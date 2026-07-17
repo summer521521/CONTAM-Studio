@@ -71,7 +71,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 三份官方样例分别读取7、3、7个Zone；首个Zone为`One`、`one`、`Attic`，并与Phase 2A隔离contamxpy结果的编号、名称、flags、体积和楼层一致。
 - 纯读取前后官方样例的SHA-256、大小和目录内容不变，没有生成结果文件。
 - 独立CLI为`python -m contam_studio_core.prj_zone_reader <PRJ路径> --json`；原`inspect_prj`继续表示隔离稳态初始化检查。
-- Python测试共59项通过，Ruff、前端构建和Rust检查在本次提交前重新执行。
+- Python测试共65项通过，覆盖严格ASCII十进制/科学计数法、超长整数结构化错误和CLI无Traceback边界；Ruff、前端构建和Rust检查在本次提交前重新执行。
 - 该读取器尚未接入React或Tauri，不支持其他PRJ区块、保存、回写或编辑。
 
 ## 尚未实现
