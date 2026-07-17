@@ -16,6 +16,8 @@ interface TopBarProps {
   theme: AppTheme;
   onLanguageChange: (language: AppLanguage) => void;
   onThemeToggle: () => void;
+  onOpenProject: () => void;
+  openDisabled: boolean;
   onPlaceholder: (action: string) => void;
 }
 
@@ -24,14 +26,16 @@ export function TopBar({
   theme,
   onLanguageChange,
   onThemeToggle,
+  onOpenProject,
+  openDisabled,
   onPlaceholder,
 }: TopBarProps) {
   const { t } = useTranslation();
   const actions = [
-    { key: "newProject", icon: Plus },
-    { key: "openProject", icon: FolderOpen },
-    { key: "save", icon: Save },
-    { key: "run", icon: Play },
+    { key: "newProject", icon: Plus, onClick: () => onPlaceholder(t("toolbar.newProject")) },
+    { key: "openProject", icon: FolderOpen, onClick: onOpenProject },
+    { key: "save", icon: Save, onClick: () => onPlaceholder(t("toolbar.save")) },
+    { key: "run", icon: Play, onClick: () => onPlaceholder(t("toolbar.run")) },
   ] as const;
 
   return (
@@ -44,12 +48,13 @@ export function TopBar({
       </div>
 
       <div className="toolbar-actions" role="toolbar" aria-label={t("app.name")}>
-        {actions.map(({ key, icon: Icon }) => (
+        {actions.map(({ key, icon: Icon, onClick }) => (
           <button
             className={`tool-button ${key === "run" ? "tool-button-run" : ""}`}
             key={key}
             type="button"
-            onClick={() => onPlaceholder(t(`toolbar.${key}`))}
+            disabled={key === "openProject" && openDisabled}
+            onClick={onClick}
           >
             <Icon size={16} aria-hidden="true" />
             <span>{t(`toolbar.${key}`)}</span>
