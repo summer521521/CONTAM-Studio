@@ -1,0 +1,38 @@
+# JavaScript / frontend
+node_modules/
+dist/
+build/
+
+# Rust / Tauri
+target/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Test output
+playwright-report/
+test-results/
+
+# Local configuration and temporary files
+*.log
+*.tmp
+*.bak
+.env
+.env.*
+!.env.example
+
+# Operating systems and editors
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
