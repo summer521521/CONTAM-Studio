@@ -22,7 +22,7 @@ nr flags ps pc pk pl relHt Vol T0 P0 name color u_Ht u_V u_T u_P cdaxis vf_type 
 ```
 
 - 整数字段必须使用十进制整数记号；`nr`必须为正且文件内不重复。
-- `relHt`、`Vol`、`T0`和`P0`必须是有限浮点数，不额外推测取值范围。
+- `relHt`、`Vol`、`T0`和`P0`只接受普通ASCII十进制或科学计数法，并且转换结果必须有限；不接受Python下划线数字分隔符、NaN、Infinity、十六进制或额外字符，也不额外推测业务取值范围。
 - 名称必须是最长15字符、不含空白的单一ASCII记号；不转义、改写大小写或规范化。
 - `cdaxis`、`vf_type`和`cfd`必须全部为0。
 - 声明数量的记录后必须立即出现独立的`-999`终止符。

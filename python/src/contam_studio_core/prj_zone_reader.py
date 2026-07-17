@@ -17,6 +17,9 @@ SUPPORTED_HEADER_VERSIONS = frozenset({"3.4.0.0", "3.4.0.4"})
 _HEADER_PATTERN = re.compile(r"^ContamW +([^ ]+) +([+-]?[0-9]+)$")
 _ZONE_MARKER_PATTERN = re.compile(r"^ *([^ ]*) +! *zones: *$")
 _INTEGER_PATTERN = re.compile(r"^[+-]?[0-9]+$")
+_FLOAT_PATTERN = re.compile(
+    r"^[+-]?(?:(?:[0-9]+(?:[.][0-9]*)?)|(?:[.][0-9]+))(?:[eE][+-]?[0-9]+)?$"
+)
 
 ERROR_EXIT_CODES = {
     "source_not_found": 2,
@@ -125,7 +128,17 @@ def _parse_header(line: str) -> tuple[str, int]:
             1,
             {"header_version": version},
         )
-    return matched.group(1), int(matched.group(2))
+    variant_token = matched.group(2)
+    try:
+        variant = int(variant_token)
+    except (ValueError, OverflowError):
+        _fail(
+            "unsupported_prj_version",
+            "ContamW文件头尾部字段不是可安全转换的整数。",
+            1,
+            {"header_variant": variant_token[:80]},
+        )
+    return matched.group(1), variant
 
 
 def _find_zone_section(lines: list[str]) -> tuple[int, int]:
@@ -153,7 +166,16 @@ def _find_zone_section(lines: list[str]) -> tuple[int, int]:
             index + 1,
             {"token": count_token[:80]},
         )
-    return index, int(count_token)
+    try:
+        count = int(count_token)
+    except (ValueError, OverflowError):
+        _fail(
+            "invalid_zone_count",
+            "Zone声明数量不是可安全转换的非负十进制整数。",
+            index + 1,
+            {"token": count_token[:80]},
+        )
+    return index, count
 
 
 def _parse_integer(token: str, field: str, line_number: int) -> int:
@@ -164,13 +186,29 @@ def _parse_integer(token: str, field: str, line_number: int) -> int:
             line_number,
             {"field": field, "token": token[:80]},
         )
-    return int(token)
+    try:
+        return int(token)
+    except (ValueError, OverflowError):
+        _fail(
+            "invalid_zone_field",
+            f"Zone字段{field}不是可安全转换的整数。",
+            line_number,
+            {"field": field, "token": token[:80]},
+        )
+    raise AssertionError("unreachable")
 
 
 def _parse_float(token: str, field: str, line_number: int) -> float:
+    if _FLOAT_PATTERN.fullmatch(token) is None:
+        _fail(
+            "invalid_zone_field",
+            f"Zone字段{field}不是有效ASCII十进制浮点数字面量。",
+            line_number,
+            {"field": field, "token": token[:80]},
+        )
     try:
         value = float(token)
-    except ValueError:
+    except (ValueError, OverflowError):
         _fail(
             "invalid_zone_field",
             f"Zone字段{field}不是有效浮点数。",
@@ -195,11 +233,13 @@ def _looks_like_split_name(tokens: list[str]) -> bool:
             if _INTEGER_PATTERN.fullmatch(tokens[index]) is None:
                 return False
         for index in range(6, 10):
+            if _FLOAT_PATTERN.fullmatch(tokens[index]) is None:
+                return False
             if not math.isfinite(float(tokens[index])):
                 return False
         if any(_INTEGER_PATTERN.fullmatch(token) is None for token in tokens[-8:]):
             return False
-    except ValueError:
+    except (ValueError, OverflowError):
         return False
     return any(_INTEGER_PATTERN.fullmatch(token) is None for token in tokens[10:-8])
 

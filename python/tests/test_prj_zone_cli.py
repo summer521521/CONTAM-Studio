@@ -14,6 +14,7 @@ OFFICIAL_PRJ = (
     / "official-contamxpy"
     / "test_GetPrjInfo.prj"
 )
+HUGE_INTEGER = "9" * 5000
 
 
 def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -62,6 +63,20 @@ def test_cli_missing_source_has_stable_exit_code(tmp_path: Path) -> None:
     assert completed.returncode == 2
     assert completed.stdout == ""
     assert json.loads(completed.stderr)["code"] == "source_not_found"
+
+
+def test_cli_huge_integer_returns_json_without_traceback(tmp_path: Path) -> None:
+    source = tmp_path / "huge-variant.prj"
+    source.write_text(f"ContamW 3.4.0.4 {HUGE_INTEGER}" + "\n", encoding="ascii")
+
+    completed = _run_cli(str(source), "--json")
+
+    assert completed.returncode == 4
+    assert completed.stdout == ""
+    diagnostic = json.loads(completed.stderr)
+    assert diagnostic["code"] == "unsupported_prj_version"
+    assert diagnostic["context"] == {"header_variant": HUGE_INTEGER[:80]}
+    assert "Traceback" not in completed.stderr
 
 
 def test_cli_help_distinguishes_pure_document_reader() -> None:

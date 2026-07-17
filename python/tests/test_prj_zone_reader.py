@@ -51,6 +51,7 @@ OFFICIAL_CASES = (
 )
 
 SIMPLE_RECORD = "1 3 0 0 0 1 0.000 600 293.15 0 Zone -1 0 2 0 0 0 0 0"
+HUGE_INTEGER = "9" * 5000
 
 
 def _sha256(path: Path) -> str:
@@ -190,6 +191,12 @@ def test_unsupported_headers_are_rejected(tmp_path: Path, version: str, variant:
     _assert_error(path, "unsupported_prj_version")
 
 
+def test_huge_header_variant_is_structured_error(tmp_path: Path) -> None:
+    path = _write_project(tmp_path, _project(variant=HUGE_INTEGER))
+    error = _assert_error(path, "unsupported_prj_version")
+    assert error.diagnostic.context == {"header_variant": HUGE_INTEGER[:80]}
+
+
 def test_missing_zone_section_is_rejected(tmp_path: Path) -> None:
     path = _write_project(
         tmp_path,
@@ -221,6 +228,12 @@ def test_invalid_zone_count_is_rejected(tmp_path: Path, count_token: str) -> Non
         _write_project(tmp_path, _project(count_token=count_token)),
         "invalid_zone_count",
     )
+
+
+def test_huge_zone_count_is_structured_error(tmp_path: Path) -> None:
+    path = _write_project(tmp_path, _project(count_token=HUGE_INTEGER))
+    error = _assert_error(path, "invalid_zone_count")
+    assert error.diagnostic.context == {"token": HUGE_INTEGER[:80]}
 
 
 def test_missing_zone_header_is_rejected(tmp_path: Path) -> None:
@@ -270,6 +283,30 @@ def test_wrong_field_count_is_rejected(tmp_path: Path, record: str) -> None:
 def test_invalid_fields_are_rejected(tmp_path: Path, record: str) -> None:
     path = _write_project(tmp_path, _project([record]))
     _assert_error(path, "invalid_zone_field")
+
+
+def test_python_digit_separator_in_float_is_rejected(tmp_path: Path) -> None:
+    record = SIMPLE_RECORD.replace("0.000 600", "0.000 1_000.0", 1)
+    path = _write_project(tmp_path, _project([record]))
+    error = _assert_error(path, "invalid_zone_field")
+    assert error.diagnostic.context == {"field": "Vol", "token": "1_000.0"}
+
+
+def test_standard_scientific_float_literals_are_supported(tmp_path: Path) -> None:
+    tokens = SIMPLE_RECORD.split()
+    tokens[6:10] = [".5", "1.0E+03", "1e-5", "+1."]
+    document = read_simple_zones(_write_project(tmp_path, _project([" ".join(tokens)])))
+    assert document.first_zone is not None
+    assert document.first_zone.relative_height == pytest.approx(0.5)
+    assert document.first_zone.volume_m3 == pytest.approx(1000.0)
+
+
+def test_huge_zone_integer_is_structured_error(tmp_path: Path) -> None:
+    tokens = SIMPLE_RECORD.split()
+    tokens[1] = HUGE_INTEGER
+    path = _write_project(tmp_path, _project([" ".join(tokens)]))
+    error = _assert_error(path, "invalid_zone_field")
+    assert error.diagnostic.context == {"field": "flags", "token": HUGE_INTEGER[:80]}
 
 
 def test_duplicate_zone_numbers_are_rejected(tmp_path: Path) -> None:
