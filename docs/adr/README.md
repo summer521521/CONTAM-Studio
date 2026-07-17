@@ -7,6 +7,7 @@ ADR用于记录具有长期影响的项目决策、理由、后果和待验证�
 - [ADR-001：使用官方ContamX](ADR-001-use-official-contamx.md)
 - [ADR-002：桌面宿主与Python领域核心](ADR-002-desktop-host-and-python-core.md)
 - [ADR-003：安全项目编辑](ADR-003-safe-project-editing.md)
+- [ADR-004：分离PRJ文档读取与仿真执行](ADR-004-separate-prj-reading-and-simulation.md)
 
 ## 统一格式
 
