@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目处于**Phase 0：项目文档与仓库基础**。仓库目前只有研究资料和项目基础文档，尚无可运行程序，也未实现GUI、PRJ解析、ContamX调用或AI能力。
+项目已建立**Phase 1：现代GUI空壳**，可启动Tauri 2桌面应用并体验双语、主题、可调整面板和本地布局恢复。当前界面全部使用模拟数据，尚未实现PRJ解析与写入、ContamX运行、Python领域核心或AI能力。
 
 ## 架构方向
 
@@ -36,6 +36,19 @@ Python CONTAM领域核心
 ↓
 官方ContamX
 ```
+
+Phase 1只实现了React前端与最小Tauri桌面宿主，未提前建立后续层级。
+
+## 开发启动
+
+需预先安装Node.js、pnpm、Rust MSVC工具链和Visual Studio C++桌面开发组件。
+
+```powershell
+pnpm install
+pnpm tauri dev
+```
+
+仅构建前端可运行`pnpm build`。
 
 ## 主要非目标
 

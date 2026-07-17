@@ -1,0 +1,16 @@
+[package]
+name = "contam-studio"
+version = "0.1.0"
+description = "Offline-first desktop workbench for CONTAM teaching and research"
+authors = ["CONTAM Studio contributors"]
+edition = "2021"
+
+[lib]
+name = "contam_studio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

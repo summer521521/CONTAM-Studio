@@ -1,0 +1,104 @@
+{
+  "app": {
+    "name": "CONTAM Studio",
+    "phase": "Phase 1 Mock"
+  },
+  "toolbar": {
+    "newProject": "新建项目",
+    "openProject": "打开项目",
+    "save": "保存",
+    "run": "运行",
+    "language": "语言",
+    "theme": "主题",
+    "light": "浅色",
+    "dark": "深色",
+    "settings": "设置"
+  },
+  "navigation": {
+    "projects": "项目",
+    "search": "搜索",
+    "run": "运行",
+    "results": "结果",
+    "projectTitle": "模拟项目结构",
+    "mockLabel": "模拟数据",
+    "sampleProject": "示例教学项目",
+    "floors": "楼层",
+    "floor1": "一层",
+    "floor2": "二层",
+    "zones": "区域",
+    "classroom": "教室A",
+    "corridor": "走廊",
+    "airflowPaths": "气流路径",
+    "contaminants": "污染物",
+    "schedules": "时间表",
+    "runHistory": "运行记录",
+    "collapse": "折叠项目树",
+    "expand": "展开项目树"
+  },
+  "welcome": {
+    "tab": "欢迎",
+    "title": "欢迎使用 CONTAM Studio",
+    "tagline": "面向教学与科研的现代化、离线优先CONTAM桌面工作台。",
+    "openProject": "打开CONTAM项目",
+    "newProject": "新建空白项目",
+    "recent": "最近项目",
+    "recentEmpty": "暂无最近项目",
+    "recentHint": "Phase 1不会读取本地项目记录。",
+    "phaseTitle": "当前阶段：Phase 1桌面工作台空壳",
+    "phaseBody": "所有项目树、属性、日志和结果均为模拟界面，不执行任何真实计算或文件操作。",
+    "offlineTitle": "离线优先",
+    "offlineBody": "本阶段不发送网络请求，核心桌面界面完全在本地运行。",
+    "protectionTitle": "原始文件保护",
+    "protectionBody": "本阶段不读取或修改任何PRJ文件。"
+  },
+  "inspector": {
+    "properties": "属性",
+    "selected": "当前模拟对象",
+    "name": "名称",
+    "type": "类型",
+    "typeValue": "Zone（模拟）",
+    "level": "楼层",
+    "levelValue": "一层",
+    "volume": "体积",
+    "volumeValue": "180 m³（模拟）",
+    "status": "状态",
+    "statusValue": "只读界面示例",
+    "readOnly": "属性仅用于布局验证，不对应真实CONTAM模型。",
+    "collapse": "折叠上下文面板",
+    "expand": "展开上下文面板"
+  },
+  "assistant": {
+    "tab": "AI助手",
+    "title": "AI尚未启用",
+    "noContext": "当前没有读取任何项目内容。",
+    "future": "Phase 6之前不会接入真实AI能力。",
+    "optIn": "未来的联网AI必须由用户主动配置和启用。"
+  },
+  "panel": {
+    "problems": "问题",
+    "logs": "运行日志",
+    "results": "结果摘要",
+    "noProblems": "未发现问题",
+    "noProblemsHint": "这是模拟检查状态，尚未验证任何真实项目。",
+    "log1": "[界面示例] CONTAM Studio Phase 1工作台已就绪。",
+    "log2": "[界面示例] 未加载项目，未调用ContamX。",
+    "log3": "[界面示例] AI功能保持禁用。",
+    "resultTitle": "无真实结果",
+    "resultBody": "结果区域仅用于验证工作台布局。",
+    "collapse": "折叠底部面板",
+    "expand": "展开底部面板"
+  },
+  "status": {
+    "language": "中文",
+    "light": "浅色",
+    "dark": "深色",
+    "noProject": "无项目",
+    "contamx": "ContamX未配置",
+    "ai": "AI未启用"
+  },
+  "mock": {
+    "label": "模拟",
+    "placeholder": "{{action}}：Phase 1占位功能，未执行真实操作。",
+    "dismiss": "关闭提示"
+  }
+}

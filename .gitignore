@@ -5,6 +5,7 @@ build/
 
 # Rust / Tauri
 target/
+src-tauri/gen/
 
 # Python
 .venv/
@@ -36,3 +37,4 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+vite.config.*.timestamp-*
