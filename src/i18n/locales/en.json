@@ -1,0 +1,104 @@
+{
+  "app": {
+    "name": "CONTAM Studio",
+    "phase": "Phase 1 Mock"
+  },
+  "toolbar": {
+    "newProject": "New project",
+    "openProject": "Open project",
+    "save": "Save",
+    "run": "Run",
+    "language": "Language",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "settings": "Settings"
+  },
+  "navigation": {
+    "projects": "Projects",
+    "search": "Search",
+    "run": "Run",
+    "results": "Results",
+    "projectTitle": "Mock project structure",
+    "mockLabel": "Mock data",
+    "sampleProject": "Teaching example",
+    "floors": "Floors",
+    "floor1": "Level 1",
+    "floor2": "Level 2",
+    "zones": "Zones",
+    "classroom": "Classroom A",
+    "corridor": "Corridor",
+    "airflowPaths": "Airflow paths",
+    "contaminants": "Contaminants",
+    "schedules": "Schedules",
+    "runHistory": "Run history",
+    "collapse": "Collapse project tree",
+    "expand": "Expand project tree"
+  },
+  "welcome": {
+    "tab": "Welcome",
+    "title": "Welcome to CONTAM Studio",
+    "tagline": "A modern, offline-first CONTAM desktop workbench for teaching and research.",
+    "openProject": "Open CONTAM project",
+    "newProject": "New blank project",
+    "recent": "Recent projects",
+    "recentEmpty": "No recent projects",
+    "recentHint": "Phase 1 does not read local project history.",
+    "phaseTitle": "Current phase: Phase 1 desktop workbench shell",
+    "phaseBody": "All project tree, property, log, and result content is mock UI. No real computation or file operation is performed.",
+    "offlineTitle": "Offline first",
+    "offlineBody": "This phase sends no network requests; the core desktop UI runs locally.",
+    "protectionTitle": "Original file protection",
+    "protectionBody": "This phase does not read or modify any PRJ file."
+  },
+  "inspector": {
+    "properties": "Properties",
+    "selected": "Current mock object",
+    "name": "Name",
+    "type": "Type",
+    "typeValue": "Zone (mock)",
+    "level": "Level",
+    "levelValue": "Level 1",
+    "volume": "Volume",
+    "volumeValue": "180 m³ (mock)",
+    "status": "Status",
+    "statusValue": "Read-only UI sample",
+    "readOnly": "These properties only validate the layout and do not represent a real CONTAM model.",
+    "collapse": "Collapse context panel",
+    "expand": "Expand context panel"
+  },
+  "assistant": {
+    "tab": "AI assistant",
+    "title": "AI is not enabled",
+    "noContext": "No project content is currently being read.",
+    "future": "Real AI capability will not be connected before Phase 6.",
+    "optIn": "Future online AI must be configured and enabled by the user."
+  },
+  "panel": {
+    "problems": "Problems",
+    "logs": "Run log",
+    "results": "Result summary",
+    "noProblems": "No problems found",
+    "noProblemsHint": "This is a mock check state; no real project has been validated.",
+    "log1": "[UI sample] CONTAM Studio Phase 1 workbench is ready.",
+    "log2": "[UI sample] No project loaded and ContamX was not called.",
+    "log3": "[UI sample] AI remains disabled.",
+    "resultTitle": "No real results",
+    "resultBody": "The result area only validates the workbench layout.",
+    "collapse": "Collapse bottom panel",
+    "expand": "Expand bottom panel"
+  },
+  "status": {
+    "language": "English",
+    "light": "Light",
+    "dark": "Dark",
+    "noProject": "No project",
+    "contamx": "ContamX not configured",
+    "ai": "AI not enabled"
+  },
+  "mock": {
+    "label": "Mock",
+    "placeholder": "{{action}}: Phase 1 placeholder; no real operation was performed.",
+    "dismiss": "Dismiss notice"
+  }
+}

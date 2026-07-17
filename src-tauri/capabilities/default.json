@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimal capability required to render the local Phase 1 workbench window.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
