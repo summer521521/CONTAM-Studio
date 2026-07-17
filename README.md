@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目已完成**Phase 2A：contamxpy只读Zone技术Spike**。Python核心可在隔离临时副本中使用contamxpy 0.0.9读取官方样例的首个Zone，但尚未接入GUI或Tauri。当前界面仍全部使用模拟数据，也未实现PRJ保存与回写、用户可触发的ContamX运行或AI能力。
+项目已完成**Phase 2A：contamxpy隔离Zone提取技术Spike**。Python核心可在隔离临时副本上调用contamxpy 0.0.9执行稳态初始化并提取官方样例的首个Zone，但尚未接入GUI或Tauri。当前界面仍全部使用模拟数据，也未实现PRJ保存与回写、用户可触发的ContamX运行或AI能力。
 
 ## 架构方向
 
@@ -37,7 +37,7 @@ Python CONTAM领域核心
 官方ContamX
 ```
 
-Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2A建立了独立的最小Python只读检查核心，层间通信仍待后续验证。
+Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2A建立了独立的最小Python隔离执行检查核心，层间通信仍待后续验证。
 
 ## 开发启动
 
@@ -50,16 +50,16 @@ pnpm tauri dev
 
 仅构建前端可运行`pnpm build`。
 
-## Python只读检查
+## Python隔离Zone检查
 
-完成`python/`依赖安装后，可对仓库内的官方测试样例执行只读检查：
+完成`python/`依赖安装后，可对仓库内的官方测试样例执行隔离Zone检查：
 
 ```powershell
 python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
   fixtures\contam\official-contamxpy\test_GetPrjInfo.prj --json
 ```
 
-该命令尚未接入桌面界面。contamxpy的公开入口会执行稳态初始化并产生结果文件，因此检查器只在临时副本和一次性隔离进程中调用它。
+该命令尚未接入桌面界面。它保证源PRJ哈希不变，但检查过程并非无副作用加载：contamxpy会执行稳态初始化并产生结果文件，所有生成物仅存在于已验证哈希的临时副本目录并在完成后清理。
 
 ## 主要非目标
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from .models import Diagnostic, ProjectInspection, ProjectMetadata, ZoneInspection
 
 SCHEMA_VERSION = "1.0"
+EXECUTION_MODE = "isolated_steady_initialization"
 WORKER_FLAG = "--_contamxpy-worker"
 WORKER_RESULT_NAME = "inspection-result.json"
 WORKER_SOURCE_NAME = "inspection-source.prj"
@@ -44,6 +45,10 @@ class NoZonesError(InspectionError):
     code = "no_zones"
 
 
+class SourceCopyMismatchError(InspectionError):
+    code = "source_copy_mismatch"
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -70,6 +75,15 @@ def _worker_command(source: Path, result: Path) -> list[str]:
         str(source),
         str(result),
     ]
+
+
+def _copy_verified_source(source: Path, destination: Path, expected_sha256: str) -> None:
+    shutil.copyfile(source, destination)
+    copied_sha256 = _sha256(destination)
+    if copied_sha256 != expected_sha256:
+        raise SourceCopyMismatchError(
+            "临时PRJ副本的SHA-256与源文件不一致，已禁止调用contamxpy。"
+        )
 
 
 def _run_worker(source: Path, work_dir: Path) -> tuple[dict[str, object], bytes, bytes]:
@@ -135,12 +149,13 @@ def inspect_prj(path: Path) -> ProjectInspection:
     ) as temporary:
         work_dir = Path(temporary)
         isolated_source = work_dir / WORKER_SOURCE_NAME
-        shutil.copyfile(source, isolated_source)
+        _copy_verified_source(source, isolated_source, source_hash_before)
         payload, native_stdout, native_stderr = _run_worker(isolated_source, work_dir)
         generated = sorted(
             item.name
             for item in work_dir.iterdir()
-            if item.name not in {WORKER_SOURCE_NAME, WORKER_RESULT_NAME}
+            if item.is_file()
+            and item.name not in {WORKER_SOURCE_NAME, WORKER_RESULT_NAME}
         )
 
     source_hash_after = _sha256(source)
@@ -197,7 +212,9 @@ def inspect_prj(path: Path) -> ProjectInspection:
         source_path=str(source),
         source_sha256=source_hash_before,
         source_size_bytes=source_size,
-        read_only=True,
+        source_unchanged=True,
+        execution_mode=EXECUTION_MODE,
+        generated_artifacts=tuple(generated),
         contamxpy_version=contamxpy_version,
         project=ProjectMetadata(contamx_version=contamx_version),
         zone_count=zone_count,
@@ -263,7 +280,9 @@ def _configure_utf8_streams() -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="只读检查CONTAM PRJ的首个Zone。")
+    parser = argparse.ArgumentParser(
+        description="在隔离临时副本上执行稳态初始化并检查CONTAM PRJ的首个Zone。"
+    )
     parser.add_argument("path", type=Path, help="CONTAM PRJ文件路径")
     parser.add_argument("--json", action="store_true", required=True, help="输出UTF-8 JSON")
     return parser

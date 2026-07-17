@@ -52,7 +52,9 @@ class ProjectInspection:
     source_path: str
     source_sha256: str
     source_size_bytes: int
-    read_only: bool
+    source_unchanged: bool
+    execution_mode: str
+    generated_artifacts: tuple[str, ...]
     contamxpy_version: str
     project: ProjectMetadata
     zone_count: int
@@ -65,7 +67,9 @@ class ProjectInspection:
             "source_path": self.source_path,
             "source_sha256": self.source_sha256,
             "source_size_bytes": self.source_size_bytes,
-            "read_only": self.read_only,
+            "source_unchanged": self.source_unchanged,
+            "execution_mode": self.execution_mode,
+            "generated_artifacts": list(self.generated_artifacts),
             "contamxpy_version": self.contamxpy_version,
             "project": self.project.to_dict(),
             "zone_count": self.zone_count,

@@ -25,7 +25,7 @@
 ```text
 src/                  React工作台、组件、国际化和样式
 src-tauri/            最小Tauri宿主、配置、能力和Windows图标
-python/               Phase 2A最小只读Python核心和测试
+python/               Phase 2A最小隔离执行Python核心和测试
 fixtures/contam/      有来源记录的官方contamxpy PRJ样例
 docs/                 项目决策、状态与界面截图
 package.json          前端脚本和依赖
@@ -46,14 +46,16 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 固定运行依赖`contamxpy==0.0.9`；开发依赖仅为pytest 8.4.2和Ruff 0.12.12。
 - 官方样例`test_GetPrjInfo.prj`来自contamxpy 0.0.9源码分发包，原样复制并保留官方`LICENSE.txt`。
 - 通过公开`cxLib`、`setupSimulation(1)`、`nZones`和`zones`接口取得7个Zone；首个Zone为编号1、名称`One`。
-- 读取前后样例SHA-256均为`ce37f7bfb7f95ac49babb117e49a22bbba5da7694491060b3166554efcccd96e`，fixture目录未产生新文件。
-- contamxpy会在加载时执行稳态初始化并生成SIM、LOG等文件；检查器将输入复制到临时目录，并用一次性子进程隔离原生崩溃和生成物，不建立长期sidecar服务。
+- 临时副本在启动contamxpy前验证SHA-256与源文件读取前哈希一致；不一致时禁止调用原生库。
+- 执行前后源样例SHA-256均为`ce37f7bfb7f95ac49babb117e49a22bbba5da7694491060b3166554efcccd96e`，fixture目录未产生新文件。
+- 结构化结果使用`source_unchanged`、`execution_mode=isolated_steady_initialization`和`generated_artifacts`区分源文件状态、执行语义与生成物。
+- contamxpy会执行稳态初始化并生成SIM、LOG等文件；检查器将输入复制到临时目录，并用一次性子进程隔离原生崩溃和生成物，不建立长期sidecar服务。该子进程不是权限沙箱，也不能防御恶意构造的PRJ。
 - 损坏PRJ的直接原生调用实测可能以Windows访问冲突退出，因此不允许在GUI或主Python进程中直接调用该加载路径。
 - Python核心尚未接入React或Tauri，也未开放新的Tauri权限。
 
 ## Phase 2A验证
 
-- `python/.venv/Scripts/python.exe -m pytest ./python/tests`通过，共9项测试。
+- `python/.venv/Scripts/python.exe -m pytest ./python/tests`通过，共12项测试。
 - `python/.venv/Scripts/python.exe -m ruff check ./python`通过。
 - 官方样例CLI输出可解析的UTF-8 JSON，原生诊断未混入标准输出。
 - 前端构建和Rust检查在本次提交前重新执行。

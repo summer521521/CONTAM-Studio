@@ -15,5 +15,5 @@
 ## 许可与用途
 
 - `LICENSE.txt`原样复制自源码分发包根目录；其SHA-256为`d91d5f52aa4a22dddb3ea306174c59db5fce539d073a07cbb171df57d81dd211`。
-- 本样例仅用于验证contamxpy公开API的只读Zone访问、错误隔离和回归测试。
+- 本样例仅用于验证contamxpy公开API的隔离Zone提取、错误隔离和回归测试。
 - 本样例不是用户项目模板，也不得被解释为CONTAM Studio推荐的工程建模起点。

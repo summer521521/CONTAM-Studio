@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "contam-studio-core"
 version = "0.1.0"
-description = "Read-only CONTAM domain inspection spike for CONTAM Studio"
+description = "Isolated CONTAM Zone inspection spike for CONTAM Studio"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

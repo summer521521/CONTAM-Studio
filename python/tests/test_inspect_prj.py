@@ -6,10 +6,14 @@ from pathlib import Path
 
 import pytest
 
+import contam_studio_core.inspect_prj as inspect_module
 from contam_studio_core.inspect_prj import (
+    EXECUTION_MODE,
     InvalidProjectExtensionError,
     ProjectLoadError,
+    SourceCopyMismatchError,
     SourceNotFoundError,
+    _copy_verified_source,
     inspect_prj,
 )
 
@@ -29,9 +33,24 @@ def official_inspection():
 
 
 def test_official_prj_loads(official_inspection) -> None:
-    assert official_inspection.read_only is True
+    assert official_inspection.source_unchanged is True
+    assert official_inspection.execution_mode == EXECUTION_MODE
     assert official_inspection.contamxpy_version == "0.0.9"
     assert official_inspection.project.contamx_version == "3.4.1.7-64bit"
+
+
+def test_generated_artifacts_are_reported(official_inspection) -> None:
+    expected = {
+        "inspection-source.ach",
+        "inspection-source.cex",
+        "inspection-source.csm",
+        "inspection-source.log",
+        "inspection-source.rst",
+        "inspection-source.sim",
+        "inspection-source.xlog",
+        "inspection-source_sarin.cex",
+    }
+    assert expected.issubset(set(official_inspection.generated_artifacts))
 
 
 def test_zone_count_and_first_zone_are_real(official_inspection) -> None:
@@ -85,3 +104,37 @@ def test_corrupt_prj_returns_controlled_error(tmp_path: Path) -> None:
         inspect_prj(broken)
     assert captured.value.exit_code == 4
     assert "contamxpy" in str(captured.value)
+
+
+def test_verified_copy_hash_matches_source(tmp_path: Path) -> None:
+    source = tmp_path / "source.prj"
+    destination = tmp_path / "copy.prj"
+    source.write_bytes(b"trusted source bytes")
+    expected = _sha256(source)
+
+    _copy_verified_source(source, destination, expected)
+
+    assert _sha256(destination) == expected
+
+
+def test_copy_hash_mismatch_stops_before_worker(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "source.prj"
+    source.write_bytes(b"trusted source bytes")
+    worker_called = False
+
+    def corrupt_copy(_source: Path, destination: Path) -> None:
+        Path(destination).write_bytes(b"different copied bytes")
+
+    def record_worker_call(_source: Path, _work_dir: Path):
+        nonlocal worker_called
+        worker_called = True
+        raise AssertionError("worker must not run for a mismatched copy")
+
+    monkeypatch.setattr(inspect_module.shutil, "copyfile", corrupt_copy)
+    monkeypatch.setattr(inspect_module, "_run_worker", record_worker_call)
+
+    with pytest.raises(SourceCopyMismatchError) as captured:
+        inspect_prj(source)
+
+    assert captured.value.code == "source_copy_mismatch"
+    assert worker_called is False

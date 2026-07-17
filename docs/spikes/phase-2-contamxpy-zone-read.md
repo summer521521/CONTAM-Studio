@@ -1,8 +1,8 @@
-# Phase 2A：contamxpy只读Zone技术Spike
+# Phase 2A：contamxpy隔离Zone提取技术Spike
 
 ## 结论
 
-contamxpy 0.0.9可在本机Python 3.12和Windows x64环境安装、导入，并通过官方公开API从官方真实PRJ取得Zone数量和首个Zone字段。源PRJ保持不变，但API没有纯“只加载”入口：`setupSimulation(1)`会执行稳态初始化、生成结果文件，损坏输入还可能导致原生访问冲突。因此，contamxpy不适合在GUI或主Python进程中直接作为无副作用读取器；本Spike只在临时副本和一次性隔离进程中调用它。
+contamxpy 0.0.9可在本机Python 3.12和Windows x64环境安装、导入，并通过官方公开API从官方真实PRJ取得Zone数量和首个Zone字段。源PRJ保持不变，但检查过程并非无副作用加载：`setupSimulation(1)`会执行稳态初始化、生成结果文件，损坏输入还可能导致原生访问冲突。因此，contamxpy不适合在GUI或主Python进程中直接作为PRJ加载器；本Spike只在已验证哈希的临时副本和一次性隔离进程中调用它。
 
 ## 测试环境
 
@@ -55,17 +55,26 @@ contamxpy 0.0.9可在本机Python 3.12和Windows x64环境安装、导入，并�
 
 该公开Zone对象没有提供稳定UUID、Zone高度、原始文本位置、未知区块、注释或无损回写信息。本Spike不推断这些字段。
 
+## 结构化执行语义
+
+- `source_unchanged=true`：仅表示执行前后源PRJ的SHA-256一致。
+- `execution_mode=isolated_steady_initialization`：明确表示contamxpy执行了稳态初始化，而非无副作用加载。
+- `generated_artifacts`：列出临时目录中由contamxpy产生并在返回后清理的文件名。
+
 ## 文件安全证据
 
 - 读取前SHA-256：`ce37f7bfb7f95ac49babb117e49a22bbba5da7694491060b3166554efcccd96e`。
 - 读取后SHA-256：`ce37f7bfb7f95ac49babb117e49a22bbba5da7694491060b3166554efcccd96e`。
 - fixture目录读取前后文件名和全部文件哈希一致。
 - 直接在临时副本上调用时，contamxpy生成`.ach`、`.cex`、`.csm`、`.log`、`.rst`、`.sim`、`.xlog`和`_sarin.cex`文件。
-- 正式检查器只把源PRJ复制到临时目录后再调用contamxpy，生成物在返回前列入诊断并随临时目录清理。
+- 源PRJ复制到临时目录后，检查器先验证副本SHA-256等于源文件读取前哈希；不一致时禁止调用contamxpy。
+- 生成物通过结构化`generated_artifacts`字段返回，并随临时目录清理。
 
 ## 错误行为
 
-对内容为`not a CONTAM project`的`.prj`执行直接原生调用时，contamxpy进程报告“Not a ContamW or LoopDA 3.4 file”，随后以Windows访问冲突`0xC0000005`退出，并产生`.xlog`。因此检查器使用一次性子进程包含原生崩溃；父进程将其转换为退出码4的明确加载错误。该子进程是单次安全边界，不是长期服务、微服务或桌面sidecar生命周期实现。
+对内容为`not a CONTAM project`的`.prj`执行直接原生调用时，contamxpy进程报告“Not a ContamW or LoopDA 3.4 file”，随后以Windows访问冲突`0xC0000005`退出，并产生`.xlog`。因此检查器使用一次性子进程包含原生崩溃；父进程将其转换为退出码4的明确加载错误。
+
+该子进程只隔离原生崩溃和生成物，不是权限沙箱，不能防御恶意构造的PRJ。当前入口只处理用户信任但可能损坏、不完整或版本不兼容的项目；未来桌面接入不得把该子进程描述成安全执行环境。本Spike不实现Windows低完整性进程、容器或其他复杂沙箱。
 
 ## 事实、推断与建议
 
@@ -79,18 +88,18 @@ contamxpy 0.0.9可在本机Python 3.12和Windows x64环境安装、导入，并�
 
 ### 推断
 
-- contamxpy适合作为受隔离的Zone数据来源候选，但不适合直接嵌入GUI进程或被描述为无副作用PRJ解析器。
+- contamxpy适合作为受隔离的Zone数据来源候选，但不适合直接嵌入GUI进程，也不得被描述为纯PRJ加载器、纯只读解析器或安全执行环境。
 - 临时副本可保护源文件，但不能消除稳态初始化的计算语义、性能成本和原生健壮性风险。
 
 ### 建议
 
-- 暂不直接进入Phase 2B的GUI/Tauri连接；先明确Phase 2是否允许以`setupSimulation(1)`稳态初始化换取只读元数据，或向官方确认是否存在纯加载API。
+- 暂不直接进入Phase 2B的GUI/Tauri连接；先明确Phase 2是否允许以`setupSimulation(1)`稳态初始化换取Zone元数据，或向官方确认是否存在纯加载API。
 - 若项目接受该限制，Phase 2B只能复用本Spike的临时副本、单次进程隔离、哈希验证和结构化错误，不得让Tauri获得任意Shell权限，也不得在用户PRJ目录直接调用contamxpy。
 - 不开展PRJ文本自解析、保存或回写，未知内容继续保持未支持状态。
 
 ## 验证结果
 
-- pytest：9项通过。
+- pytest：12项通过。
 - Ruff：通过。
 - CLI：成功输出UTF-8 JSON；测试覆盖不存在文件、非PRJ和损坏PRJ的受控错误。
 - 前端与Rust：在本次提交前重新构建检查。

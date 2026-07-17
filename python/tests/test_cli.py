@@ -42,6 +42,9 @@ def test_cli_success_outputs_only_json() -> None:
     assert completed.returncode == 0
     assert completed.stderr == ""
     payload = json.loads(completed.stdout)
+    assert payload["source_unchanged"] is True
+    assert payload["execution_mode"] == "isolated_steady_initialization"
+    assert "inspection-source.sim" in payload["generated_artifacts"]
     assert payload["zone_count"] == 7
     assert payload["first_zone"]["number"] == 1
     assert payload["first_zone"]["name"] == "One"
