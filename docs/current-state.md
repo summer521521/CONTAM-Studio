@@ -25,8 +25,8 @@
 ```text
 src/                  React工作台、组件、国际化和样式
 src-tauri/            最小Tauri宿主、配置、能力和Windows图标
-python/               Phase 2A最小隔离执行Python核心和测试
-fixtures/contam/      有来源记录的官方contamxpy PRJ样例
+python/               Phase 2A隔离检查与Phase 2B-1严格Zone文档读取核心和测试
+fixtures/contam/      有来源记录的contamxpy与NIST官方PRJ样例
 docs/                 项目决策、状态与界面截图
 package.json          前端脚本和依赖
 pnpm-lock.yaml        唯一的Node依赖锁文件
@@ -60,9 +60,23 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 官方样例CLI输出可解析的UTF-8 JSON，原生诊断未混入标准输出。
 - 前端构建和Rust检查在本次提交前重新执行。
 
+## Phase 2B-1严格Zone文档读取
+
+- 新增独立`prj_zone_reader`，固定`reader_mode=strict_contam_3_4_simple_zone_v1`。
+- 读取器只使用Python标准库，不导入contamxpy、`subprocess`、`tempfile`或Phase 2A执行入口，不调用ContamX或仿真初始化。
+- 精确支持`ContamW 3.4.0.0`和`ContamW 3.4.0.4`文件头，以及单行、19字段、ASCII名称、三个条件字段均为0的简单Zone记录。
+- 对非ASCII、未知版本、重复区块、数量或终止符不一致、字段类型错误、重复编号、含空格或超长名称、条件尾部及未验证布局返回结构化错误，整个调用不返回部分结果。
+- 数据模型返回全部Zone、首个Zone、源文件哈希与大小、文件头、原始CONTAM编号和源行号；当前不创建稳定UUID。
+- 官方fixture新增contamxpy样例`valThreeZonesWthCtm-UseApi.prj`和NIST教程样例`demo1c.prj`，均保留原始文件名、字节和来源记录。
+- 三份官方样例分别读取7、3、7个Zone；首个Zone为`One`、`one`、`Attic`，并与Phase 2A隔离contamxpy结果的编号、名称、flags、体积和楼层一致。
+- 纯读取前后官方样例的SHA-256、大小和目录内容不变，没有生成结果文件。
+- 独立CLI为`python -m contam_studio_core.prj_zone_reader <PRJ路径> --json`；原`inspect_prj`继续表示隔离稳态初始化检查。
+- Python测试共65项通过，覆盖严格ASCII十进制/科学计数法、超长整数结构化错误和CLI无Traceback边界；Ruff、前端构建和Rust检查在本次提交前重新执行。
+- 该读取器尚未接入React或Tauri，不支持其他PRJ区块、保存、回写或编辑。
+
 ## 尚未实现
 
-当前GUI仍全部使用模拟数据。尚未实现真实文件选择、GUI/Tauri到Python的连接、PRJ保存或回写、完整领域模型、Patch/Diff/快照、ContamX发现与用户可触发运行、结果读取、AI调用或网络服务；Phase 2A的命令行读取能力不得解释为桌面应用已经能够打开项目。
+当前GUI仍全部使用模拟数据。尚未实现真实文件选择、GUI/Tauri到Python的连接、PRJ保存或回写、完整领域模型、Patch/Diff/快照、ContamX发现与用户可触发运行、结果读取、AI调用或网络服务；Phase 2A和Phase 2B-1的命令行能力不得解释为桌面应用已经能够打开项目。
 
 ## 待验证问题
 
