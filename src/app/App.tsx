@@ -35,10 +35,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = workbench.theme;
     document.documentElement.lang = workbench.language;
     void i18n.changeLanguage(workbench.language);
-    saveWorkbenchState(workbench);
+  }, [workbench.language]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = workbench.theme;
+  }, [workbench.theme]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => saveWorkbenchState(workbench), 200);
+    return () => window.clearTimeout(timer);
   }, [workbench]);
 
   useEffect(() => {
