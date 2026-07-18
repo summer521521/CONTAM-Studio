@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  desktopOpenIssue,
   INITIAL_PROJECT_STATE,
   projectReducer,
   selectedZone,
@@ -167,5 +168,42 @@ describe("projectReducer", () => {
       zoneKey: zoneSelectionKey(loadedProject, loadedProject.zones[1]),
     });
     expect(selectedZone(selected)?.name).toBe("Zone2");
+  });
+});
+
+describe("desktop open response", () => {
+  it("treats cancellation without an envelope as a normal response", () => {
+    expect(
+      desktopOpenIssue(
+        { request_id: "request-1", cancelled: true, envelope: null },
+        "request-1",
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects a cancellation carrying an envelope", () => {
+    const invalid = desktopOpenIssue(
+      {
+        request_id: "request-1",
+        cancelled: true,
+        envelope: {
+          protocol_version: "1.0",
+          request_id: "request-1",
+          ok: false,
+          result: null,
+          error: issue,
+        },
+      },
+      "request-1",
+    );
+    expect(invalid?.code).toBe("desktop_response_contract_invalid");
+  });
+
+  it("rejects a response for another request", () => {
+    const invalid = desktopOpenIssue(
+      { request_id: "request-2", cancelled: true, envelope: null },
+      "request-1",
+    );
+    expect(invalid?.code).toBe("desktop_response_request_mismatch");
   });
 });

@@ -15,6 +15,10 @@ Phase 2B-1已建立严格、纯文档的简单Zone读取器。Phase 2C需要让T
 - Phase 2的Zone读取采用“一次请求启动一次Python进程，stdin接收一条JSON请求，stdout返回一条JSON响应，完成后退出”的最小桥接方式。
 - 协议固定包含版本、`request_id`、有限操作名和成功/失败共用的Envelope；失败不得返回部分Zone。
 - Rust宿主负责Python发现、参数数组启动、工作目录、超时、输出上限、进程终止和协议验证；不使用Shell或命令字符串拼接。
+- 文件选择和读取合并为唯一的`select_and_read_prj_zones`应用命令。React只传`request_id`；Rust打开原生对话框、验证并规范化所选本地PRJ路径，再在内部调用Python桥。
+- 应用命令通过`AppManifest`登记，并由main窗口capability显式授予`allow-select-and-read-prj-zones`；前端不持有dialog、文件系统、Shell或HTTP权限。
+- Python响应先反序列化为Rust内部Raw类型。诊断code、message和context在跨IPC前由Rust验证与清理，TypeScript清理只作为第二道防线。
+- 任意非空stderr使本次桥接整体失败；成功结果的`source_path`必须规范化后与用户实际选择的文件一致。
 - Python桥只复用严格Zone读取器，不调用contamxpy、ContamX或仿真初始化。
 - React只通过有限Tauri命令取得结构化结果，不直接读取PRJ、启动Python或访问任意文件系统。
 - 开发期Python只从`CONTAM_STUDIO_PYTHON`绝对路径或仓库内`python/.venv/Scripts/python.exe`发现；不回退到PATH中的任意Python。
@@ -35,6 +39,7 @@ Phase 2B-1已建立严格、纯文档的简单Zone读取器。Phase 2C需要让T
 - 旧请求的UI结果由请求序号和`request_id`丢弃；当前没有跨进程主动取消协议。
 - 任何协议字段变化需要同时更新Python、Rust和TypeScript验证，并递增协议版本或保持向后兼容。
 - 子进程退出、崩溃、无效输出和超时必须转成结构化错误，不能让Tauri主进程崩溃或把Traceback传给用户。
+- 文件选择由Rust拥有，减少WebView以任意路径调用读取器的能力；代价是选择与读取成为一个桌面操作，前端不再观察两者之间的独立路径状态。
 
 ## 替代方案
 

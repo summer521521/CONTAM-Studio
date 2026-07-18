@@ -49,6 +49,12 @@ export interface BridgeEnvelope {
   error: ReaderDiagnostic | null;
 }
 
+export interface DesktopOpenResponse {
+  request_id: string;
+  cancelled: boolean;
+  envelope: BridgeEnvelope | null;
+}
+
 export interface ProjectState {
   status: ProjectStatus;
   activeSequence: number | null;
@@ -269,6 +275,29 @@ export function envelopeIssue(envelope: BridgeEnvelope, requestId: string): Read
     return {
       code: "python_response_contract_invalid",
       message: "Bridge response contract invalid",
+      source_line_number: null,
+      context: {},
+    };
+  }
+  return null;
+}
+
+export function desktopOpenIssue(
+  response: DesktopOpenResponse,
+  requestId: string,
+): ReaderDiagnostic | null {
+  if (response.request_id !== requestId) {
+    return {
+      code: "desktop_response_request_mismatch",
+      message: "Desktop open response did not match the request",
+      source_line_number: null,
+      context: {},
+    };
+  }
+  if (response.cancelled !== (response.envelope === null)) {
+    return {
+      code: "desktop_response_contract_invalid",
+      message: "Desktop open response contract invalid",
       source_line_number: null,
       context: {},
     };

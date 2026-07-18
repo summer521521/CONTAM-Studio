@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal capability for the local workbench and user-initiated PRJ selection.",
+  "description": "Minimal capability for the local workbench and its controlled PRJ open command.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": ["core:default", "allow-select-and-read-prj-zones"]
 }

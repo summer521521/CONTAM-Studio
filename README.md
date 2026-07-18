@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目已建立**Phase 2C：真实PRJ只读Zone展示闭环**。用户可从Tauri原生文件选择器主动选择受支持的PRJ，由Rust宿主通过一次性受控Python进程调用严格Zone读取器，随后在桌面工作台查看真实项目摘要、全部Zone和只读属性。该能力仍只覆盖经验证的CONTAM 3.4简单Zone子集，不代表完整PRJ已加载；未知版本、复杂尾部和未验证布局会整体拒绝。当前没有PRJ保存与回写、ContamX运行或AI能力。
+项目已建立**Phase 2C：真实PRJ只读Zone展示闭环**。用户可从Tauri原生文件选择器主动选择受支持的PRJ，由Rust宿主通过一次性受控Python进程调用严格Zone读取器，随后在桌面工作台查看真实项目摘要、全部Zone和只读属性。文件选择与读取合并为一个显式授权的Rust命令，前端只能提交`request_id`，不能指定源路径。该能力仍只覆盖经验证的CONTAM 3.4简单Zone子集，不代表完整PRJ已加载；未知版本、复杂尾部和未验证布局会整体拒绝。当前没有PRJ保存与回写、ContamX运行或AI能力。
 
 ## 架构方向
 
@@ -37,7 +37,7 @@ Python CONTAM领域核心
 官方ContamX
 ```
 
-Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2A建立了Python隔离执行检查核心；Phase 2B-1增加了独立的严格Zone纯文档读取器；Phase 2C用结构化协议将该读取器接入桌面工作台。contamxpy隔离稳态初始化入口没有接入GUI。
+Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2A建立了Python隔离执行检查核心；Phase 2B-1增加了独立的严格Zone纯文档读取器；Phase 2C用结构化协议将该读取器接入桌面工作台。Rust在结果跨IPC前清理诊断、拒绝非空stderr，并确认响应路径与用户选择的规范化路径一致。contamxpy隔离稳态初始化入口没有接入GUI。
 
 ## 开发启动
 

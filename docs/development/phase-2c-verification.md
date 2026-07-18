@@ -27,7 +27,7 @@ cargo check --manifest-path .\src-tauri\Cargo.toml
 git diff --check
 ```
 
-本次结果：Python 77项通过，Ruff通过；Vitest 11项通过，前端构建通过；Cargo 15项通过，Cargo检查通过。MSVC链接器输出了一条本地化的导入库创建提示，未影响测试或构建。
+本次结果：Python 77项通过，Ruff通过；Vitest 15项通过，前端构建通过；Cargo 20项通过，Cargo检查与格式检查通过。MSVC链接器输出了一条本地化的导入库创建提示，未影响测试或构建。
 
 ## 官方fixture
 
@@ -45,6 +45,7 @@ git diff --check
 - 依次打开三份官方fixture，核对全部Zone、首个Zone、文件头、源大小、哈希缩略值及属性检查器。
 - 切换任意Zone后，名称、CONTAM编号、flags、楼层、相对高度、体积和源行号同步更新。
 - 原生文件选择取消后不显示错误，已加载项目保持不变。
+- 原生文件对话框由Rust命令打开；前端桌面API和IPC参数只包含`request_id`，没有`source_path`参数或dialog插件权限。
 - 新项目加载失败时保留上一个成功项目，同时问题面板显示稳定错误码；首次失败保持欢迎页。
 - 简体中文、英文、浅色和深色主题均在真实项目状态下验证，布局没有白屏或明显溢出。
 - 正式截图`docs/ui/phase-2c-real-zone-project.png`来自实际浅色Tauri窗口，文件签名为PNG，尺寸1443×931。
@@ -62,7 +63,9 @@ git diff --check
 | `NaN`、`Infinity`、十六进制浮点、超大科学计数法 | `invalid_zone_field` |
 | 非法桥接JSON | `bridge_request_invalid_json` |
 
-每个Python桥响应均只有一行JSON，stderr为空，不包含Traceback。Rust单元测试另行模拟并验证错误解释器路径、进程启动失败、非零退出、超时、无效UTF-8、无效JSON、协议/请求不匹配、stdout/stderr超限和诊断截断；这些错误均不会触发Rust panic或返回内部命令。
+每个Python桥响应均只有一行JSON，stderr为空，不包含Traceback。Rust单元测试另行模拟并验证错误解释器路径、进程启动失败、非零退出、超时、无效UTF-8、无效JSON、协议/请求不匹配、stdout/stderr超限、非空stderr、响应路径错配、恶意诊断和诊断截断；这些错误均不会触发Rust panic或返回内部命令。Rust测试还核对`AppManifest`、生成权限、main capability、前端API与`package.json`的一致性。
+
+跨IPC测试证明Python原始message、Traceback文本、未批准context键、嵌套值和超长token不会出现在最终WebView响应中；无效诊断code会使整个响应以`python_response_diagnostic_invalid`失败。前端仍执行相同白名单和截断，作为第二道防线。
 
 ## 当前验证边界
 

@@ -1,19 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import type { BridgeEnvelope } from "./project-state";
+import type { DesktopOpenResponse } from "./project-state";
 
-export async function selectPrjFile(): Promise<string | null> {
-  const selected = await open({
-    directory: false,
-    multiple: false,
-    filters: [{ name: "CONTAM PRJ", extensions: ["prj"] }],
-  });
-  return typeof selected === "string" ? selected : null;
-}
-
-export async function readPrjZones(
-  sourcePath: string,
+export async function selectAndReadPrjZones(
   requestId: string,
-): Promise<BridgeEnvelope> {
-  return invoke<BridgeEnvelope>("read_prj_zones", { sourcePath, requestId });
+): Promise<DesktopOpenResponse> {
+  return invoke<DesktopOpenResponse>("select_and_read_prj_zones", { requestId });
 }

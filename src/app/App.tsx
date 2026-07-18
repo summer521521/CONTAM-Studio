@@ -10,8 +10,9 @@ import { StatusBar } from "../components/workbench/StatusBar";
 import { TopBar } from "../components/workbench/TopBar";
 import { WelcomePage } from "../components/workbench/WelcomePage";
 import i18n from "../i18n";
-import { readPrjZones, selectPrjFile } from "./desktop-api";
+import { selectAndReadPrjZones } from "./desktop-api";
 import {
+  desktopOpenIssue,
   envelopeIssue,
   INITIAL_PROJECT_STATE,
   projectReducer,
@@ -87,34 +88,27 @@ function App() {
   const openProject = useCallback(async () => {
     const sequence = ++requestSequence.current;
     dispatchProject({ type: "selection_started", sequence });
-    let sourcePath: string | null;
-    try {
-      sourcePath = await selectPrjFile();
-    } catch {
-      if (!mounted.current || sequence !== requestSequence.current) return;
-      dispatchProject({
-        type: "selection_failed",
-        sequence,
-        issue: {
-          code: "desktop_dialog_failed",
-          message: "Desktop file dialog failed",
-          source_line_number: null,
-          context: {},
-        },
-      });
-      return;
-    }
-    if (!mounted.current || sequence !== requestSequence.current) return;
-    if (!sourcePath) {
-      dispatchProject({ type: "selection_cancelled", sequence });
-      return;
-    }
-
     const requestId = crypto.randomUUID();
     dispatchProject({ type: "loading_started", sequence, requestId });
     try {
-      const envelope = await readPrjZones(sourcePath, requestId);
+      const response = await selectAndReadPrjZones(requestId);
       if (!mounted.current || sequence !== requestSequence.current) return;
+      const desktopIssue = desktopOpenIssue(response, requestId);
+      if (desktopIssue) {
+        dispatchProject({
+          type: "loading_failed",
+          sequence,
+          requestId,
+          issue: desktopIssue,
+        });
+        return;
+      }
+      if (response.cancelled) {
+        dispatchProject({ type: "selection_cancelled", sequence });
+        return;
+      }
+      const envelope = response.envelope;
+      if (!envelope) return;
       const issue = envelopeIssue(envelope, requestId);
       if (issue || !envelope.result) {
         dispatchProject({
