@@ -9,6 +9,7 @@
     "allow-plan-zone-volume-patch",
     "allow-apply-zone-volume-patch-to-copy",
     "allow-select-and-extract-zone-air-state",
+    "allow-extract-active-run-zone-air-state",
     "allow-run-active-contam-project"
   ]
 }

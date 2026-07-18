@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   INITIAL_RESULT_STATE,
+  resultIsOlderThanActiveRun,
   resultReducer,
   type ZoneAirStateResult,
 } from "./result-state";
@@ -44,6 +45,27 @@ describe("Zone result state", () => {
     expect(selecting.status).toBe("selecting");
     const loading = resultReducer(selecting, { type: "host_loading_started", requestId: "r1" });
     expect(loading.status).toBe("loading");
+  });
+
+  it("loads an active run directly without entering selecting or accepting host stages", () => {
+    const loading = resultReducer(INITIAL_RESULT_STATE, {
+      type: "active_run_started",
+      sequence: 1,
+      requestId: "active-1",
+      projectSessionId: "s1",
+      zoneNumber: 1,
+    });
+    expect(loading.status).toBe("loading");
+    expect(loading.pendingSource).toBe("active_run");
+    expect(resultReducer(loading, { type: "host_loading_started", requestId: "active-1" })).toEqual(loading);
+    const loaded = resultReducer(loading, {
+      type: "load_succeeded",
+      sequence: 1,
+      requestId: "active-1",
+      projectSessionId: "s1",
+      result: RESULT_FIXTURE,
+    });
+    expect(loaded.resultSource).toBe("active_run");
   });
 
   it("ignores a host stage notification from an old request", () => {
@@ -116,5 +138,17 @@ describe("Zone result state", () => {
   it("clears results and notices when the project or Zone changes", () => {
     const cancelled = resultReducer(start(), { type: "load_cancelled", sequence: 1, requestId: "r1" });
     expect(resultReducer(cancelled, { type: "project_or_zone_changed" })).toEqual(INITIAL_RESULT_STATE);
+  });
+
+  it("marks retained results stale only when the latest successful run changes", () => {
+    const loaded = {
+      ...INITIAL_RESULT_STATE,
+      status: "loaded" as const,
+      result: RESULT_FIXTURE,
+      resultSource: "selected_manifest" as const,
+    };
+    expect(resultIsOlderThanActiveRun(loaded, "run-1")).toBe(false);
+    expect(resultIsOlderThanActiveRun(loaded, "run-2")).toBe(true);
+    expect(resultIsOlderThanActiveRun(loaded, null)).toBe(false);
   });
 });

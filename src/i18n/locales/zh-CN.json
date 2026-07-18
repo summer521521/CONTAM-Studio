@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 4B-1 桌面运行"
+    "phase": "Phase 5B-2 最新运行结果"
   },
   "common": {
     "yes": "是",
@@ -52,7 +52,7 @@
     "recent": "最近项目",
     "recentEmpty": "暂无最近项目",
     "recentHint": "当前不保存或自动扫描最近项目。",
-    "phaseTitle": "当前阶段：Phase 4B-1受控桌面运行",
+    "phaseTitle": "当前阶段：Phase 5B-2最新运行结果",
     "phaseBody": "可从顶部运行当前活动项目并查看安全摘要；运行结果仍需在结果页手动选择Phase 4清单。",
     "offlineTitle": "离线优先",
     "offlineBody": "本阶段不发送网络请求，核心桌面界面完全在本地运行。",
@@ -147,16 +147,27 @@
   "results": {
     "tab": "Zone空气状态结果",
     "load": "加载运行结果",
+    "loadLatest": "加载最新运行结果",
+    "selectManifest": "选择已有运行清单",
+    "selectOtherManifest": "选择其他运行清单",
     "selecting": "正在选择Phase 4运行清单…",
-    "loading": "正在加载运行结果…",
+    "loading": "正在加载所选运行结果…",
+    "loadingLatest": "正在加载最新运行结果…",
     "cancelled": "已取消运行清单选择，未加载结果。",
     "selectingRetained": "正在选择新的Phase 4运行清单；当前结果仍保留。",
-    "loadingRetained": "正在提取新的运行结果；当前结果仍保留。",
+    "loadingRetained": "正在提取所选运行结果；当前结果仍保留。",
+    "loadingLatestRetained": "正在提取最新运行结果；当前结果仍保留。",
     "cancelledRetained": "本次加载已取消；仍显示上一次成功结果。",
     "failedRetained": "本次加载失败（{{error}}）；仍显示上一次成功结果。",
     "empty": "选择Zone后加载Phase 4运行清单。",
+    "emptyWithActiveRun": "最新成功运行可用于当前Zone；结果提取仍需你主动触发。",
+    "emptyWithoutActiveRun": "请先运行当前项目，或选择已有的Phase 4运行清单。",
     "manifestLabel": "Phase 4运行清单",
     "summaryTitle": "真实Zone空气状态摘要",
+    "sourceLabel": "结果来源",
+    "sourceActiveRun": "当前桌面会话的最新成功运行",
+    "sourceSelectedManifest": "用户选择的Phase 4运行清单",
+    "staleRun": "新的运行已经完成。当前表格仍来自较早运行，请加载最新运行结果。",
     "zone": "Zone",
     "runId": "运行ID",
     "extractionId": "提取ID",
@@ -196,7 +207,8 @@
     "timedOut": "是否超时",
     "simCount": "主要SIM数量",
     "sourceUnchanged": "源文件保持不变",
-    "nextSlice": "下一切片才会把本次活动运行直接衔接到Zone结果页。"
+    "viewCurrentZoneResults": "查看当前Zone结果",
+    "resultActionHint": "结果提取需要明确点击；完成运行不会自动调用SimRead。"
   },
   "patch": {
     "editVolume": "修改体积",
@@ -307,6 +319,10 @@
       "run_source_changed": "源项目或源目录在运行期间发生变化",
       "run_response_contract_invalid": "ContamX运行响应不符合桌面契约",
       "run_response_path_invalid": "运行证据不位于受控应用目录",
+      "active_run_missing": "当前项目没有可用的最新成功运行，请先运行项目或选择已有运行清单",
+      "active_run_invalid": "最新运行证据已失效，请重新运行项目或选择已有运行清单",
+      "active_run_project_mismatch": "最新运行不属于当前项目，请重新运行项目",
+      "active_run_result_mismatch": "提取结果与最新成功运行不一致，请重试",
       "result_project_mismatch": "运行清单不属于当前项目",
       "result_zone_mismatch": "运行结果与当前Zone不匹配",
       "result_manifest_not_found": "找不到Phase 4运行清单",

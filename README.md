@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目当前进入**Phase 4B-1：受控桌面ContamX运行**。已打开受支持PRJ后，顶部“运行”通过Rust活动session和应用本地运行目录调用Python Phase 4核心，界面只显示不含路径的运行摘要；最新成功manifest只保存在Rust内存。当前不会自动把本次运行加载到结果页，仍不提供历史、批量、取消、曲线或导出。
+项目当前进入**Phase 5B-2：最新成功运行直达当前Zone结果**。桌面运行成功后，Rust只在内存保留受项目session和SHA-256约束的最新manifest；用户明确点击“加载最新运行结果”或“查看当前Zone结果”后，宿主直接复用Phase 5A提取，不再要求重新寻找刚生成的清单。运行结束不会自动调用SimRead，手动选择已有运行清单的入口仍保留。
 
 ## 架构方向
 
@@ -118,6 +118,7 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [ContamX运行工作区](docs/architecture/contamx-run-workspace.md)
 - [Phase 4B-1受控桌面运行](docs/architecture/phase-4b-desktop-contamx-run.md)
 - [Phase 4B-1自动验证](docs/development/phase-4b-desktop-contamx-run-verification.md)
+- [Phase 5B-2最新运行结果验证](docs/development/phase-5b-active-run-results-verification.md)
 - [Phase 4A开发与验证](docs/development/phase-4a-contamx-run-core-verification.md)
 - [Phase 2C开发与验证](docs/development/phase-2c-verification.md)
 - [Phase 3A-0开发与验证](docs/development/phase-3a-zone-volume-patch-verification.md)
@@ -143,14 +144,16 @@ python\.venv\Scripts\python.exe -m contam_studio_core.zone_air_state_results ext
 
 结果提取只接受成功的Phase 4运行清单作为可信入口，不能直接传入NFR或SIM。manifest、PRJ和SIM使用同一份bytes及哈希证据反复复核；`day_type`当前返回null，因为官方NFR不提供CONTAM日类型，`sim_time_seconds`表示从首个样本起算的累计秒数。工作区创建后进程或解析失败会使用与成功相同的清单模型保留真实流和生成物证据，wait异常和超时均进入有界进程收口并关闭父管道，且写清单前记录Phase 4、工作区和SimRead最终证据状态；未确认退出的生成物不写最终哈希；入口配置或路径在工作区创建前拒绝时不会伪造清单。
 
-## Phase 5B-1桌面结果摘要
+## Phase 5B桌面结果摘要
 
-打开受支持PRJ并选择Zone后，结果区域的“加载运行结果”只打开Phase 4运行清单筛选器；React不会提交任何本地路径。Rust持有活动项目session和原生选择的manifest路径，结果根目录由应用本地数据目录控制，Python在启动SimRead前验证项目SHA-256和Zone身份。成功后桌面显示当前Zone的真实样本表格；`day_type`显示为不可用的`—`。详见[Phase 5B-1架构](docs/architecture/phase-5b-zone-result-summary.md)和[验证记录](docs/development/phase-5b-zone-result-summary-verification.md)。
+打开受支持PRJ并选择Zone后，Phase 5B-1允许通过原生对话框选择Phase 4运行清单。Phase 5B-2新增无对话框的“加载最新运行结果”：manifest只来自Rust内存中的`ActiveRunContext`，并严格绑定当前项目session、源SHA-256、受控运行目录和`run_id`。React始终只提交request、session和Zone编号，不提交任何路径。详见[Phase 5B架构](docs/architecture/phase-5b-zone-result-summary.md)、[Phase 5B-1验证记录](docs/development/phase-5b-zone-result-summary-verification.md)和[Phase 5B-2验证记录](docs/development/phase-5b-active-run-results-verification.md)。
 
-Phase 5B-1结果入口仍不接受任意SIM/NFR；Phase 4B-1运行成功后也不会自动提取结果。当前不支持曲线、CSV/Excel导出、多Zone比较、污染物结果或AI解释。
+结果入口仍不接受任意SIM/NFR；运行成功后不会自动提取结果。当前不支持曲线、CSV/Excel导出、多Zone或多运行比较、运行历史、污染物结果或AI解释。
+
+Phase 5B-2自动、非GUI官方闭环和用户真实Tauri验收均已通过；验收覆盖最新运行直达、Zone 1/2、较早清单过期提示、取消保留、项目切换清理、中英文和双主题，证据见[PR #12评论](https://github.com/summer521521/CONTAM-Studio/pull/12#issuecomment-5011558413)。
 
 ## Phase 4B-1桌面运行
 
 顶部“运行”只向Tauri提交`request_id`和活动`project_session_id`。Rust绑定当前项目路径和SHA-256，把运行根限制到应用本地数据目录，并通过一次性Python桥调用同一`run_contamx()`领域接口。成功摘要包含运行ID、官方ContamX 3.4.0.3、时间、退出码和非空SIM数量，不包含求解器、manifest或工作区绝对路径。ContamX通过`CONTAM_STUDIO_CONTAMX`配置，不回退PATH。
 
-最新成功运行只存在于当前桌面会话，打开其他项目或切换到Patch副本后清除。运行失败保留上一次成功摘要。本切片不自动提取或展示本次运行结果；手动GUI验收状态为`pending_user`。
+最新成功运行只存在于当前桌面会话，打开其他项目或切换到Patch副本后清除。运行失败保留上一次成功摘要。Phase 4B-1自动与用户手动GUI验收均已通过；手动证据记录在[PR #11验收评论](https://github.com/summer521521/CONTAM-Studio/pull/11#issuecomment-5011099169)。Phase 5B-2允许用户主动把这份最新成功运行加载到当前Zone结果页，但不自动提取。

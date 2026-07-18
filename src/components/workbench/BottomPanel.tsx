@@ -9,11 +9,21 @@ interface BottomPanelProps {
   activeTab: BottomTab;
   projectState: ProjectState;
   runState: RunState;
+  onViewCurrentZoneResults: () => void;
+  viewRunResultsDisabled: boolean;
   onTabChange: (tab: BottomTab) => void;
   onCollapse: () => void;
 }
 
-export function BottomPanel({ activeTab, projectState, runState, onTabChange, onCollapse }: BottomPanelProps) {
+export function BottomPanel({
+  activeTab,
+  projectState,
+  runState,
+  onViewCurrentZoneResults,
+  viewRunResultsDisabled,
+  onTabChange,
+  onCollapse,
+}: BottomPanelProps) {
   const { t } = useTranslation();
   const tabs: BottomTab[] = ["problems", "logs", "results"];
 
@@ -75,7 +85,13 @@ export function BottomPanel({ activeTab, projectState, runState, onTabChange, on
             </div>
           </div>
         ) : null}
-        {activeTab === "logs" ? <ContamXRunSummary state={runState} /> : null}
+        {activeTab === "logs" ? (
+          <ContamXRunSummary
+            state={runState}
+            onViewCurrentZoneResults={onViewCurrentZoneResults}
+            viewResultsDisabled={viewRunResultsDisabled}
+          />
+        ) : null}
         {activeTab === "results" ? (
           <div className="panel-empty-state">
             <FileClock size={27} strokeWidth={1.5} aria-hidden="true" />

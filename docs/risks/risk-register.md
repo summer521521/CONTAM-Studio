@@ -34,3 +34,4 @@
 | Phase 4源证据与运行快照脱钩 | 结果可能归因到错误PRJ或SIM | 高 | 严格要求主PRJ source/snapshot字段和实际文件逐项相等，并在提取多时点复核 | Phase 5A |
 | SimRead失败证据不完整 | 失败被误判成功或无法审计 | 高 | 统一结果清单模型；保留stdin、退出/终止请求与退出确认、父管道关闭、流冻结和已生成NFR/XRF证据；未确认退出时生成物不写最终哈希；写入前统一复核Phase 4、工作区和SimRead身份 | Phase 5A |
 | R-5B-1 | 结果清单可能属于其他项目 | 高 | Rust持有manifest路径并绑定活动项目SHA-256，Python在SimRead启动前复核项目与Zone | 当前仅支持Phase 4成功清单和当前Zone |
+| R-5B-2 | 内存中的活动运行失效或旧结果被误认为最新 | 高 | 绑定项目session/SHA-256、受控manifest规范化路径和`run_id`；Python返回后再次复核；旧结果显式标记过期且不自动替换 | Phase 5B-2 |

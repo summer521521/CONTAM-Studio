@@ -4,9 +4,15 @@ import type { RunState } from "../../app/run-state";
 
 interface ContamXRunSummaryProps {
   state: RunState;
+  onViewCurrentZoneResults: () => void;
+  viewResultsDisabled: boolean;
 }
 
-export function ContamXRunSummary({ state }: ContamXRunSummaryProps) {
+export function ContamXRunSummary({
+  state,
+  onViewCurrentZoneResults,
+  viewResultsDisabled,
+}: ContamXRunSummaryProps) {
   const { t } = useTranslation();
   const summary = state.summary;
   return (
@@ -36,7 +42,19 @@ export function ContamXRunSummary({ state }: ContamXRunSummaryProps) {
           <div><dt>{t("run.sourceUnchanged")}</dt><dd>{t(summary.source_unchanged ? "common.yes" : "common.no")}</dd></div>
         </dl>
       ) : null}
-      {summary ? <p className="run-next-note">{t("run.nextSlice")}</p> : null}
+      {summary ? (
+        <div className="run-result-action">
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={onViewCurrentZoneResults}
+            disabled={viewResultsDisabled}
+          >
+            <Play size={15} />{t("run.viewCurrentZoneResults")}
+          </button>
+          <p className="run-next-note">{t("run.resultActionHint")}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

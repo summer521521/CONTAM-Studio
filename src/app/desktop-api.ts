@@ -51,6 +51,18 @@ export async function selectAndExtractZoneAirState(
   });
 }
 
+export async function extractActiveRunZoneAirState(
+  requestId: string,
+  projectSessionId: string,
+  zoneNumber: number,
+): Promise<DesktopZoneAirStateResponse> {
+  return invoke<DesktopZoneAirStateResponse>("extract_active_run_zone_air_state", {
+    requestId,
+    projectSessionId,
+    zoneNumber,
+  });
+}
+
 export async function runActiveContamProject(
   requestId: string,
   projectSessionId: string,
