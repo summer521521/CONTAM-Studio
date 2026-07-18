@@ -5,6 +5,7 @@ import type {
 } from "./patch-state";
 import type { DesktopOpenResponse } from "./project-state";
 import type { DesktopZoneAirStateResponse } from "./result-state";
+import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state";
 import type { DesktopRunResponse } from "./run-state";
 
 export async function selectAndReadPrjZones(
@@ -60,6 +61,22 @@ export async function extractActiveRunZoneAirState(
     requestId,
     projectSessionId,
     zoneNumber,
+  });
+}
+
+export async function exportActiveZoneAirStateCsv(
+  requestId: string,
+  projectSessionId: string,
+  zoneNumber: number,
+  runId: string,
+  extractionId: string,
+): Promise<DesktopZoneAirStateCsvExportResponse> {
+  return invoke<DesktopZoneAirStateCsvExportResponse>("export_active_zone_air_state_csv", {
+    requestId,
+    projectSessionId,
+    zoneNumber,
+    runId,
+    extractionId,
   });
 }
 

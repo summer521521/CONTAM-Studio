@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 5B-2 Latest run results"
+    "phase": "Phase 5C Result analysis"
   },
   "common": {
     "yes": "Yes",
@@ -52,8 +52,8 @@
     "recent": "Recent projects",
     "recentEmpty": "No recent projects",
     "recentHint": "Recent projects are not stored or scanned automatically.",
-    "phaseTitle": "Current phase: Phase 5B-2 latest run results",
-    "phaseBody": "Run the active project from the top toolbar and inspect a safe summary; loading this run into results remains a later slice.",
+    "phaseTitle": "Current phase: Phase 5C result analysis",
+    "phaseBody": "Analyze the current Zone's strict result with deterministic statistics, synchronized charts, and controlled CSV export.",
     "offlineTitle": "Offline first",
     "offlineBody": "This phase sends no network requests; the core desktop UI runs locally.",
     "protectionTitle": "Original file protection",
@@ -178,7 +178,7 @@
     "dayType": "Day type",
     "dayTypeUnavailable": "Official NFR does not provide a CONTAM day type; none was inferred",
     "simreadNote": "Results were extracted by official SimRead from a trusted Phase 4 run manifest.",
-    "strictNote": "Only the current Zone zone_air_state is shown; arbitrary SIM files, charts, and export are unsupported.",
+    "strictNote": "Only the current Zone zone_air_state is analyzed; arbitrary SIM files, multi-Zone comparison, and other result types are unsupported.",
     "time": "Elapsed time (s)",
     "temperature": "Temperature (K)",
     "pressure": "Reference pressure (Pa)",
@@ -186,7 +186,43 @@
     "dayTypeColumn": "Day type",
     "noData": "No real results loaded yet",
     "errorTitle": "Result loading failed",
-    "retry": "Choose another run manifest"
+    "retry": "Choose another run manifest",
+    "latestResult": "Latest run result",
+    "olderResult": "Earlier run result",
+    "timeLabel": "Elapsed time",
+    "analysis": {
+      "title": "Zone air-state analysis",
+      "duration": "Total duration",
+      "statistics": "Deterministic statistics",
+      "minimum": "Minimum",
+      "maximum": "Maximum",
+      "mean": "Arithmetic mean",
+      "deterministicNote": "Statistics use one ordered pass over the raw samples with no interpolation or smoothing; they are not comfort or compliance judgments.",
+      "viewLabel": "Result view",
+      "charts": "Charts",
+      "dataTable": "Data table",
+      "tableCaption": "{{count}} raw Zone air-state samples",
+      "invalidTitle": "Invalid result analysis contract",
+      "invalidBody": "The strict result cannot be analyzed deterministically; reload the run result."
+    },
+    "chart": {
+      "description": "Three real Zone air-state curves sharing one elapsed-time range: temperature, reference pressure, and air density.",
+      "sample": "Sample index",
+      "elapsed": "Elapsed time",
+      "temperature": "Temperature",
+      "pressure": "Reference pressure",
+      "density": "Air density",
+      "resetZoom": "Reset zoom"
+    },
+    "export": {
+      "action": "Export current result CSV",
+      "selecting": "Choose export destination…",
+      "exporting": "Exporting…",
+      "selectingStatus": "Choose a new CSV file; no existing file will be overwritten.",
+      "exportingStatus": "Writing and verifying the CSV atomically.",
+      "cancelled": "This CSV export was cancelled; the current result is unchanged.",
+      "succeeded": "Exported {{file_name}}: {{row_count}} rows, {{byte_count}} bytes."
+    }
   },
   "run": {
     "status": {
@@ -323,6 +359,18 @@
       "active_run_invalid": "The latest run evidence is no longer valid; rerun the project or choose an existing manifest",
       "active_run_project_mismatch": "The latest run does not belong to the current project; run the project again",
       "active_run_result_mismatch": "The extracted result did not match the latest successful run; try again",
+      "active_result_missing": "No active result is available for export; load a Zone result first",
+      "active_result_project_mismatch": "The active result does not belong to the current project; reload it",
+      "active_result_zone_mismatch": "The active result does not belong to the current Zone; reload it",
+      "active_result_identity_mismatch": "The active result identity changed; reload it",
+      "export_destination_invalid": "The selected CSV export destination is invalid",
+      "export_destination_exists": "The selected CSV already exists and will not be overwritten",
+      "export_destination_conflicts_with_source": "The export destination conflicts with the project source",
+      "export_temporary_write_failed": "The controlled temporary CSV could not be created or written",
+      "export_atomic_commit_failed": "The CSV could not be committed atomically",
+      "export_verification_failed": "The CSV size verification failed after writing",
+      "export_response_contract_invalid": "The CSV export response violated the desktop contract",
+      "export_stage_notification_failed": "The CSV export stage could not be reported",
       "result_project_mismatch": "The run manifest does not belong to this project",
       "result_zone_mismatch": "The run result does not match the current Zone",
       "result_manifest_not_found": "The Phase 4 run manifest was not found",

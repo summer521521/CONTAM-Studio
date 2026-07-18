@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 5B-2 最新运行结果"
+    "phase": "Phase 5C 结果分析"
   },
   "common": {
     "yes": "是",
@@ -52,8 +52,8 @@
     "recent": "最近项目",
     "recentEmpty": "暂无最近项目",
     "recentHint": "当前不保存或自动扫描最近项目。",
-    "phaseTitle": "当前阶段：Phase 5B-2最新运行结果",
-    "phaseBody": "可从顶部运行当前活动项目并查看安全摘要；运行结果仍需在结果页手动选择Phase 4清单。",
+    "phaseTitle": "当前阶段：Phase 5C结果分析",
+    "phaseBody": "对当前Zone的严格结果提供确定性统计、同步曲线和受控CSV导出。",
     "offlineTitle": "离线优先",
     "offlineBody": "本阶段不发送网络请求，核心桌面界面完全在本地运行。",
     "protectionTitle": "原始文件保护",
@@ -178,7 +178,7 @@
     "dayType": "日类型",
     "dayTypeUnavailable": "官方NFR不提供CONTAM日类型，未进行推断",
     "simreadNote": "结果由官方SimRead从受信任的Phase 4运行清单提取。",
-    "strictNote": "当前只显示当前Zone的zone_air_state，不支持任意SIM、曲线或导出。",
+    "strictNote": "当前只分析当前Zone的zone_air_state；不支持任意SIM、多Zone比较或其他结果类型。",
     "time": "累计时间（秒）",
     "temperature": "温度（K）",
     "pressure": "参考压力（Pa）",
@@ -186,7 +186,43 @@
     "dayTypeColumn": "日类型",
     "noData": "尚未加载真实结果",
     "errorTitle": "结果加载失败",
-    "retry": "重新选择运行清单"
+    "retry": "重新选择运行清单",
+    "latestResult": "最新运行结果",
+    "olderResult": "较早运行结果",
+    "timeLabel": "累计时间",
+    "analysis": {
+      "title": "Zone空气状态分析",
+      "duration": "总持续时间",
+      "statistics": "确定性统计摘要",
+      "minimum": "最小值",
+      "maximum": "最大值",
+      "mean": "算术平均值",
+      "deterministicNote": "统计由原始样本按固定顺序一次遍历计算，不插值、不平滑，也不构成舒适性或合规判断。",
+      "viewLabel": "结果视图",
+      "charts": "图表",
+      "dataTable": "数据表",
+      "tableCaption": "{{count}}个Zone空气状态原始样本",
+      "invalidTitle": "结果分析契约无效",
+      "invalidBody": "严格结果无法用于确定性分析，请重新加载运行结果。"
+    },
+    "chart": {
+      "description": "三张共享累计时间范围的真实Zone空气状态曲线，依次显示温度、参考压力和空气密度。",
+      "sample": "样本索引",
+      "elapsed": "累计时间",
+      "temperature": "温度",
+      "pressure": "参考压力",
+      "density": "空气密度",
+      "resetZoom": "重置缩放"
+    },
+    "export": {
+      "action": "导出当前结果CSV",
+      "selecting": "选择导出位置…",
+      "exporting": "正在导出…",
+      "selectingStatus": "请选择不存在的新CSV文件；不会覆盖任何既有文件。",
+      "exportingStatus": "正在原子写入并验证CSV。",
+      "cancelled": "本次CSV导出已取消；当前结果保持不变。",
+      "succeeded": "已导出{{file_name}}：{{row_count}}行，{{byte_count}}字节。"
+    }
   },
   "run": {
     "status": {
@@ -323,6 +359,18 @@
       "active_run_invalid": "最新运行证据已失效，请重新运行项目或选择已有运行清单",
       "active_run_project_mismatch": "最新运行不属于当前项目，请重新运行项目",
       "active_run_result_mismatch": "提取结果与最新成功运行不一致，请重试",
+      "active_result_missing": "当前没有可导出的活动结果，请先加载Zone结果",
+      "active_result_project_mismatch": "活动结果不属于当前项目，请重新加载结果",
+      "active_result_zone_mismatch": "活动结果不属于当前Zone，请重新加载结果",
+      "active_result_identity_mismatch": "活动结果身份已变化，请重新加载结果",
+      "export_destination_invalid": "所选CSV导出位置无效",
+      "export_destination_exists": "所选CSV已经存在，不会覆盖",
+      "export_destination_conflicts_with_source": "导出目标与项目源文件冲突",
+      "export_temporary_write_failed": "无法创建或写入受控CSV临时文件",
+      "export_atomic_commit_failed": "无法安全完成CSV原子落盘",
+      "export_verification_failed": "CSV写入后的大小验证失败",
+      "export_response_contract_invalid": "CSV导出响应不符合桌面契约",
+      "export_stage_notification_failed": "无法报告CSV导出阶段",
       "result_project_mismatch": "运行清单不属于当前项目",
       "result_zone_mismatch": "运行结果与当前Zone不匹配",
       "result_manifest_not_found": "找不到Phase 4运行清单",

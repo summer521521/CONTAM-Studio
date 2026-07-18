@@ -2,7 +2,7 @@
 
 ## 目的与范围
 
-Phase 2C用最小纵向切片验证桌面端能够打开受支持的真实PRJ并展示全部Zone。Phase 3B加入Zone体积Patch，Phase 5B-1加入清单选择与结果提取，Phase 4B-1加入活动项目ContamX运行，Phase 5B-2再把Rust内存中的最新成功运行连接到同一结果提取桥。桥不调用contamxpy。
+Phase 2C用最小纵向切片验证桌面端能够打开受支持的真实PRJ并展示全部Zone。Phase 3B加入Zone体积Patch，Phase 5B-1加入清单选择与结果提取，Phase 4B-1加入活动项目ContamX运行，Phase 5B-2再把Rust内存中的最新成功运行连接到同一结果提取桥。Phase 5C的CSV只使用Rust已验证的活动结果，不新增Python操作。桥不调用contamxpy。
 
 ```text
 React GUI
@@ -67,6 +67,7 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / e
 11. 应用成功后Rust验证应用结果和重读文档，替换活动项目并清除Patch；React切换到新副本。React只接受当前`request_id`对应的结果。
 12. 结果命令由Rust原生选择Phase 4 JSON清单，并在应用本地数据目录创建受控结果根；Rust向Python传入活动项目路径、哈希和Zone编号，验证返回的样本契约后只向WebView发送不含路径的结果视图。
 13. 最新运行结果命令不打开对话框，从Rust `ActiveRunContext`取得受控manifest；它额外验证项目session、源SHA-256、运行根和返回`run_id`，但复用第12步相同的Python操作与结果验证。
+14. 两种结果入口成功后，Rust保存仅存在于内存的`ActiveResultContext`。CSV导出重新验证项目、Zone、运行和提取身份，原生选择目标并在Rust中编码；React不提交路径、样本或CSV，导出不启动Python。
 
 读取和计划超时为10秒，应用超时为15秒，结果提取超时为45秒，桌面ContamX运行桥超时为75秒（大于Python求解器60秒上限）；stdout上限2 MiB，stderr上限16 KiB。超时后Rust终止Python进程；超过上限的内容继续被排空但不保存在内存中。stderr必须为空且不会返回前端，Python正常用户输入错误通过stdout Envelope表达。
 
@@ -94,7 +95,7 @@ Rust只接受不超过80字符的`[a-z0-9_]`诊断code；Python原始message被�
 
 ## 文件与权限边界
 
-- `build.rs`通过`AppManifest`只登记打开、计划、应用、手动结果提取、活动运行结果提取和活动项目运行六个命令；main窗口capability仅包含`core:default`及这六个命令的显式权限。
+- `build.rs`通过`AppManifest`只登记打开、计划、应用、手动结果提取、活动运行结果提取、活动项目运行和活动结果CSV导出七个命令；main窗口capability仅包含`core:default`及这七个命令的显式权限。
 - 前端没有dialog、文件系统、Shell、HTTP或远程URL权限，也没有`@tauri-apps/plugin-dialog`依赖。
 - Rust侧文件选择器只显示`.prj`筛选，不扫描磁盘；取消不是错误。筛选之后仍验证文件、扩展名和规范化路径。
 - Rust只把内部持有的规范化选择路径作为结构化字段传入Python，不把路径拼接成命令。
@@ -111,5 +112,5 @@ Rust只接受不超过80字符的`[a-z0-9_]`诊断code；Python原始message被�
 - 进程主动取消、进程树清理及大量并发请求；当前UI在选择和读取期间禁用重复打开，状态层仍拒绝旧响应。
 - 完整PRJ、Zone条件尾部、其他区块、源文件保存和完整回写；当前未知区块仅通过单记号替换时保留原始字节。
 - 稳定UUID、跨重启session、多个Patch、撤销/重做和其他字段编辑。
-- 运行结束后自动提取、任意SIM/NFR入口、结果曲线、导出和其他结果类型。最新成功运行仍必须由用户明确点击后加载。
+- 运行结束后自动提取、任意SIM/NFR入口、其他结果类型、多Zone/多运行比较、Excel原生格式和自动导出。最新成功运行仍必须由用户明确点击后加载，CSV仍必须由用户明确选择新文件。
 - HTTP服务、常驻sidecar、远程调用、云服务和AI。

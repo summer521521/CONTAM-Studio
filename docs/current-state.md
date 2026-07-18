@@ -2,6 +2,13 @@
 
 记录日期：2026-07-18。
 
+## Phase 5C Zone空气状态分析工作区
+
+- 当前Zone的严格`zone_air_state`结果新增模块化ECharts三联曲线、确定性统计和完整语义化数据表切换。曲线不插值、不平滑、不采样，统计使用一次遍历在线均值且不改变原始样本或SI单位。
+- Rust新增仅存在于桌面进程内存的`ActiveResultContext`，绑定项目session/SHA-256、Zone、运行、提取、来源和完整严格结果。提取失败或取消不覆盖，新项目和Patch副本清除，新运行成功保留旧结果以显示过期提示。
+- 新增显式ACL命令`export_active_zone_air_state_csv`。React只提交结果身份；Rust在对话框前、写入前和写入后复核源PRJ SHA-256，路径由原生保存对话框取得，CSV使用固定13列、UTF-8、CRLF、RFC转义和公式注入防护生成，并以不可覆盖的同目录原子写入提交。
+- 新增唯一依赖`echarts 6.1.0`（Apache-2.0），使用模块化Canvas折线图入口。自动检查及官方ContamX→SimRead→统计→生产Rust CSV→独立CSV重读的非GUI闭环已通过；真实GUI验收为`pending_user`。
+
 ## Phase 4B-1受控桌面ContamX运行
 
 - 新增显式ACL命令`run_active_contam_project`。React只提交request和项目session；Rust从活动项目内存取得规范化路径与SHA-256，并使用`<app-local-data>/runs`。
@@ -14,12 +21,12 @@
 
 - 新增受控`select_and_extract_zone_air_state`桌面命令。React只提交request、项目session和CONTAM Zone编号；Rust通过原生JSON对话框取得Phase 4运行清单，并将结果根目录限制在应用本地数据目录。
 - Python桥新增显式`extract_zone_air_state`操作，复用Phase 5A接口并在SimRead启动前验证当前项目规范化路径、源SHA-256和Zone身份。
-- React新增真实`zone_air_state`摘要和可滚动表格，当前只显示用户选择运行清单对应的当前Zone；未接入ContamX运行、任意SIM、曲线或导出。
+- React新增真实`zone_air_state`摘要和可滚动表格，当前只显示用户选择运行清单对应的当前Zone；Phase 5C在同一严格结果上增加曲线、统计和受控CSV，但仍不接受任意SIM。
 - Phase 5B-1自动测试和真实Tauri交互已完成；官方Zone 1 `One`显示577个样本，首样本为293.15 K、-1.4222 Pa和1.2041 kg/m³，中英文与双主题正常，源PRJ及Phase 4 manifest/SIM保持不变。
 
 ## Phase 5B-2最新成功运行直达结果
 
-- 当前切片新增显式ACL命令`extract_active_run_zone_air_state`。React只提交request、活动项目session和Zone编号；命令不打开文件选择器，也不接受manifest、运行根或`run_id`。
+- Phase 5B-2新增显式ACL命令`extract_active_run_zone_air_state`。React只提交request、活动项目session和Zone编号；命令不打开文件选择器，也不接受manifest、运行根或`run_id`。
 - Rust验证`ActiveRunContext`与当前项目session/SHA-256一致，manifest严格位于`<app-local-data>/runs/<run_id>/evidence/manifest.json`，并复用Phase 5B-1相同的Python Phase 5A桥与结果契约。
 - 活动运行入口返回的`run_id`必须与最新成功运行一致；Python返回后还会再次确认活动项目和运行未被替换。WebView只收到安全结果视图。
 - 手动“选择已有运行清单”入口继续可用。新运行完成后旧表格不会被自动替换，而是显示非错误的过期提示，等待用户主动加载最新运行。
@@ -121,7 +128,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 前端项目状态使用`idle/selecting/loading/loaded/cancelled/unsupported/error`互斥状态；请求序号与`request_id`共同阻止旧响应覆盖新状态。新项目加载失败时保留上一次成功项目，首次失败保持欢迎页。
 - 成功后项目树显示全部Zone和CONTAM原始编号；选择Zone可查看名称、编号、flags、楼层、相对高度、体积、源行号、读取模式和只读状态。当前选择键是源哈希、CONTAM编号和源行号组成的临时键，不是稳定UUID。
 - 项目摘要明确显示文件头、Zone数、源文件大小、SHA-256缩略值、严格读取模式及未解析其他PRJ区块的边界；不支持文件不会显示部分项目树。
-- Node依赖为`@tauri-apps/api 2.11.1`和测试依赖`vitest 4.1.10`；前端`@tauri-apps/plugin-dialog`已移除。Rust依赖保留`serde 1.0.228`、`serde_json 1.0.150`和`tauri-plugin-dialog 2.7.1`。相关项目均为MIT、Apache-2.0或双许可证，来自持续维护的Tauri、Serde和Vitest官方仓库。
+- Node依赖包括`@tauri-apps/api 2.11.1`和模块化图表`echarts 6.1.0`，测试依赖为`vitest 4.1.10`；前端`@tauri-apps/plugin-dialog`已移除。Rust依赖保留`serde 1.0.228`、`serde_json 1.0.150`和`tauri-plugin-dialog 2.7.1`。相关项目均为MIT、Apache-2.0或双许可证，来自持续维护的官方仓库。
 - 正式界面截图为`docs/ui/phase-2c-real-zone-project.png`，内容来自实际Tauri窗口，PNG为1443×931。
 
 ## Phase 2C验证
@@ -161,7 +168,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入一个Zone体积的Diff审阅与另存副本，以及当前Zone的真实`zone_air_state`摘要；运行和AI内容仍为占位。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、撤销、多Patch、ContamX用户可触发运行、任意结果类型、曲线、导出、AI调用、网络服务或Python打包分发；Phase 3B和Phase 5B-1不得解释为完整编辑或结果分析系统。
+桌面GUI已接入一个Zone体积的Diff审阅与另存副本、受控ContamX运行、当前Zone真实`zone_air_state`摘要，以及Phase 5C曲线、确定性统计和CSV副本导出。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、撤销、多Patch、其他结果类型、多Zone/多运行比较、运行历史、AI调用、网络服务或Python打包分发；Phase 3B和Phase 5C不得解释为完整编辑或结果分析系统。
 
 ## 待验证问题
 
@@ -176,11 +183,11 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 已验证与Phase 4相同NIST官方包中的`simread.exe`：3.4.0.3、Windows x64、34816字节，SHA-256为`85AF9B559DEBB6ECF9BA2F73705CEF60F14D32C5F8ED9B524823FA3AC85A6958`。
 - 结果入口绑定成功的Phase 4 manifest，复制PRJ和SIM到全新提取工作区；不接受任意SIM路径，不修改Phase 4运行证据。
 - 首个结果类型为`zone_air_state`，通过官方`.nfr`文本严格读取Zone空气状态，单位为K、Pa和kg/m³。真实Zone 1 `One`得到577个样本，首样本为293.15 K、-1.4222 Pa、1.2041 kg/m³。
-- 当前没有GUI结果页、曲线、导出、路径流量、污染物浓度或直接SIM二进制解析。
+- Phase 5B/5C已在桌面展示当前Zone并支持受控CSV副本导出；当前仍没有路径流量、污染物浓度、直接SIM二进制解析或其他结果类型。
 ## Phase 5A加固状态
 
 - Phase 4 manifest现在以单次bytes快照严格验证，完整绑定官方ContamX身份、PRJ/SIM哈希和运行目录；主PRJ的source与snapshot字段必须逐项一致，成功清单diagnostics必须为空。
 - 提取阶段在多个时点复核Phase 4证据、工作区PRJ/SIM和SimRead二进制身份；工作区创建后成功和失败均通过同一result-manifest模型保留进程、流证据和SimRead生成物。工作区创建前的拒绝不写伪造清单。
 - Zone在启动SimRead前预验证；公开CLI不接受直接NFR或SIM。
-- `day_type`返回null并标注不可用来源；累计时间从首个样本起算。当前仍只支持`zone_air_state`，无GUI和其他结果类型。
+- `day_type`返回null并标注不可用来源；累计时间从首个样本起算。当前仍只支持`zone_air_state`，桌面分析不改变这一领域边界。
 - 当前Phase 5A Python测试共255项通过，新增编排级TOCTOU、进程收口、父管道关闭、流证据冻结、最终证据和清单Schema验证；真实Zone 1仍为577个样本。

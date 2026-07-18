@@ -14,6 +14,8 @@ import { useTranslation } from "react-i18next";
 import type { ProjectState } from "../../app/project-state";
 import { projectFileName } from "../../app/project-state";
 import type { ResultState } from "../../app/result-state";
+import type { ResultExportState } from "../../app/result-export-state";
+import type { AppTheme } from "../../app/workbench-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 
 interface WelcomePageProps {
@@ -26,9 +28,12 @@ interface WelcomePageProps {
   openDisabled: boolean;
   onPlaceholder: (action: string) => void;
   resultState: ResultState;
+  resultExportState: ResultExportState;
   activeRunId: string | null;
+  theme: AppTheme;
   onLoadLatestResults: () => void;
   onSelectManifestResults: () => void;
+  onExportResults: () => void;
 }
 
 export function WelcomePage({
@@ -41,9 +46,12 @@ export function WelcomePage({
   openDisabled,
   onPlaceholder,
   resultState,
+  resultExportState,
   activeRunId,
+  theme,
   onLoadLatestResults,
   onSelectManifestResults,
+  onExportResults,
 }: WelcomePageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -130,9 +138,12 @@ export function WelcomePage({
             </div>
             <ZoneAirStateResults
               state={resultState}
+              exportState={resultExportState}
               activeRunId={activeRunId}
+              theme={theme}
               onLoadLatest={onLoadLatestResults}
               onSelectManifest={onSelectManifestResults}
+              onExport={onExportResults}
               disabled={openDisabled}
             />
           </div>

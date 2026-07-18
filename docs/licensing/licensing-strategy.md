@@ -7,6 +7,7 @@
 - 未来若捆绑ContamX，应记录二进制来源、版本和校验信息，并在安装包及仓库材料中保留所需的第三方声明。
 - CONTAM Studio是独立项目，不是NIST官方产品，不得暗示NIST认可、维护或背书。
 - CONTAM Studio自身代码和内容采用何种许可证尚未由用户决定。
+- Phase 5C新增`echarts 6.1.0`，来源为Apache ECharts官方包，许可证为Apache-2.0。项目只使用模块化Canvas折线图组件；发布前第三方声明需包含该依赖及其许可证文本。
 
 ## Phase 0处理
 

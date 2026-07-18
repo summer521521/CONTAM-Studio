@@ -32,8 +32,8 @@ React不能提交PRJ、manifest、SIM、SimRead、结果目录路径或`run_id`�
 
 ## 结果契约
 
-桌面只接受`result_type=zone_air_state`、SI单位和严格Phase 5A样本字段：累计秒、温度K、参考压力Pa、空气密度kg/m³、日类型。官方NFR没有CONTAM日类型，界面显示`—`并保留机器可读的`day_type_source`说明。结果提取目录、运行清单和SimRead生成物由Python证据链管理，不写入源项目目录。
+桌面只接受`result_type=zone_air_state`、SI单位和严格Phase 5A样本字段：累计秒、温度K、参考压力Pa、空气密度kg/m³、日类型。官方NFR没有CONTAM日类型，界面显示`—`并保留机器可读的`day_type_source`说明。结果提取目录、运行清单和SimRead生成物由Python证据链管理，不写入源项目目录。Phase 5C在该安全结果视图上增加分析和CSV，不改变本页的提取信任边界。
 
 ## 当前不支持
 
-不支持任意SIM/NFR、自动结果提取、曲线、导出、多Zone或多运行比较、运行历史、路径流量、污染物、AI、长期Python服务和结果自动清理。session和活动运行只在本次应用内存中有效，不是稳定UUID。
+不支持任意SIM/NFR、自动结果提取、多Zone或多运行比较、运行历史、路径流量、污染物、AI、长期Python服务和结果自动清理。Phase 5C已增加当前Zone曲线和CSV副本导出；session、活动运行和活动结果只在本次应用内存中有效，不是稳定UUID。

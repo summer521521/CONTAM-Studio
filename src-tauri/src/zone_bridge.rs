@@ -2,13 +2,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
@@ -26,6 +27,7 @@ const APPLY_OPERATION: &str = "apply_zone_volume_patch_to_copy";
 const EXTRACT_ZONE_AIR_STATE_OPERATION: &str = "extract_zone_air_state";
 const RUN_ACTIVE_PROJECT_OPERATION: &str = "run_active_project";
 const ZONE_RESULT_STAGE_EVENT: &str = "zone-result-stage";
+const RESULT_EXPORT_STAGE_EVENT: &str = "zone-result-export-stage";
 const READ_AND_PLAN_TIMEOUT: Duration = Duration::from_secs(10);
 const APPLY_TIMEOUT: Duration = Duration::from_secs(15);
 const EXTRACT_TIMEOUT: Duration = Duration::from_secs(45);
@@ -41,6 +43,152 @@ const MAX_DIAGNOSTIC_CODE_BYTES: usize = 80;
 const MAX_DIAGNOSTIC_MESSAGE_CHARS: usize = 160;
 const MAX_CONTEXT_STRING_CHARS: usize = 120;
 const PYTHON_DIAGNOSTIC_MESSAGE: &str = "Python Zone bridge returned a structured diagnostic.";
+const SHA256_INITIAL: [u32; 8] = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+];
+const SHA256_ROUND: [u32; 64] = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+];
+
+#[derive(Clone)]
+struct Sha256 {
+    state: [u32; 8],
+    buffer: [u8; 64],
+    buffer_len: usize,
+    byte_len: u64,
+}
+
+impl Sha256 {
+    fn new() -> Self {
+        Self {
+            state: SHA256_INITIAL,
+            buffer: [0; 64],
+            buffer_len: 0,
+            byte_len: 0,
+        }
+    }
+
+    fn update(&mut self, mut bytes: &[u8]) -> std::io::Result<()> {
+        self.byte_len = self
+            .byte_len
+            .checked_add(bytes.len() as u64)
+            .ok_or_else(|| std::io::Error::other("SHA-256 input is too large"))?;
+        if self.buffer_len > 0 {
+            let needed = 64 - self.buffer_len;
+            let copied = needed.min(bytes.len());
+            self.buffer[self.buffer_len..self.buffer_len + copied]
+                .copy_from_slice(&bytes[..copied]);
+            self.buffer_len += copied;
+            bytes = &bytes[copied..];
+            if self.buffer_len == 64 {
+                let block = self.buffer;
+                self.compress(&block);
+                self.buffer_len = 0;
+            }
+        }
+        while bytes.len() >= 64 {
+            let block: &[u8; 64] = bytes[..64].try_into().expect("64-byte SHA-256 block");
+            self.compress(block);
+            bytes = &bytes[64..];
+        }
+        self.buffer[..bytes.len()].copy_from_slice(bytes);
+        self.buffer_len = bytes.len();
+        Ok(())
+    }
+
+    fn compress(&mut self, block: &[u8; 64]) {
+        let mut words = [0_u32; 64];
+        for (index, chunk) in block.chunks_exact(4).enumerate() {
+            words[index] = u32::from_be_bytes(chunk.try_into().expect("four-byte SHA word"));
+        }
+        for index in 16..64 {
+            let small0 = words[index - 15].rotate_right(7)
+                ^ words[index - 15].rotate_right(18)
+                ^ (words[index - 15] >> 3);
+            let small1 = words[index - 2].rotate_right(17)
+                ^ words[index - 2].rotate_right(19)
+                ^ (words[index - 2] >> 10);
+            words[index] = words[index - 16]
+                .wrapping_add(small0)
+                .wrapping_add(words[index - 7])
+                .wrapping_add(small1);
+        }
+        let mut value = self.state;
+        for index in 0..64 {
+            let sum1 =
+                value[4].rotate_right(6) ^ value[4].rotate_right(11) ^ value[4].rotate_right(25);
+            let choose = (value[4] & value[5]) ^ (!value[4] & value[6]);
+            let temporary1 = value[7]
+                .wrapping_add(sum1)
+                .wrapping_add(choose)
+                .wrapping_add(SHA256_ROUND[index])
+                .wrapping_add(words[index]);
+            let sum0 =
+                value[0].rotate_right(2) ^ value[0].rotate_right(13) ^ value[0].rotate_right(22);
+            let majority = (value[0] & value[1]) ^ (value[0] & value[2]) ^ (value[1] & value[2]);
+            let temporary2 = sum0.wrapping_add(majority);
+            value = [
+                temporary1.wrapping_add(temporary2),
+                value[0],
+                value[1],
+                value[2],
+                value[3].wrapping_add(temporary1),
+                value[4],
+                value[5],
+                value[6],
+            ];
+        }
+        for (state, value) in self.state.iter_mut().zip(value) {
+            *state = state.wrapping_add(value);
+        }
+    }
+
+    fn finalize(mut self) -> [u8; 32] {
+        let bit_len = self.byte_len * 8;
+        self.buffer[self.buffer_len] = 0x80;
+        self.buffer_len += 1;
+        if self.buffer_len > 56 {
+            self.buffer[self.buffer_len..].fill(0);
+            let block = self.buffer;
+            self.compress(&block);
+            self.buffer = [0; 64];
+            self.buffer_len = 0;
+        }
+        self.buffer[self.buffer_len..56].fill(0);
+        self.buffer[56..64].copy_from_slice(&bit_len.to_be_bytes());
+        let block = self.buffer;
+        self.compress(&block);
+        let mut digest = [0_u8; 32];
+        for (chunk, value) in digest.chunks_exact_mut(4).zip(self.state) {
+            chunk.copy_from_slice(&value.to_be_bytes());
+        }
+        digest
+    }
+}
+
+fn sha256_file(path: &Path) -> std::io::Result<(String, u64)> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count])?;
+    }
+    let size = file.metadata()?.len();
+    let digest = hasher.finalize();
+    let hash = digest.iter().map(|byte| format!("{byte:02X}")).collect();
+    Ok((hash, size))
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
@@ -300,7 +448,7 @@ struct RawZoneAirStateExtraction {
     parsed_result: RawZoneAirStateSeries,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ZoneAirStateSampleView {
     index: u64,
     day_of_year: u64,
@@ -311,7 +459,7 @@ pub struct ZoneAirStateSampleView {
     air_density_kg_m3: f64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ZoneAirStateResultView {
     schema_version: String,
     result_type: String,
@@ -333,6 +481,25 @@ pub struct DesktopZoneAirStateResponse {
     cancelled: bool,
     project_session_id: Option<String>,
     result: Option<ZoneAirStateResultView>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ZoneAirStateCsvExportSummary {
+    file_name: String,
+    row_count: u64,
+    byte_count: u64,
+    run_id: String,
+    extraction_id: String,
+    zone_number: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopZoneAirStateCsvExportResponse {
+    request_id: String,
+    cancelled: bool,
+    project_session_id: Option<String>,
+    export: Option<ZoneAirStateCsvExportSummary>,
     error: Option<ReaderDiagnostic>,
 }
 
@@ -420,6 +587,12 @@ struct ZoneResultStageEvent {
     stage: &'static str,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct ResultExportStageEvent {
+    request_id: String,
+    stage: &'static str,
+}
+
 #[derive(Clone, Debug)]
 struct ActiveProjectContext {
     project_session_id: String,
@@ -450,6 +623,125 @@ struct ActiveRunContext {
     succeeded: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ActiveResultSource {
+    ActiveRun,
+    SelectedManifest,
+}
+
+#[derive(Clone, Debug)]
+struct ActiveResultContext {
+    project_session_id: String,
+    source_sha256: String,
+    zone_number: i64,
+    zone_name: String,
+    source_line_number: u64,
+    run_id: String,
+    extraction_id: String,
+    source: ActiveResultSource,
+    result: ZoneAirStateResultView,
+    sample_count: u64,
+    unit_system: String,
+}
+
+impl ActiveResultContext {
+    fn new(
+        active: &ActiveProjectContext,
+        source: ActiveResultSource,
+        result: ZoneAirStateResultView,
+    ) -> Result<Self, ReaderDiagnostic> {
+        let selected = active
+            .zones
+            .iter()
+            .find(|zone| zone.contam_number == result.zone_number);
+        if selected.is_none_or(|zone| {
+            zone.name != result.zone_name || zone.source_line_number != result.source_line_number
+        }) || result.sample_count == 0
+            || result.sample_count as usize != result.samples.len()
+            || result.unit_system != "SI"
+        {
+            return Err(host_diagnostic(
+                "active_result_identity_mismatch",
+                "The verified result could not be bound to the active project.",
+                BTreeMap::new(),
+            ));
+        }
+        Ok(Self {
+            project_session_id: active.project_session_id.clone(),
+            source_sha256: active.source_sha256.clone(),
+            zone_number: result.zone_number,
+            zone_name: result.zone_name.clone(),
+            source_line_number: result.source_line_number,
+            run_id: result.run_id.clone(),
+            extraction_id: result.extraction_id.clone(),
+            source,
+            sample_count: result.sample_count,
+            unit_system: result.unit_system.clone(),
+            result,
+        })
+    }
+
+    fn validate_export_identity(
+        &self,
+        active: &ActiveProjectContext,
+        zone_number: i64,
+        run_id: &str,
+        extraction_id: &str,
+    ) -> Result<(), ReaderDiagnostic> {
+        if self.project_session_id != active.project_session_id
+            || self.source_sha256 != active.source_sha256
+        {
+            return Err(host_diagnostic(
+                "active_result_project_mismatch",
+                "The active result does not belong to the active project.",
+                BTreeMap::new(),
+            ));
+        }
+        let zone = active
+            .zones
+            .iter()
+            .find(|zone| zone.contam_number == zone_number);
+        if self.zone_number != zone_number
+            || zone.is_none_or(|zone| {
+                zone.name != self.zone_name || zone.source_line_number != self.source_line_number
+            })
+        {
+            return Err(host_diagnostic(
+                "active_result_zone_mismatch",
+                "The active result does not belong to the selected Zone.",
+                BTreeMap::new(),
+            ));
+        }
+        let source_is_valid = matches!(
+            self.source,
+            ActiveResultSource::ActiveRun | ActiveResultSource::SelectedManifest
+        );
+        if !source_is_valid
+            || self.run_id != run_id
+            || self.extraction_id != extraction_id
+            || self.result.run_id != self.run_id
+            || self.result.extraction_id != self.extraction_id
+            || self.sample_count != self.result.sample_count
+            || self.sample_count as usize != self.result.samples.len()
+            || self.unit_system != "SI"
+            || self.result.unit_system != self.unit_system
+        {
+            return Err(host_diagnostic(
+                "active_result_identity_mismatch",
+                "The active result identity did not match the export request.",
+                BTreeMap::new(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn active_project_source_matches(active: &ActiveProjectContext) -> bool {
+    sha256_file(&active.source_path).is_ok_and(|(sha256, size)| {
+        size == active.source_size_bytes && sha256.eq_ignore_ascii_case(&active.source_sha256)
+    })
+}
+
 impl ActiveRunContext {
     fn is_bound_to(&self, project: &ActiveProjectContext) -> bool {
         self.succeeded
@@ -465,6 +757,7 @@ struct DesktopSessionState {
     active_project: Option<ActiveProjectContext>,
     planned_patch: Option<PlannedPatchContext>,
     active_run: Option<ActiveRunContext>,
+    active_result: Option<ActiveResultContext>,
 }
 
 #[derive(Default)]
@@ -512,6 +805,31 @@ impl DesktopProjectSessionStore {
         state.active_project = Some(context);
         state.planned_patch = None;
         state.active_run = None;
+        state.active_result = None;
+    }
+
+    fn retain_result(
+        &self,
+        active: &ActiveProjectContext,
+        source: ActiveResultSource,
+        result: &ZoneAirStateResultView,
+    ) -> Result<(), ReaderDiagnostic> {
+        let context = ActiveResultContext::new(active, source, result.clone())?;
+        let mut state = self.state.lock().expect("desktop session mutex poisoned");
+        let still_active = state.active_project.as_ref().is_some_and(|project| {
+            project.project_session_id == active.project_session_id
+                && project.source_sha256 == active.source_sha256
+                && project.source_path == active.source_path
+        });
+        if !still_active {
+            return Err(host_diagnostic(
+                "active_result_project_mismatch",
+                "The active project changed during result extraction.",
+                BTreeMap::new(),
+            ));
+        }
+        state.active_result = Some(context);
+        Ok(())
     }
 }
 
@@ -1279,6 +1597,199 @@ fn result_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopZoneAirSt
     }
 }
 
+fn export_failure(
+    request_id: &str,
+    error: ReaderDiagnostic,
+) -> DesktopZoneAirStateCsvExportResponse {
+    DesktopZoneAirStateCsvExportResponse {
+        request_id: request_id.into(),
+        cancelled: false,
+        project_session_id: None,
+        export: None,
+        error: Some(error),
+    }
+}
+
+fn csv_formula_safe(value: &str) -> String {
+    if value
+        .as_bytes()
+        .first()
+        .is_some_and(|byte| matches!(byte, b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'))
+    {
+        format!("'{value}")
+    } else {
+        value.to_string()
+    }
+}
+
+fn csv_text(value: &str) -> String {
+    let protected = csv_formula_safe(value);
+    if protected
+        .bytes()
+        .any(|byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'))
+    {
+        format!("\"{}\"", protected.replace('"', "\"\""))
+    } else {
+        protected
+    }
+}
+
+fn encode_zone_air_state_csv(context: &ActiveResultContext) -> Vec<u8> {
+    const HEADER: &str = "run_id,extraction_id,zone_number,zone_name,source_line_number,unit_system,sample_index,day_of_year,day_type,sim_time_seconds,temperature_k,reference_pressure_pa,air_density_kg_m3\r\n";
+    let mut csv = String::with_capacity(HEADER.len() + context.result.samples.len() * 160);
+    csv.push_str(HEADER);
+    let run_id = csv_text(&context.run_id);
+    let extraction_id = csv_text(&context.extraction_id);
+    let zone_name = csv_text(&context.zone_name);
+    let unit_system = csv_text(&context.unit_system);
+    for sample in &context.result.samples {
+        let day_type = sample.day_type.as_deref().map(csv_text).unwrap_or_default();
+        let zone_number = context.zone_number.to_string();
+        let source_line_number = context.source_line_number.to_string();
+        let sample_index = sample.index.to_string();
+        let day_of_year = sample.day_of_year.to_string();
+        let sim_time_seconds = sample.sim_time_seconds.to_string();
+        let temperature_k = sample.temperature_k.to_string();
+        let reference_pressure_pa = sample.reference_pressure_pa.to_string();
+        let air_density_kg_m3 = sample.air_density_kg_m3.to_string();
+        let fields = [
+            run_id.as_str(),
+            extraction_id.as_str(),
+            zone_number.as_str(),
+            zone_name.as_str(),
+            source_line_number.as_str(),
+            unit_system.as_str(),
+            sample_index.as_str(),
+            day_of_year.as_str(),
+            day_type.as_str(),
+            sim_time_seconds.as_str(),
+            temperature_k.as_str(),
+            reference_pressure_pa.as_str(),
+            air_density_kg_m3.as_str(),
+        ];
+        csv.push_str(&fields.join(","));
+        csv.push_str("\r\n");
+    }
+    csv.into_bytes()
+}
+
+fn validate_csv_destination(source: &Path, selected: &Path) -> Result<PathBuf, &'static str> {
+    if selected.exists() && std::fs::canonicalize(selected).ok().as_deref() == Some(source) {
+        return Err("export_destination_conflicts_with_source");
+    }
+    let mut candidate = selected.to_path_buf();
+    match candidate.extension().and_then(|value| value.to_str()) {
+        None => {
+            candidate.set_extension("csv");
+        }
+        Some(extension) if extension.eq_ignore_ascii_case("csv") => {}
+        _ => return Err("export_destination_invalid"),
+    }
+    if candidate.exists() {
+        return Err("export_destination_exists");
+    }
+    let file_name = candidate
+        .file_name()
+        .filter(|value| !value.is_empty())
+        .ok_or("export_destination_invalid")?;
+    let parent = candidate.parent().ok_or("export_destination_invalid")?;
+    let canonical_parent =
+        std::fs::canonicalize(parent).map_err(|_| "export_destination_invalid")?;
+    if !canonical_parent.is_dir() {
+        return Err("export_destination_invalid");
+    }
+    let output = canonical_parent.join(file_name);
+    if output.to_str().is_none() || output == source {
+        return Err("export_destination_conflicts_with_source");
+    }
+    Ok(output)
+}
+
+fn create_csv_temporary_file(output: &Path) -> Result<(PathBuf, File), &'static str> {
+    let parent = output.parent().ok_or("export_destination_invalid")?;
+    let file_name = output
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or("export_destination_invalid")?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    for attempt in 0..16_u8 {
+        let temporary = parent.join(format!(
+            ".{file_name}.{}.{}.{}.tmp",
+            std::process::id(),
+            nonce,
+            attempt
+        ));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err("export_temporary_write_failed"),
+        }
+    }
+    Err("export_temporary_write_failed")
+}
+
+fn write_csv_atomically(output: &Path, bytes: &[u8]) -> Result<u64, &'static str> {
+    write_csv_atomically_with_steps(
+        output,
+        bytes,
+        |file, bytes| {
+            file.write_all(bytes)?;
+            file.flush()?;
+            file.sync_all()
+        },
+        |temporary, output| std::fs::rename(temporary, output),
+    )
+}
+
+fn write_csv_atomically_with_steps<WriteStep, CommitStep>(
+    output: &Path,
+    bytes: &[u8],
+    write_step: WriteStep,
+    commit_step: CommitStep,
+) -> Result<u64, &'static str>
+where
+    WriteStep: FnOnce(&mut File, &[u8]) -> std::io::Result<()>,
+    CommitStep: FnOnce(&Path, &Path) -> std::io::Result<()>,
+{
+    if output.exists() {
+        return Err("export_destination_exists");
+    }
+    let (temporary, mut file) = create_csv_temporary_file(output)?;
+    let write_result = write_step(&mut file, bytes);
+    drop(file);
+    if write_result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+        return Err("export_temporary_write_failed");
+    }
+    if output.exists() {
+        let _ = std::fs::remove_file(&temporary);
+        return Err("export_destination_exists");
+    }
+    if commit_step(&temporary, output).is_err() {
+        let _ = std::fs::remove_file(&temporary);
+        return Err("export_atomic_commit_failed");
+    }
+    let actual = match std::fs::metadata(output) {
+        Ok(metadata) => metadata.len(),
+        Err(_) => {
+            let _ = std::fs::remove_file(output);
+            return Err("export_verification_failed");
+        }
+    };
+    if actual != bytes.len() as u64 {
+        let _ = std::fs::remove_file(output);
+        return Err("export_verification_failed");
+    }
+    Ok(actual)
+}
+
 fn run_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopRunResponse {
     DesktopRunResponse {
         request_id: request_id.into(),
@@ -1889,13 +2400,20 @@ pub async fn select_and_extract_zone_air_state(
     )
     .await
     {
-        Ok(result) => DesktopZoneAirStateResponse {
-            request_id,
-            cancelled: false,
-            project_session_id: Some(active.project_session_id.clone()),
-            result: Some(result),
-            error: None,
-        },
+        Ok(result) => {
+            if let Err(error) =
+                store.retain_result(&active, ActiveResultSource::SelectedManifest, &result)
+            {
+                return result_failure(&request_id, error);
+            }
+            DesktopZoneAirStateResponse {
+                request_id,
+                cancelled: false,
+                project_session_id: Some(active.project_session_id.clone()),
+                result: Some(result),
+                error: None,
+            }
+        }
         Err(error) => result_failure(&request_id, error),
     }
 }
@@ -2031,11 +2549,276 @@ pub async fn extract_active_run_zone_air_state(
             ),
         );
     }
+    drop(state);
+    if let Err(error) = store.retain_result(&active, ActiveResultSource::ActiveRun, &result) {
+        return result_failure(&request_id, error);
+    }
     DesktopZoneAirStateResponse {
         request_id,
         cancelled: false,
         project_session_id: Some(active.project_session_id),
         result: Some(result),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn export_active_zone_air_state_csv(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    zone_number: i64,
+    run_id: String,
+    extraction_id: String,
+) -> DesktopZoneAirStateCsvExportResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || !request_id_is_valid(&run_id)
+        || !request_id_is_valid(&extraction_id)
+        || zone_number <= 0
+    {
+        return export_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "Zone result export request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return export_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let (active, active_result) = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_missing",
+                    "No active project session exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    "active_result_project_mismatch",
+                    "The project session did not match the active result.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        let Some(active_result) = state.active_result.clone() else {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    "active_result_missing",
+                    "No active Zone result is available.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if let Err(error) =
+            active_result.validate_export_identity(&active, zone_number, &run_id, &extraction_id)
+        {
+            return export_failure(&request_id, error);
+        }
+        (active, active_result)
+    };
+    let source_for_check = active.clone();
+    let source_matches = tauri::async_runtime::spawn_blocking(move || {
+        active_project_source_matches(&source_for_check)
+    })
+    .await
+    .unwrap_or(false);
+    if !source_matches {
+        return export_failure(
+            &request_id,
+            host_diagnostic(
+                "active_result_project_mismatch",
+                "The project source no longer matches the active result.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let safe_run_id: String = run_id
+        .chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() || value == '-' {
+                value
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let suggested = format!("zone-{zone_number}-air-state-{safe_run_id}.csv");
+    let dialog_app = app.clone();
+    let selected = match tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter("Zone air-state CSV", &["csv"])
+            .set_file_name(suggested)
+            .blocking_save_file()
+    })
+    .await
+    {
+        Ok(selected) => selected,
+        Err(_) => {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    "export_destination_invalid",
+                    "The native CSV save dialog failed.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let Some(selected) = selected else {
+        return DesktopZoneAirStateCsvExportResponse {
+            request_id,
+            cancelled: true,
+            project_session_id: None,
+            export: None,
+            error: None,
+        };
+    };
+    let selected_path = match selected.into_path() {
+        Ok(path) => path,
+        Err(_) => {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    "export_destination_invalid",
+                    "The selected CSV destination was not local.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let output = match validate_csv_destination(&active.source_path, &selected_path) {
+        Ok(path) => path,
+        Err(code) => {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    code,
+                    "The selected CSV destination is not allowed.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let source_for_check = active.clone();
+    let source_matches = tauri::async_runtime::spawn_blocking(move || {
+        active_project_source_matches(&source_for_check)
+    })
+    .await
+    .unwrap_or(false);
+    if !source_matches {
+        return export_failure(
+            &request_id,
+            host_diagnostic(
+                "active_result_project_mismatch",
+                "The project source changed before CSV export.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    if app
+        .emit(
+            RESULT_EXPORT_STAGE_EVENT,
+            ResultExportStageEvent {
+                request_id: request_id.clone(),
+                stage: "exporting",
+            },
+        )
+        .is_err()
+    {
+        return export_failure(
+            &request_id,
+            host_diagnostic(
+                "export_stage_notification_failed",
+                "The CSV export stage could not be reported.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let bytes = encode_zone_air_state_csv(&active_result);
+    let output_for_write = output.clone();
+    let byte_count = match tauri::async_runtime::spawn_blocking(move || {
+        write_csv_atomically(&output_for_write, &bytes)
+    })
+    .await
+    {
+        Ok(Ok(size)) => size,
+        Ok(Err(code)) => {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    code,
+                    "The CSV export could not be completed safely.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+        Err(_) => {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    "export_temporary_write_failed",
+                    "The CSV export task ended unexpectedly.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let source_for_check = active.clone();
+    let source_matches = tauri::async_runtime::spawn_blocking(move || {
+        active_project_source_matches(&source_for_check)
+    })
+    .await
+    .unwrap_or(false);
+    if !source_matches {
+        let _ = std::fs::remove_file(&output);
+        return export_failure(
+            &request_id,
+            host_diagnostic(
+                "active_result_project_mismatch",
+                "The project source changed during CSV export.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let file_name = output
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("zone-air-state.csv")
+        .to_string();
+    DesktopZoneAirStateCsvExportResponse {
+        request_id,
+        cancelled: false,
+        project_session_id: Some(project_session_id),
+        export: Some(ZoneAirStateCsvExportSummary {
+            file_name,
+            row_count: active_result.sample_count,
+            byte_count,
+            run_id,
+            extraction_id,
+            zone_number,
+        }),
         error: None,
     }
 }
@@ -2580,6 +3363,7 @@ pub async fn apply_zone_volume_patch_to_copy(
     state.active_project = Some(new_active);
     state.planned_patch = None;
     state.active_run = None;
+    state.active_result = None;
     DesktopApplyResponse {
         request_id,
         cancelled: false,
@@ -3138,19 +3922,372 @@ mod tests {
     }
 
     #[test]
+    fn active_result_context_is_strictly_bound_and_follows_session_lifecycle() {
+        let store = DesktopProjectSessionStore::default();
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-active-result-store")
+            .result
+            .unwrap();
+        store.activate_project("session-result".into(), fixture.clone(), &project);
+        let active = store.state.lock().unwrap().active_project.clone().unwrap();
+        let view =
+            validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
+        store
+            .retain_result(&active, ActiveResultSource::SelectedManifest, &view)
+            .unwrap();
+        {
+            let state = store.state.lock().unwrap();
+            let retained = state.active_result.as_ref().unwrap();
+            assert_eq!(retained.source, ActiveResultSource::SelectedManifest);
+            retained
+                .validate_export_identity(&active, 1, "run-1", "extract-1")
+                .unwrap();
+            assert_eq!(
+                retained
+                    .validate_export_identity(&active, 2, "run-1", "extract-1")
+                    .unwrap_err()
+                    .code,
+                "active_result_zone_mismatch"
+            );
+            assert_eq!(
+                retained
+                    .validate_export_identity(&active, 1, "other", "extract-1")
+                    .unwrap_err()
+                    .code,
+                "active_result_identity_mismatch"
+            );
+            assert_eq!(
+                retained
+                    .validate_export_identity(&active, 1, "run-1", "other-extraction")
+                    .unwrap_err()
+                    .code,
+                "active_result_identity_mismatch"
+            );
+            let mut other_project = active.clone();
+            other_project.source_sha256 = "b".repeat(64);
+            assert_eq!(
+                retained
+                    .validate_export_identity(&other_project, 1, "run-1", "extract-1")
+                    .unwrap_err()
+                    .code,
+                "active_result_project_mismatch"
+            );
+        }
+        store
+            .retain_result(&active, ActiveResultSource::ActiveRun, &view)
+            .unwrap();
+        assert_eq!(
+            store
+                .state
+                .lock()
+                .unwrap()
+                .active_result
+                .as_ref()
+                .unwrap()
+                .source,
+            ActiveResultSource::ActiveRun
+        );
+
+        let previous = store.state.lock().unwrap().active_result.clone();
+        let mut invalid = view.clone();
+        invalid.zone_name = "Wrong".into();
+        assert!(store
+            .retain_result(&active, ActiveResultSource::ActiveRun, &invalid)
+            .is_err());
+        assert_eq!(
+            store
+                .state
+                .lock()
+                .unwrap()
+                .active_result
+                .as_ref()
+                .unwrap()
+                .run_id,
+            previous.unwrap().run_id
+        );
+
+        store.activate_project("session-new".into(), fixture, &project);
+        assert!(store.state.lock().unwrap().active_result.is_none());
+    }
+
+    #[test]
+    fn a_new_successful_run_does_not_clear_the_retained_result() {
+        let store = DesktopProjectSessionStore::default();
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-run-retains-result")
+            .result
+            .unwrap();
+        store.activate_project("session-retained".into(), fixture.clone(), &project);
+        let active = store.state.lock().unwrap().active_project.clone().unwrap();
+        let view =
+            validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
+        store
+            .retain_result(&active, ActiveResultSource::SelectedManifest, &view)
+            .unwrap();
+        store.state.lock().unwrap().active_run = Some(ActiveRunContext {
+            project_session_id: active.project_session_id.clone(),
+            source_sha256: active.source_sha256.clone(),
+            run_id: "new-run".into(),
+            manifest_path: fixture,
+            succeeded: true,
+        });
+        assert_eq!(
+            store
+                .state
+                .lock()
+                .unwrap()
+                .active_result
+                .as_ref()
+                .unwrap()
+                .run_id,
+            "run-1"
+        );
+    }
+
+    #[test]
+    fn deterministic_csv_preserves_rows_numbers_and_protects_text_fields() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-csv-result").result.unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "session-csv".into(),
+            source_path: fixture,
+            source_sha256: project.source_sha256,
+            source_size_bytes: project.source_size_bytes,
+            reader_mode: project.reader_mode,
+            header_version: project.header_version,
+            zones: project.zones,
+        };
+        let mut view =
+            validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
+        let first = view.samples[0].clone();
+        view.samples = (0..577)
+            .map(|index| ZoneAirStateSampleView {
+                index,
+                sim_time_seconds: index as f64 * 300.0,
+                reference_pressure_pa: -1.4222,
+                air_density_kg_m3: 1.2041,
+                ..first.clone()
+            })
+            .collect();
+        view.sample_count = 577;
+        let context =
+            ActiveResultContext::new(&active, ActiveResultSource::ActiveRun, view).unwrap();
+        let first_encoding = encode_zone_air_state_csv(&context);
+        let second_encoding = encode_zone_air_state_csv(&context);
+        assert_eq!(first_encoding, second_encoding);
+        let text = String::from_utf8(first_encoding).unwrap();
+        assert!(text.starts_with("run_id,extraction_id,zone_number,zone_name,source_line_number,unit_system,sample_index,day_of_year,day_type,sim_time_seconds,temperature_k,reference_pressure_pa,air_density_kg_m3\r\n"));
+        assert_eq!(text.matches("\r\n").count(), 578);
+        assert!(text
+            .lines()
+            .nth(1)
+            .unwrap()
+            .contains(",0,293.15,-1.4222,1.2041"));
+        assert!(!text.contains(active.source_path.to_string_lossy().as_ref()));
+
+        let mut protected = context.clone();
+        protected.zone_name = "=SUM(1,2)\r\n\"Zone\"".into();
+        protected.result.zone_name = protected.zone_name.clone();
+        let protected_text = String::from_utf8(encode_zone_air_state_csv(&protected)).unwrap();
+        assert!(protected_text.contains("\"'=SUM(1,2)\r\n\"\"Zone\"\"\""));
+        assert_eq!(csv_text("+formula"), "'+formula");
+        assert_eq!(csv_text("-formula"), "'-formula");
+        assert_eq!(csv_text("@formula"), "'@formula");
+        assert_eq!(csv_text("\tformula"), "'\tformula");
+        assert_eq!(csv_text("\rformula"), "\"'\rformula\"");
+        assert_eq!(csv_text("a,b"), "\"a,b\"");
+
+        let first_row = text.lines().nth(1).unwrap().split(',').collect::<Vec<_>>();
+        assert_eq!(first_row.len(), 13);
+        assert_eq!(first_row[8], "");
+        assert_eq!(first_row[9].parse::<f64>().unwrap(), 0.0);
+        assert_eq!(first_row[10].parse::<f64>().unwrap(), 293.15);
+        assert_eq!(first_row[11].parse::<f64>().unwrap(), -1.4222);
+        assert_eq!(first_row[12].parse::<f64>().unwrap(), 1.2041);
+    }
+
+    #[test]
+    fn source_sha256_is_rechecked_for_csv_export() {
+        let root =
+            std::env::temp_dir().join(format!("contam-source-hash-check-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let empty = root.join("empty");
+        fs::write(&empty, b"").unwrap();
+        assert_eq!(
+            sha256_file(&empty).unwrap(),
+            (
+                "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".into(),
+                0
+            )
+        );
+        let abc = root.join("abc");
+        fs::write(&abc, b"abc").unwrap();
+        assert_eq!(
+            sha256_file(&abc).unwrap().0,
+            "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+        );
+
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-source-hash").result.unwrap();
+        let copied = root.join("copied.prj");
+        fs::copy(&fixture, &copied).unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "source-hash-session".into(),
+            source_path: copied.clone(),
+            source_sha256: project.source_sha256,
+            source_size_bytes: project.source_size_bytes,
+            reader_mode: project.reader_mode,
+            header_version: project.header_version,
+            zones: project.zones,
+        };
+        assert!(active_project_source_matches(&active));
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&copied)
+            .unwrap()
+            .write_all(b"changed")
+            .unwrap();
+        assert!(!active_project_source_matches(&active));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires an explicitly supplied real Phase 5A result JSON"]
+    fn real_zone_result_encodes_through_the_production_csv_contract() {
+        let result_path = PathBuf::from(
+            std::env::var_os("CONTAM_STUDIO_PHASE5C_RESULT_JSON")
+                .expect("CONTAM_STUDIO_PHASE5C_RESULT_JSON must be set"),
+        );
+        let output = PathBuf::from(
+            std::env::var_os("CONTAM_STUDIO_PHASE5C_CSV_OUTPUT")
+                .expect("CONTAM_STUDIO_PHASE5C_CSV_OUTPUT must be set"),
+        );
+        let result: ZoneAirStateResultView =
+            serde_json::from_slice(&fs::read(result_path).unwrap()).unwrap();
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-real-csv-result")
+            .result
+            .unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "real-csv-session".into(),
+            source_path: fixture,
+            source_sha256: project.source_sha256,
+            source_size_bytes: project.source_size_bytes,
+            reader_mode: project.reader_mode,
+            header_version: project.header_version,
+            zones: project.zones,
+        };
+        let context =
+            ActiveResultContext::new(&active, ActiveResultSource::SelectedManifest, result)
+                .unwrap();
+        let encoded = encode_zone_air_state_csv(&context);
+        assert_eq!(encoded, encode_zone_air_state_csv(&context));
+        assert_eq!(context.sample_count, 577);
+        assert_eq!(
+            encoded.windows(2).filter(|pair| *pair == b"\r\n").count(),
+            578
+        );
+        assert!(!String::from_utf8_lossy(&encoded)
+            .contains(active.source_path.to_string_lossy().as_ref()));
+        assert_eq!(
+            write_csv_atomically(&output, &encoded),
+            Ok(encoded.len() as u64)
+        );
+    }
+
+    #[test]
+    fn csv_destination_and_atomic_write_never_overwrite() {
+        let root = std::env::temp_dir().join(format!("contam-csv-export-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.prj");
+        fs::write(&source, b"source").unwrap();
+        let source = fs::canonicalize(source).unwrap();
+        let output = validate_csv_destination(&source, &root.join("result")).unwrap();
+        assert!(output.ends_with("result.csv"));
+        assert_eq!(write_csv_atomically(&output, b"a,b\r\n1,2\r\n"), Ok(10));
+        assert_eq!(fs::read(&output).unwrap(), b"a,b\r\n1,2\r\n");
+        assert_eq!(
+            write_csv_atomically(&output, b"replacement"),
+            Err("export_destination_exists")
+        );
+        assert_eq!(fs::read(&output).unwrap(), b"a,b\r\n1,2\r\n");
+        assert_eq!(
+            validate_csv_destination(&source, &root.join("wrong.txt")),
+            Err("export_destination_invalid")
+        );
+        assert_eq!(
+            validate_csv_destination(&source, &source),
+            Err("export_destination_conflicts_with_source")
+        );
+        assert_eq!(
+            validate_csv_destination(&source, &root.join("missing").join("result.csv")),
+            Err("export_destination_invalid")
+        );
+        assert_eq!(
+            validate_csv_destination(&source, &source.join("result.csv")),
+            Err("export_destination_invalid")
+        );
+        assert!(!fs::read_dir(&root).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp")));
+
+        let write_failure = root.join("write-failure.csv");
+        assert_eq!(
+            write_csv_atomically_with_steps(
+                &write_failure,
+                b"partial",
+                |file, _| {
+                    file.write_all(b"par")?;
+                    Err(std::io::Error::other("injected write failure"))
+                },
+                |temporary, output| std::fs::rename(temporary, output),
+            ),
+            Err("export_temporary_write_failed")
+        );
+        assert!(!write_failure.exists());
+
+        let commit_failure = root.join("commit-failure.csv");
+        assert_eq!(
+            write_csv_atomically_with_steps(
+                &commit_failure,
+                b"complete",
+                |file, bytes| {
+                    file.write_all(bytes)?;
+                    file.flush()?;
+                    file.sync_all()
+                },
+                |_, _| Err(std::io::Error::other("injected commit failure")),
+            ),
+            Err("export_atomic_commit_failed")
+        );
+        assert!(!commit_failure.exists());
+        assert!(!fs::read_dir(&root).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn active_run_extraction_has_no_dialog_and_reuses_the_trusted_bridge() {
         let source = include_str!("zone_bridge.rs");
         let active_start = source
             .find("pub async fn extract_active_run_zone_air_state")
             .unwrap();
         let active_end = source[active_start..]
-            .find("pub async fn run_active_contam_project")
+            .find("pub async fn export_active_zone_air_state_csv")
             .map(|offset| active_start + offset)
             .unwrap();
         let active_command = &source[active_start..active_end];
         assert!(!active_command.contains(".dialog()"));
         assert!(active_command.contains("validate_active_run_context"));
         assert!(active_command.contains("extract_zone_air_state_with_manifest"));
+        assert!(active_command.contains("ActiveResultSource::ActiveRun"));
 
         let manual_start = source
             .find("pub async fn select_and_extract_zone_air_state")
@@ -3159,7 +4296,18 @@ mod tests {
             .find("pub async fn extract_active_run_zone_air_state")
             .map(|offset| manual_start + offset)
             .unwrap();
-        assert!(source[manual_start..manual_end].contains(".dialog()"));
+        let manual_command = &source[manual_start..manual_end];
+        assert!(manual_command.contains(".dialog()"));
+        assert!(manual_command.contains("extract_zone_air_state_with_manifest"));
+        assert!(manual_command.contains("ActiveResultSource::SelectedManifest"));
+        let helper_start = source
+            .find("async fn extract_zone_air_state_with_manifest")
+            .unwrap();
+        let helper_end = source[helper_start..]
+            .find("pub async fn select_and_read_prj_zones")
+            .map(|offset| helper_start + offset)
+            .unwrap();
+        assert!(source[helper_start..helper_end].contains("validate_zone_air_state_result"));
     }
 
     #[test]
@@ -3268,6 +4416,40 @@ mod tests {
         assert_eq!(stage["request_id"], "stage-1");
         assert_eq!(stage["stage"], "loading");
         assert_eq!(stage.as_object().unwrap().len(), 2);
+
+        let export_stage = serde_json::to_value(ResultExportStageEvent {
+            request_id: "export-stage-1".into(),
+            stage: "exporting",
+        })
+        .unwrap();
+        assert_eq!(export_stage["request_id"], "export-stage-1");
+        assert_eq!(export_stage["stage"], "exporting");
+        assert_eq!(export_stage.as_object().unwrap().len(), 2);
+
+        let safe_export = DesktopZoneAirStateCsvExportResponse {
+            request_id: "export-safe".into(),
+            cancelled: false,
+            project_session_id: Some("session-results".into()),
+            export: Some(ZoneAirStateCsvExportSummary {
+                file_name: "zone-1-air-state-run-1.csv".into(),
+                row_count: 1,
+                byte_count: 200,
+                run_id: "run-1".into(),
+                extraction_id: "extract-1".into(),
+                zone_number: 1,
+            }),
+            error: None,
+        };
+        let serialized_export = serde_json::to_string(&safe_export).unwrap();
+        for forbidden in [
+            "source_path",
+            "manifest",
+            "result_root",
+            "samples",
+            "temporary",
+        ] {
+            assert!(!serialized_export.contains(forbidden));
+        }
     }
 
     #[test]
@@ -3275,6 +4457,7 @@ mod tests {
         let build_script = include_str!("../build.rs");
         let capability: Value =
             serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let source = include_str!("zone_bridge.rs");
         let desktop_api = include_str!("../../src/app/desktop-api.ts");
         let package_json = include_str!("../../package.json");
         for command in [
@@ -3283,11 +4466,12 @@ mod tests {
             "apply_zone_volume_patch_to_copy",
             "select_and_extract_zone_air_state",
             "extract_active_run_zone_air_state",
+            "export_active_zone_air_state_csv",
             "run_active_contam_project",
         ] {
             assert!(build_script.contains(command));
         }
-        assert_eq!(capability["permissions"].as_array().unwrap().len(), 7);
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 8);
         let forbidden = [
             "sourcePath",
             "outputPath",
@@ -3299,9 +4483,38 @@ mod tests {
         }
         assert!(desktop_api.contains("runActiveContamProject"));
         assert!(desktop_api.contains("extractActiveRunZoneAirState"));
+        assert!(desktop_api.contains("exportActiveZoneAirStateCsv"));
         assert!(desktop_api.contains("requestId"));
         assert!(desktop_api.contains("projectSessionId"));
         assert!(!package_json.contains("@tauri-apps/plugin-dialog"));
+        let export_permission =
+            include_str!("../permissions/autogenerated/export_active_zone_air_state_csv.toml");
+        assert!(
+            export_permission.contains("commands.allow = [\"export_active_zone_air_state_csv\"]")
+        );
+        let export_start = source
+            .find("pub async fn export_active_zone_air_state_csv")
+            .unwrap();
+        let export_end = source[export_start..]
+            .find("pub async fn run_active_contam_project")
+            .map(|offset| export_start + offset)
+            .unwrap();
+        let export_command = &source[export_start..export_end];
+        for forbidden in ["source_path: String", "output_path", "samples:", "csv_body"] {
+            assert!(!export_command.contains(forbidden), "found {forbidden}");
+        }
+        assert_eq!(
+            export_command
+                .matches("active_project_source_matches")
+                .count(),
+            3
+        );
+        let cancel_branch = export_command
+            .find("let Some(selected) = selected else")
+            .unwrap();
+        let encode = export_command.find("encode_zone_air_state_csv").unwrap();
+        let write = export_command.find("write_csv_atomically").unwrap();
+        assert!(cancel_branch < encode && cancel_branch < write);
         let capability_text = include_str!("../capabilities/default.json");
         for permission in ["dialog", "fs:", "shell", "http"] {
             assert!(!capability_text.contains(permission));
