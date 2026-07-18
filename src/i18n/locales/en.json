@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 3B Copy workflow"
+    "phase": "Phase 5B-1 Results"
   },
   "toolbar": {
     "newProject": "New project",
@@ -48,8 +48,8 @@
     "recent": "Recent projects",
     "recentEmpty": "No recent projects",
     "recentHint": "Recent projects are not stored or scanned automatically.",
-    "phaseTitle": "Current phase: Phase 3B reviewed copy workflow",
-    "phaseBody": "A single Zone volume token can be reviewed and written to a new copy. The original PRJ is never overwritten.",
+    "phaseTitle": "Current phase: Phase 5B-1 real result summary",
+    "phaseBody": "Air-state samples for the selected Zone can be extracted from a trusted Phase 4 run manifest. The desktop still does not run ContamX.",
     "offlineTitle": "Offline first",
     "offlineBody": "This phase sends no network requests; the core desktop UI runs locally.",
     "protectionTitle": "Original file protection",
@@ -98,8 +98,8 @@
     "log1": "[Workbench] CONTAM Studio Phase 2C read-only entry is ready.",
     "log2": "[Workbench] Opening a project does not call ContamX.",
     "log3": "[UI sample] AI remains disabled.",
-    "resultTitle": "No real results",
-    "resultBody": "The result area only validates the workbench layout.",
+    "resultTitle": "Zone air-state results",
+    "resultBody": "Load a trusted Phase 4 run manifest for the current Zone in the central workspace.",
     "collapse": "Collapse bottom panel",
     "expand": "Expand bottom panel"
   },
@@ -139,6 +139,35 @@
   },
   "diagnostics": {
     "strict_subset_read": "PRJ sections other than Zones were not parsed. This result cannot be saved or written back."
+  },
+  "results": {
+    "tab": "Zone air state",
+    "tab": "Zone air-state results",
+    "load": "Load run results",
+    "loading": "Loading run results…",
+    "cancelled": "Run manifest selection was cancelled; no results were loaded.",
+    "empty": "Select a Zone and load a Phase 4 run manifest.",
+    "manifestLabel": "Phase 4 run manifest",
+    "summaryTitle": "Real Zone air-state summary",
+    "zone": "Zone",
+    "runId": "Run ID",
+    "extractionId": "Extraction ID",
+    "sampleCount": "Samples",
+    "startTime": "Start elapsed time",
+    "endTime": "End elapsed time",
+    "unitSystem": "Unit system",
+    "dayType": "Day type",
+    "dayTypeUnavailable": "Official NFR does not provide a CONTAM day type; none was inferred",
+    "simreadNote": "Results were extracted by official SimRead from a trusted Phase 4 run manifest.",
+    "strictNote": "Only the current Zone zone_air_state is shown; arbitrary SIM files, charts, and export are unsupported.",
+    "time": "Elapsed time (s)",
+    "temperature": "Temperature (K)",
+    "pressure": "Reference pressure (Pa)",
+    "density": "Air density (kg/m³)",
+    "dayTypeColumn": "Day type",
+    "noData": "No real results loaded yet",
+    "errorTitle": "Result loading failed",
+    "retry": "Choose another run manifest"
   },
   "patch": {
     "editVolume": "Modify volume",
@@ -234,6 +263,20 @@
       "patch_application_failed": "A new PRJ copy could not be created safely",
       "patch_verification_failed": "The new copy failed deterministic verification and was removed",
       "bridge_internal_error": "Python reader bridge internal error",
+      "result_project_mismatch": "The run manifest does not belong to this project",
+      "result_zone_mismatch": "The run result does not match the current Zone",
+      "result_manifest_not_found": "The Phase 4 run manifest was not found",
+      "result_manifest_invalid": "The Phase 4 run manifest is invalid",
+      "result_run_not_succeeded": "The Phase 4 run did not succeed",
+      "result_run_evidence_invalid": "Phase 4 run evidence is incomplete or changed",
+      "simread_not_configured": "A supported SimRead is not configured",
+      "simread_not_found": "A supported SimRead was not found",
+      "simread_unsupported": "SimRead identity is unsupported",
+      "simread_process_timeout": "SimRead timed out",
+      "simread_process_failed": "SimRead failed",
+      "simread_output_missing": "SimRead produced no Zone result",
+      "zone_result_not_found": "No result is available for the current Zone",
+      "zone_result_contract_invalid": "The Zone result violated its contract",
       "unknown": "Unknown project read error"
     }
   },

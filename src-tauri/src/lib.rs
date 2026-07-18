@@ -8,7 +8,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             zone_bridge::select_and_read_prj_zones,
             zone_bridge::plan_zone_volume_patch,
-            zone_bridge::apply_zone_volume_patch_to_copy
+            zone_bridge::apply_zone_volume_patch_to_copy,
+            zone_bridge::select_and_extract_zone_air_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running CONTAM Studio");

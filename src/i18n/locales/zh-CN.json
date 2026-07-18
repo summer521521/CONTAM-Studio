@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 3B 副本修改"
+    "phase": "Phase 5B-1 结果摘要"
   },
   "toolbar": {
     "newProject": "新建项目",
@@ -48,8 +48,8 @@
     "recent": "最近项目",
     "recentEmpty": "暂无最近项目",
     "recentHint": "当前不保存或自动扫描最近项目。",
-    "phaseTitle": "当前阶段：Phase 3B受控副本修改",
-    "phaseBody": "可审阅一个Zone体积记号的修改并另存为新副本；不覆盖原始PRJ，也不解析完整PRJ。",
+    "phaseTitle": "当前阶段：Phase 5B-1真实结果摘要",
+    "phaseBody": "可从受信任的Phase 4运行清单提取并显示当前Zone的空气状态；桌面端仍不直接运行ContamX。",
     "offlineTitle": "离线优先",
     "offlineBody": "本阶段不发送网络请求，核心桌面界面完全在本地运行。",
     "protectionTitle": "原始文件保护",
@@ -98,8 +98,8 @@
     "log1": "[工作台] CONTAM Studio Phase 2C只读入口已就绪。",
     "log2": "[工作台] 项目打开不会调用ContamX。",
     "log3": "[界面示例] AI功能保持禁用。",
-    "resultTitle": "无真实结果",
-    "resultBody": "结果区域仅用于验证工作台布局。",
+    "resultTitle": "Zone空气状态结果",
+    "resultBody": "在中央工作区为当前Zone加载受信任的Phase 4运行清单。",
     "collapse": "折叠底部面板",
     "expand": "展开底部面板"
   },
@@ -139,6 +139,35 @@
   },
   "diagnostics": {
     "strict_subset_read": "未解析Zone以外的PRJ区块，当前结果不能用于保存或回写。"
+  },
+  "results": {
+    "tab": "Zone空气状态",
+    "tab": "Zone空气状态结果",
+    "load": "加载运行结果",
+    "loading": "正在加载运行结果…",
+    "cancelled": "已取消运行清单选择，未加载结果。",
+    "empty": "选择Zone后加载Phase 4运行清单。",
+    "manifestLabel": "Phase 4运行清单",
+    "summaryTitle": "真实Zone空气状态摘要",
+    "zone": "Zone",
+    "runId": "运行ID",
+    "extractionId": "提取ID",
+    "sampleCount": "样本数",
+    "startTime": "起始累计时间",
+    "endTime": "结束累计时间",
+    "unitSystem": "单位系统",
+    "dayType": "日类型",
+    "dayTypeUnavailable": "官方NFR不提供CONTAM日类型，未进行推断",
+    "simreadNote": "结果由官方SimRead从受信任的Phase 4运行清单提取。",
+    "strictNote": "当前只显示当前Zone的zone_air_state，不支持任意SIM、曲线或导出。",
+    "time": "累计时间（秒）",
+    "temperature": "温度（K）",
+    "pressure": "参考压力（Pa）",
+    "density": "空气密度（kg/m³）",
+    "dayTypeColumn": "日类型",
+    "noData": "尚未加载真实结果",
+    "errorTitle": "结果加载失败",
+    "retry": "重新选择运行清单"
   },
   "patch": {
     "editVolume": "修改体积",
@@ -234,6 +263,20 @@
       "patch_application_failed": "无法安全创建新的PRJ副本",
       "patch_verification_failed": "新副本未通过确定性验证，未保留输出",
       "bridge_internal_error": "Python读取桥内部错误",
+      "result_project_mismatch": "运行清单不属于当前项目",
+      "result_zone_mismatch": "运行结果与当前Zone不匹配",
+      "result_manifest_not_found": "找不到Phase 4运行清单",
+      "result_manifest_invalid": "Phase 4运行清单无效",
+      "result_run_not_succeeded": "Phase 4运行未成功完成",
+      "result_run_evidence_invalid": "Phase 4运行证据不完整或已变化",
+      "simread_not_configured": "未配置受支持的SimRead",
+      "simread_not_found": "找不到受支持的SimRead",
+      "simread_unsupported": "SimRead身份不受支持",
+      "simread_process_timeout": "SimRead处理超时",
+      "simread_process_failed": "SimRead处理失败",
+      "simread_output_missing": "SimRead未生成Zone结果",
+      "zone_result_not_found": "没有可用的当前Zone结果",
+      "zone_result_contract_invalid": "Zone结果格式不符合契约",
       "unknown": "未知项目读取错误"
     }
   },

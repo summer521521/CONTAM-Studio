@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
-const PROTOCOL_VERSION: &str = "1.1";
+const PROTOCOL_VERSION: &str = "1.2";
 const RESULT_SCHEMA_VERSION: &str = "1.0";
 const READER_MODE: &str = "strict_contam_3_4_simple_zone_v1";
 const PATCH_TYPE: &str = "replace_zone_volume";
@@ -23,8 +23,10 @@ const PYTHON_ENVIRONMENT_VARIABLE: &str = "CONTAM_STUDIO_PYTHON";
 const READ_OPERATION: &str = "read_simple_zones";
 const PLAN_OPERATION: &str = "plan_zone_volume_patch";
 const APPLY_OPERATION: &str = "apply_zone_volume_patch_to_copy";
+const EXTRACT_ZONE_AIR_STATE_OPERATION: &str = "extract_zone_air_state";
 const READ_AND_PLAN_TIMEOUT: Duration = Duration::from_secs(10);
 const APPLY_TIMEOUT: Duration = Duration::from_secs(15);
+const EXTRACT_TIMEOUT: Duration = Duration::from_secs(45);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MAX_STDOUT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 16 * 1024;
@@ -43,7 +45,7 @@ struct RawReaderDiagnostic {
     code: String,
     message: String,
     source_line_number: Option<u64>,
-    context: BTreeMap<String, Value>,
+    context: Option<BTreeMap<String, Value>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -254,6 +256,83 @@ pub struct DesktopApplyResponse {
     error: Option<ReaderDiagnostic>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct RawZoneAirStateSample {
+    index: u64,
+    day_of_year: u64,
+    day_type: Option<String>,
+    sim_time_seconds: f64,
+    temperature_k: f64,
+    reference_pressure_pa: f64,
+    air_density_kg_m3: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct RawZoneAirStateSeries {
+    schema_version: String,
+    result_type: String,
+    run_id: String,
+    extraction_id: String,
+    zone_number: i64,
+    zone_name: String,
+    source_line_number: u64,
+    unit_system: String,
+    sample_count: u64,
+    samples: Vec<RawZoneAirStateSample>,
+    day_type_source: String,
+    time_contract: String,
+    diagnostics: Vec<RawReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct RawZoneAirStateExtraction {
+    result_type: String,
+    extraction_id: String,
+    status: String,
+    run_id: String,
+    zone_number: i64,
+    zone_name: String,
+    sample_count: u64,
+    first_sample: RawZoneAirStateSample,
+    parsed_result: RawZoneAirStateSeries,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ZoneAirStateSampleView {
+    index: u64,
+    day_of_year: u64,
+    day_type: Option<String>,
+    sim_time_seconds: f64,
+    temperature_k: f64,
+    reference_pressure_pa: f64,
+    air_density_kg_m3: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ZoneAirStateResultView {
+    schema_version: String,
+    result_type: String,
+    run_id: String,
+    extraction_id: String,
+    zone_number: i64,
+    zone_name: String,
+    source_line_number: u64,
+    unit_system: String,
+    sample_count: u64,
+    samples: Vec<ZoneAirStateSampleView>,
+    day_type_source: String,
+    time_contract: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopZoneAirStateResponse {
+    request_id: String,
+    cancelled: bool,
+    project_session_id: Option<String>,
+    result: Option<ZoneAirStateResultView>,
+    error: Option<ReaderDiagnostic>,
+}
+
 #[derive(Clone, Debug)]
 struct ActiveProjectContext {
     project_session_id: String,
@@ -262,6 +341,7 @@ struct ActiveProjectContext {
     source_size_bytes: u64,
     reader_mode: String,
     header_version: String,
+    zones: Vec<ZoneRecord>,
 }
 
 #[derive(Clone, Debug)]
@@ -319,6 +399,7 @@ impl DesktopProjectSessionStore {
             source_size_bytes: project.source_size_bytes,
             reader_mode: project.reader_mode.clone(),
             header_version: project.header_version.clone(),
+            zones: project.zones.clone(),
         };
         let mut state = self.state.lock().expect("desktop session mutex poisoned");
         state.active_project = Some(context);
@@ -411,6 +492,7 @@ fn sanitize_raw_diagnostic(raw: RawReaderDiagnostic) -> Result<ReaderDiagnostic,
     }
     let context = raw
         .context
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|(key, value)| {
             if !context_key_is_allowed(&key) {
@@ -1063,6 +1145,121 @@ fn apply_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopApplyRespo
     }
 }
 
+fn canonicalize_manifest_path(path: &Path) -> Result<PathBuf, &'static str> {
+    if !path.is_file()
+        || !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("json"))
+    {
+        return Err("result_manifest_invalid");
+    }
+    let canonical = std::fs::canonicalize(path).map_err(|_| "result_manifest_not_found")?;
+    if !canonical.is_file() || canonical.to_str().is_none() {
+        return Err("result_manifest_invalid");
+    }
+    Ok(canonical)
+}
+
+fn result_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopZoneAirStateResponse {
+    DesktopZoneAirStateResponse {
+        request_id: request_id.into(),
+        cancelled: false,
+        project_session_id: None,
+        result: None,
+        error: Some(error),
+    }
+}
+
+fn validate_zone_air_state_result(
+    raw: RawZoneAirStateExtraction,
+    active: &ActiveProjectContext,
+    zone_number: i64,
+) -> Result<ZoneAirStateResultView, ReaderDiagnostic> {
+    let selected = active
+        .zones
+        .iter()
+        .find(|zone| zone.contam_number == zone_number);
+    let Some(selected) = selected else {
+        return Err(host_diagnostic(
+            "result_zone_mismatch",
+            "The result Zone did not match the active project.",
+            BTreeMap::new(),
+        ));
+    };
+    let valid = raw.result_type == "zone_air_state_extraction"
+        && raw.status == "succeeded"
+        && raw.zone_number == zone_number
+        && raw.zone_name == selected.name
+        && raw.zone_name.len() <= 120
+        && !raw.run_id.is_empty()
+        && raw.run_id.len() <= 128
+        && !raw.extraction_id.is_empty()
+        && raw.extraction_id.len() <= 128
+        && raw.sample_count > 0
+        && raw.sample_count as usize == raw.parsed_result.samples.len()
+        && raw.sample_count == raw.parsed_result.sample_count
+        && raw.parsed_result.schema_version == RESULT_SCHEMA_VERSION
+        && raw.parsed_result.result_type == "zone_air_state"
+        && raw.parsed_result.run_id == raw.run_id
+        && raw.parsed_result.extraction_id == raw.extraction_id
+        && raw.parsed_result.zone_number == zone_number
+        && raw.parsed_result.zone_name == selected.name
+        && raw.parsed_result.source_line_number == selected.source_line_number
+        && raw.parsed_result.unit_system == "SI"
+        && raw.parsed_result.day_type_source == "not_available_in_simread_nfr_v1"
+        && raw.parsed_result.time_contract == "elapsed_seconds_from_first_sample"
+        && raw.first_sample == raw.parsed_result.samples[0];
+    if !valid || raw.sample_count > 100_000 {
+        return Err(host_diagnostic(
+            "python_response_result_invalid",
+            "Python Zone air-state result was invalid.",
+            BTreeMap::new(),
+        ));
+    }
+    let mut previous_time = None;
+    let mut samples = Vec::with_capacity(raw.parsed_result.samples.len());
+    for sample in raw.parsed_result.samples {
+        if sample.day_type.is_some()
+            || !sample.sim_time_seconds.is_finite()
+            || !sample.temperature_k.is_finite()
+            || !sample.reference_pressure_pa.is_finite()
+            || !sample.air_density_kg_m3.is_finite()
+            || previous_time.is_some_and(|value| sample.sim_time_seconds < value)
+        {
+            return Err(host_diagnostic(
+                "python_response_result_invalid",
+                "Python Zone air-state samples were invalid.",
+                BTreeMap::new(),
+            ));
+        }
+        previous_time = Some(sample.sim_time_seconds);
+        samples.push(ZoneAirStateSampleView {
+            index: sample.index,
+            day_of_year: sample.day_of_year,
+            day_type: None,
+            sim_time_seconds: sample.sim_time_seconds,
+            temperature_k: sample.temperature_k,
+            reference_pressure_pa: sample.reference_pressure_pa,
+            air_density_kg_m3: sample.air_density_kg_m3,
+        });
+    }
+    Ok(ZoneAirStateResultView {
+        schema_version: raw.parsed_result.schema_version,
+        result_type: raw.parsed_result.result_type,
+        run_id: raw.run_id,
+        extraction_id: raw.extraction_id,
+        zone_number,
+        zone_name: selected.name.clone(),
+        source_line_number: selected.source_line_number,
+        unit_system: raw.parsed_result.unit_system,
+        sample_count: raw.sample_count,
+        samples,
+        day_type_source: raw.parsed_result.day_type_source,
+        time_contract: raw.parsed_result.time_contract,
+    })
+}
+
 #[tauri::command]
 pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> DesktopOpenResponse {
     let store = app.state::<DesktopProjectSessionStore>();
@@ -1168,6 +1365,205 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
         cancelled: false,
         project_session_id,
         envelope: Some(envelope),
+    }
+}
+
+#[tauri::command]
+pub async fn select_and_extract_zone_air_state(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    zone_number: i64,
+) -> DesktopZoneAirStateResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || zone_number <= 0
+    {
+        return result_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "Zone result request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return result_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let active = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_missing",
+                    "No active project session exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_mismatch",
+                    "Project session did not match.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if !active
+            .zones
+            .iter()
+            .any(|zone| zone.contam_number == zone_number)
+        {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "result_zone_mismatch",
+                    "The selected Zone is not part of the active project.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        active
+    };
+    let dialog_app = app.clone();
+    let selected = match tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter("Phase 4 run manifest", &["json"])
+            .blocking_pick_file()
+    })
+    .await
+    {
+        Ok(selected) => selected,
+        Err(_) => {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "desktop_dialog_failed",
+                    "The native manifest dialog failed.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let Some(selected) = selected else {
+        return DesktopZoneAirStateResponse {
+            request_id,
+            cancelled: true,
+            project_session_id: None,
+            result: None,
+            error: None,
+        };
+    };
+    let manifest_path = match selected.into_path() {
+        Ok(path) => match canonicalize_manifest_path(&path) {
+            Ok(path) => path,
+            Err(code) => {
+                return result_failure(
+                    &request_id,
+                    host_diagnostic(
+                        code,
+                        "The selected run manifest is invalid.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+        },
+        Err(_) => {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "result_manifest_invalid",
+                    "The selected manifest was not a local path.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let result_root = match app.path().app_local_data_dir() {
+        Ok(path) => path.join("result-extractions"),
+        Err(_) => {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "result_root_invalid",
+                    "The application result workspace is unavailable.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": EXTRACT_ZONE_AIR_STATE_OPERATION,
+        "manifest_path": manifest_path,
+        "source_path": active.source_path,
+        "source_sha256": active.source_sha256,
+        "result_root": result_root,
+        "zone_number": zone_number,
+    });
+    let bridge_id = request_id.clone();
+    let raw = match tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, EXTRACT_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(envelope)) => envelope,
+        Ok(Err(error)) => return result_failure(&request_id, error),
+        Err(_) => {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "bridge_task_failed",
+                    "The Zone result task ended unexpectedly.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if !raw.ok {
+        return result_failure(
+            &request_id,
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let extraction: RawZoneAirStateExtraction =
+        match serde_json::from_value(raw.result.expect("validated result")) {
+            Ok(value) => value,
+            Err(_) => {
+                return result_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "python_response_result_invalid",
+                        "Python Zone air-state result was invalid.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+        };
+    match validate_zone_air_state_result(extraction, &active, zone_number) {
+        Ok(result) => DesktopZoneAirStateResponse {
+            request_id,
+            cancelled: false,
+            project_session_id: Some(active.project_session_id.clone()),
+            result: Some(result),
+            error: None,
+        },
+        Err(error) => result_failure(&request_id, error),
     }
 }
 
@@ -1537,6 +1933,7 @@ pub async fn apply_zone_volume_patch_to_copy(
         source_size_bytes: project.source_size_bytes,
         reader_mode: project.reader_mode.clone(),
         header_version: project.header_version.clone(),
+        zones: project.zones.clone(),
     };
     let mut state = store.state.lock().expect("desktop session mutex poisoned");
     if state
@@ -1630,12 +2027,12 @@ mod tests {
             code: "patch_precondition_failed".into(),
             message: "Traceback C:/secret/model.prj".repeat(30),
             source_line_number: Some(9),
-            context: BTreeMap::from([
+            context: Some(BTreeMap::from([
                 ("token".into(), json!("x".repeat(300))),
                 ("source_path".into(), json!("C:/secret/model.prj")),
                 ("field".into(), json!({"nested": true})),
                 ("old_token".into(), json!("600")),
-            ]),
+            ])),
         };
         let safe = sanitize_raw_diagnostic(raw).unwrap();
         let serialized = serde_json::to_string(&safe).unwrap();
@@ -1762,6 +2159,7 @@ mod tests {
             source_size_bytes: project.source_size_bytes,
             reader_mode: project.reader_mode,
             header_version: project.header_version,
+            zones: project.zones,
         };
         let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-contract", "operation": PLAN_OPERATION, "source_path": fixture, "contam_number": 1, "new_volume_token": "650"});
         let envelope =
@@ -1799,6 +2197,82 @@ mod tests {
         );
     }
 
+    fn raw_air_state_result() -> RawZoneAirStateExtraction {
+        let sample = RawZoneAirStateSample {
+            index: 0,
+            day_of_year: 1,
+            day_type: None,
+            sim_time_seconds: 0.0,
+            temperature_k: 293.15,
+            reference_pressure_pa: -1.4222,
+            air_density_kg_m3: 1.2041,
+        };
+        RawZoneAirStateExtraction {
+            result_type: "zone_air_state_extraction".into(),
+            extraction_id: "extract-1".into(),
+            status: "succeeded".into(),
+            run_id: "run-1".into(),
+            zone_number: 1,
+            zone_name: "One".into(),
+            sample_count: 1,
+            first_sample: sample.clone(),
+            parsed_result: RawZoneAirStateSeries {
+                schema_version: RESULT_SCHEMA_VERSION.into(),
+                result_type: "zone_air_state".into(),
+                run_id: "run-1".into(),
+                extraction_id: "extract-1".into(),
+                zone_number: 1,
+                zone_name: "One".into(),
+                source_line_number: 243,
+                unit_system: "SI".into(),
+                sample_count: 1,
+                samples: vec![sample],
+                day_type_source: "not_available_in_simread_nfr_v1".into(),
+                time_contract: "elapsed_seconds_from_first_sample".into(),
+                diagnostics: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn zone_air_state_contract_rejects_untrusted_samples_and_paths_are_not_serialized() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-results").result.unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "session-results".into(),
+            source_path: fixture,
+            source_sha256: project.source_sha256,
+            source_size_bytes: project.source_size_bytes,
+            reader_mode: project.reader_mode,
+            header_version: project.header_version,
+            zones: project.zones,
+        };
+        let view = validate_zone_air_state_result(raw_air_state_result(), &active, 1).unwrap();
+        let serialized = serde_json::to_string(&view).unwrap();
+        assert_eq!(view.sample_count, 1);
+        assert!(!serialized.contains("source_path"));
+        assert!(!serialized.contains("result_root"));
+        assert!(!serialized.contains("manifest"));
+
+        let mut non_finite = raw_air_state_result();
+        non_finite.parsed_result.samples[0].temperature_k = f64::INFINITY;
+        assert_eq!(
+            validate_zone_air_state_result(non_finite, &active, 1)
+                .unwrap_err()
+                .code,
+            "python_response_result_invalid"
+        );
+
+        let mut count_mismatch = raw_air_state_result();
+        count_mismatch.sample_count = 2;
+        assert_eq!(
+            validate_zone_air_state_result(count_mismatch, &active, 1)
+                .unwrap_err()
+                .code,
+            "python_response_result_invalid"
+        );
+    }
+
     #[test]
     fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         let build_script = include_str!("../build.rs");
@@ -1810,10 +2284,11 @@ mod tests {
             "select_and_read_prj_zones",
             "plan_zone_volume_patch",
             "apply_zone_volume_patch_to_copy",
+            "select_and_extract_zone_air_state",
         ] {
             assert!(build_script.contains(command));
         }
-        assert_eq!(capability["permissions"].as_array().unwrap().len(), 4);
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 5);
         let forbidden = [
             "sourcePath",
             "outputPath",
@@ -1870,6 +2345,7 @@ mod tests {
                 source_size_bytes: project.source_size_bytes,
                 reader_mode: project.reader_mode,
                 header_version: project.header_version,
+                zones: project.zones,
             }
         };
         let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-real", "operation": PLAN_OPERATION, "source_path": active.source_path, "contam_number": 1, "new_volume_token": "650.0"});

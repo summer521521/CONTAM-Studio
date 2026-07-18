@@ -68,6 +68,7 @@ ERROR_EXIT_CODES = {
             "result_manifest_unsupported",
             "result_run_not_succeeded",
             "result_run_evidence_invalid",
+            "result_project_mismatch",
             "result_artifact_missing",
             "result_artifact_ambiguous",
             "result_artifact_path_invalid",
@@ -1171,11 +1172,27 @@ def _failure_manifest(
 
 
 def extract_zone_air_state(
-    run_manifest_path: Path, *, simread_path: Path | None, result_root: Path, zone_number: int
+    run_manifest_path: Path,
+    *,
+    simread_path: Path | None,
+    result_root: Path,
+    zone_number: int,
+    expected_source_path: Path | None = None,
+    expected_source_sha256: str | None = None,
 ) -> dict[str, Any]:
     started = time.time()
     started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     evidence = _validate_phase4_manifest(run_manifest_path)
+    if expected_source_path is not None:
+        try:
+            expected = expected_source_path.resolve(strict=True)
+            source_matches = os.path.samefile(expected, Path(evidence.source["path"]))
+        except OSError:
+            _fail("result_project_mismatch", "当前项目源文件无法规范化。")
+        if not source_matches:
+            _fail("result_project_mismatch", "运行清单不属于当前项目。")
+    if expected_source_sha256 is not None and evidence.source["sha256"] != expected_source_sha256:
+        _fail("result_project_mismatch", "运行清单与当前项目哈希不匹配。")
     if isinstance(zone_number, bool) or not isinstance(zone_number, int) or zone_number <= 0:
         _fail("zone_result_not_found", "Zone编号必须为正整数。")
     source_directory = Path(evidence.source["path"]).resolve().parent

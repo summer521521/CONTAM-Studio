@@ -2,6 +2,13 @@
 
 记录日期：2026-07-18。
 
+## Phase 5B-1桌面Zone空气状态摘要
+
+- 新增受控`select_and_extract_zone_air_state`桌面命令。React只提交request、项目session和CONTAM Zone编号；Rust通过原生JSON对话框取得Phase 4运行清单，并将结果根目录限制在应用本地数据目录。
+- Python桥新增显式`extract_zone_air_state`操作，复用Phase 5A接口并在SimRead启动前验证当前项目规范化路径、源SHA-256和Zone身份。
+- React新增真实`zone_air_state`摘要和可滚动表格，当前只显示用户选择运行清单对应的当前Zone；未接入ContamX运行、任意SIM、曲线或导出。
+- Phase 5B-1自动测试和真实Tauri交互已完成；官方Zone 1 `One`显示577个样本，首样本为293.15 K、-1.4222 Pa和1.2041 kg/m³，中英文与双主题正常，源PRJ及Phase 4 manifest/SIM保持不变。
+
 ## Phase 0初始状态
 
 - 项目根目录最初包含`docs/`、`examples/`、`fixtures/`和`references/`四个目录；后三者为空。
@@ -90,7 +97,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 文件选择和读取合并为Rust侧唯一的`select_and_read_prj_zones`命令。React只提交`request_id`，无法向命令指定源路径；Rust打开原生对话框，验证本地文件、`.prj`扩展名并规范化路径后才调用Python。
 - `build.rs`通过`AppManifest`登记该命令，main窗口capability只授予`core:default`与`allow-select-and-read-prj-zones`；前端dialog依赖和权限已移除，未开放文件系统、Shell、HTTP、远程URL或自动更新能力。
 - React不读取文件、不启动进程；Rust宿主把内部持有的规范化选择路径作为JSON请求字段，通过参数数组启动一次性Python进程，并将结构化Envelope返回前端。取消选择以独立`cancelled`响应返回，不伪装为读取错误。
-- Python桥现使用协议`1.1`，显式允许读取、计划Zone体积Patch和应用到副本三个操作；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
+- Python桥现使用协议`1.2`，显式允许读取、计划Zone体积Patch、应用到副本和提取Zone空气状态四个操作；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
 - Python解释器按`CONTAM_STUDIO_PYTHON`绝对路径、仓库内`python/.venv/Scripts/python.exe`顺序发现；缺失时返回`python_runtime_not_found`，不回退到PATH、全局Python或Microsoft Store别名。
 - Rust端超时为10秒，stdout上限2 MiB、stderr上限16 KiB；超时终止进程，并拒绝非UTF-8、无效JSON、协议不匹配、request_id不匹配、非零退出、超大输出及任意非空stderr。
 - Python响应先进入不可序列化到WebView的Raw类型；Rust验证诊断code，以固定消息替换Python原始message，并对白名单context执行类型检查与120字符截断。成功diagnostics和失败error使用同一规则，TypeScript清理保留为第二道防线。
@@ -138,7 +145,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入一个Zone体积的Diff审阅与另存副本，但其余欢迎页、结果和运行内容仍为模拟或占位。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、快照、撤销、多Patch、ContamX发现与用户可触发运行、结果读取、AI调用、网络服务或Python打包分发；Phase 3B不得解释为整个PRJ已经可编辑或可保存。
+桌面GUI已接入一个Zone体积的Diff审阅与另存副本，以及当前Zone的真实`zone_air_state`摘要；运行和AI内容仍为占位。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、撤销、多Patch、ContamX用户可触发运行、任意结果类型、曲线、导出、AI调用、网络服务或Python打包分发；Phase 3B和Phase 5B-1不得解释为完整编辑或结果分析系统。
 
 ## 待验证问题
 

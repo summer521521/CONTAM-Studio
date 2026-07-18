@@ -1,4 +1,5 @@
 import {
+  Activity,
   FilePlus2,
   FolderOpen,
   HardDrive,
@@ -12,6 +13,8 @@ import {
 import { useTranslation } from "react-i18next";
 import type { ProjectState } from "../../app/project-state";
 import { projectFileName } from "../../app/project-state";
+import type { ResultState } from "../../app/result-state";
+import { ZoneAirStateResults } from "./ZoneAirStateResults";
 
 interface WelcomePageProps {
   projectState: ProjectState;
@@ -22,6 +25,8 @@ interface WelcomePageProps {
   onOpenProject: () => void;
   openDisabled: boolean;
   onPlaceholder: (action: string) => void;
+  resultState: ResultState;
+  onLoadResults: () => void;
 }
 
 export function WelcomePage({
@@ -33,6 +38,8 @@ export function WelcomePage({
   onOpenProject,
   openDisabled,
   onPlaceholder,
+  resultState,
+  onLoadResults,
 }: WelcomePageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -41,8 +48,8 @@ export function WelcomePage({
     <main className="editor-surface">
       <div className="editor-tabs">
         <div className="editor-tab is-active">
-          <Home size={14} aria-hidden="true" />
-          <span>{t("welcome.tab")}</span>
+          {project ? <Activity size={14} aria-hidden="true" /> : <Home size={14} aria-hidden="true" />}
+          <span>{project ? t("results.tab") : t("welcome.tab")}</span>
         </div>
         <div className="editor-layout-actions">
           <button
@@ -117,6 +124,11 @@ export function WelcomePage({
                 <span>{t("project.openAnother")}</span>
               </button>
             </div>
+            <ZoneAirStateResults
+              state={resultState}
+              onLoad={onLoadResults}
+              disabled={openDisabled}
+            />
           </div>
         ) : (
         <div className="welcome-content">
