@@ -33,9 +33,36 @@ describe("Zone air-state ECharts contract", () => {
       expect(item.animation).toBe(false);
       expect(item).not.toHaveProperty("sampling");
     }
-    const zoom = option.dataZoom as Array<{ xAxisIndex: number[] }>;
-    expect(zoom.every((item) => item.xAxisIndex.join(",") === "0,1,2")).toBe(true);
+    const zoom = option.dataZoom as Array<{ type: string; xAxisIndex: number[]; zoomOnMouseWheel: boolean }>;
+    expect(zoom).toHaveLength(1);
+    expect(zoom[0]).toMatchObject({
+      type: "inside",
+      xAxisIndex: [0, 1, 2],
+      zoomOnMouseWheel: true,
+    });
     expect(JSON.stringify(RESULT_FIXTURE.samples)).toBe(before);
+  });
+
+  it("shows three equal elapsed-time axes while keeping zoom wheel-only", () => {
+    const second = {
+      ...RESULT_FIXTURE.samples[0],
+      index: 1,
+      sim_time_seconds: 172800,
+    };
+    const option = buildZoneAirStateChartOption({
+      ...RESULT_FIXTURE,
+      sample_count: 2,
+      samples: [RESULT_FIXTURE.samples[0], second],
+    }, copy);
+    const xAxes = option.xAxis as Array<{ min: number; max: number; name: string; axisLabel: { show: boolean } }>;
+    expect(xAxes).toHaveLength(3);
+    expect(xAxes.every((axis) => axis.name === "Elapsed time (s)" && axis.axisLabel.show)).toBe(true);
+    expect(new Set(xAxes.map((axis) => `${axis.min}:${axis.max}`))).toEqual(new Set(["0:172800"]));
+    const grids = option.grid as Array<{ left: number; right: number }>;
+    expect(new Set(grids.map((grid) => `${grid.left}:${grid.right}`))).toEqual(new Set(["76:28"]));
+    expect(option.dataZoom).toEqual([
+      expect.objectContaining({ type: "inside", zoomOnMouseWheel: true }),
+    ]);
   });
 
   it("builds tooltip text from the exact sample values", () => {

@@ -7,7 +7,7 @@
 - 当前Zone的严格`zone_air_state`结果新增模块化ECharts三联曲线、确定性统计和完整语义化数据表切换。曲线不插值、不平滑、不采样，统计使用一次遍历在线均值且不改变原始样本或SI单位。
 - Rust新增仅存在于桌面进程内存的`ActiveResultContext`，绑定项目session/SHA-256、Zone、运行、提取、来源和完整严格结果。提取失败或取消不覆盖，新项目和Patch副本清除，新运行成功保留旧结果以显示过期提示。
 - 新增显式ACL命令`export_active_zone_air_state_csv`。React只提交结果身份；Rust在对话框前、写入前和写入后复核源PRJ SHA-256，路径由原生保存对话框取得，CSV使用固定13列、UTF-8、CRLF、RFC转义和公式注入防护生成，并以不可覆盖的同目录原子写入提交。
-- 新增唯一依赖`echarts 6.1.0`（Apache-2.0），使用模块化Canvas折线图入口。自动检查及官方ContamX→SimRead→统计→生产Rust CSV→独立CSV重读的非GUI闭环已通过；真实GUI验收为`pending_user`。
+- 新增唯一依赖`echarts 6.1.0`（Apache-2.0），使用模块化Canvas折线图入口。自动检查及官方ContamX→SimRead→统计→生产Rust CSV→独立CSV重读的非GUI闭环已通过。用户首轮真实GUI验收除状态栏、三联横轴/缩放和极值时间标签外均通过；三个展示问题已修正，真实Tauri复核为`pending_user_recheck`。
 
 ## Phase 4B-1受控桌面ContamX运行
 

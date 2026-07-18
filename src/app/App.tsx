@@ -763,7 +763,7 @@ function App() {
         </Group>
       </div>
 
-      <StatusBar theme={workbench.theme} projectState={projectState} />
+      <StatusBar theme={workbench.theme} projectState={projectState} runState={runState} />
 
       {placeholderNotice ? (
         <div className="placeholder-toast" role="status" aria-live="polite">

@@ -116,8 +116,13 @@ export function buildZoneAirStateChartOption(
     type: "value" as const,
     min: result.samples[0]?.sim_time_seconds ?? 0,
     max: result.samples.at(-1)?.sim_time_seconds ?? 0,
+    name: `${copy.time} (s)`,
+    nameLocation: "middle" as const,
+    nameGap: 27,
+    nameTextStyle: { color: palette.muted },
     axisLine: { lineStyle: { color: palette.border } },
-    axisLabel: { color: palette.muted },
+    axisTick: { show: true, lineStyle: { color: palette.border } },
+    axisLabel: { show: true, color: palette.muted },
     splitLine: { lineStyle: { color: palette.border, opacity: 0.45 } },
   };
   return {
@@ -132,9 +137,9 @@ export function buildZoneAirStateChartOption(
       data: [copy.temperature, copy.pressure, copy.density],
     },
     grid: [
-      { left: 72, right: 28, top: 48, height: "21%" },
-      { left: 72, right: 28, top: "36%", height: "21%" },
-      { left: 72, right: 28, top: "65%", height: "21%" },
+      { left: 76, right: 28, top: 48, height: "18%", containLabel: false },
+      { left: 76, right: 28, top: "38%", height: "18%", containLabel: false },
+      { left: 76, right: 28, top: "68%", height: "18%", containLabel: false },
     ],
     axisPointer: { link: [{ xAxisIndex: [0, 1, 2] }] },
     tooltip: {
@@ -157,9 +162,9 @@ export function buildZoneAirStateChartOption(
       },
     },
     xAxis: [
-      { ...commonAxis, gridIndex: 0, axisLabel: { show: false } },
-      { ...commonAxis, gridIndex: 1, axisLabel: { show: false } },
-      { ...commonAxis, gridIndex: 2, name: `${copy.time} (s)`, nameTextStyle: { color: palette.muted } },
+      { ...commonAxis, gridIndex: 0 },
+      { ...commonAxis, gridIndex: 1 },
+      { ...commonAxis, gridIndex: 2 },
     ],
     yAxis: [
       { type: "value", gridIndex: 0, name: "K", nameTextStyle: { color: palette.muted }, axisLabel: { color: palette.muted }, splitLine: { lineStyle: { color: palette.border, opacity: 0.45 } } },
@@ -167,8 +172,16 @@ export function buildZoneAirStateChartOption(
       { type: "value", gridIndex: 2, name: "kg/m³", nameTextStyle: { color: palette.muted }, axisLabel: { color: palette.muted }, splitLine: { lineStyle: { color: palette.border, opacity: 0.45 } } },
     ],
     dataZoom: [
-      { type: "inside", xAxisIndex: [0, 1, 2], filterMode: "none", start: 0, end: 100 },
-      { type: "slider", xAxisIndex: [0, 1, 2], filterMode: "none", start: 0, end: 100, bottom: 2, textStyle: { color: palette.muted }, borderColor: palette.border },
+      {
+        type: "inside",
+        xAxisIndex: [0, 1, 2],
+        filterMode: "none",
+        start: 0,
+        end: 100,
+        zoomOnMouseWheel: true,
+        moveOnMouseWheel: false,
+        moveOnMouseMove: true,
+      },
     ],
     series: [
       {

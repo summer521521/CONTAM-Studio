@@ -112,7 +112,9 @@
     "light": "浅色",
     "dark": "深色",
     "noProject": "无项目",
-    "contamx": "ContamX未配置",
+    "contamx": "ContamX状态待验证",
+    "contamxRunning": "ContamX运行中",
+    "contamxNotConfigured": "ContamX未配置",
     "ai": "AI未启用"
   },
   "project": {
@@ -196,6 +198,7 @@
       "statistics": "确定性统计摘要",
       "minimum": "最小值",
       "maximum": "最大值",
+      "extremeTime": "极值时间",
       "mean": "算术平均值",
       "deterministicNote": "统计由原始样本按固定顺序一次遍历计算，不插值、不平滑，也不构成舒适性或合规判断。",
       "viewLabel": "结果视图",

@@ -112,7 +112,9 @@
     "light": "Light",
     "dark": "Dark",
     "noProject": "No project",
-    "contamx": "ContamX not configured",
+    "contamx": "ContamX status not yet verified",
+    "contamxRunning": "ContamX running",
+    "contamxNotConfigured": "ContamX not configured",
     "ai": "AI not enabled"
   },
   "project": {
@@ -196,6 +198,7 @@
       "statistics": "Deterministic statistics",
       "minimum": "Minimum",
       "maximum": "Maximum",
+      "extremeTime": "Extreme time",
       "mean": "Arithmetic mean",
       "deterministicNote": "Statistics use one ordered pass over the raw samples with no interpolation or smoothing; they are not comfort or compliance judgments.",
       "viewLabel": "Result view",

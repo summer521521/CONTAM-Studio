@@ -6,6 +6,7 @@ import { zoneSelectionKey } from "../../app/project-state";
 import { BottomPanel } from "./BottomPanel";
 import { ContextSidebar } from "./ContextSidebar";
 import { ProjectSidebar } from "./ProjectSidebar";
+import { StatusBar } from "./StatusBar";
 import { ZoneVolumePatchDialog } from "./ZoneVolumePatchDialog";
 import { ZoneAirStateDataTable, ZoneAirStateResults } from "./ZoneAirStateResults";
 import { TopBar } from "./TopBar";
@@ -272,9 +273,62 @@ describe("real project components", () => {
     );
     expect(markup).toContain("Zone空气状态分析");
     expect(markup).toContain("293.15");
+    expect(markup).toContain("极值时间: 0天 00:00:00");
     expect(markup).toContain("zone-air-state-chart");
     expect(markup).toContain('aria-selected="true"');
     expect(markup).not.toContain("<table");
+  });
+
+  it("reports ContamX status from verified run evidence instead of a permanent placeholder", () => {
+    const pending = renderToStaticMarkup(
+      <StatusBar theme="light" projectState={state} runState={INITIAL_RUN_STATE} />,
+    );
+    expect(pending).toContain("ContamX状态待验证");
+    expect(pending).not.toContain("ContamX未配置");
+
+    const verified = renderToStaticMarkup(
+      <StatusBar
+        theme="light"
+        projectState={state}
+        runState={{
+          ...INITIAL_RUN_STATE,
+          status: "succeeded",
+          projectSessionId: "request-1",
+          summary: {
+            status: "succeeded",
+            run_id: "run-1",
+            solver_name: "contamx3.exe",
+            solver_version: "3.4.0.3",
+            started_at_utc: "2026-07-18T23:00:00Z",
+            duration_ms: 71,
+            exit_code: 0,
+            timed_out: false,
+            sim_artifact_count: 1,
+            source_unchanged: true,
+          },
+        }}
+      />,
+    );
+    expect(verified).toContain("contamx3.exe 3.4.0.3");
+
+    const notConfigured = renderToStaticMarkup(
+      <StatusBar
+        theme="light"
+        projectState={state}
+        runState={{
+          ...INITIAL_RUN_STATE,
+          status: "error",
+          issue: {
+            code: "contamx_solver_not_configured",
+            message: "internal detail",
+            source_line_number: null,
+            context: {},
+          },
+        }}
+      />,
+    );
+    expect(notConfigured).toContain("ContamX未配置");
+    expect(notConfigured).not.toContain("internal detail");
   });
 
   it("keeps all 577 raw samples in the equivalent semantic table", () => {

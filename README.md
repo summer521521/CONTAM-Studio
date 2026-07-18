@@ -157,7 +157,7 @@ Phase 5B-2自动、非GUI官方闭环和用户真实Tauri验收均已通过；�
 
 ## Phase 5C结果分析与CSV
 
-当前Zone的严格结果默认进入图表视图：温度K、参考压力Pa和空气密度kg/m³使用一个模块化ECharts实例和共享累计时间缩放；数据原序、数值和单位保持不变。纯TypeScript模块用一次遍历确定性计算三项指标的最小值、最大值、平均值和首次极值位置，原始语义化表格仍完整保留。
+当前Zone的严格结果默认进入图表视图：温度K、参考压力Pa和空气密度kg/m³使用一个模块化ECharts实例、等长同范围的三个累计时间横轴和鼠标滚轮同步缩放；不显示独立拖放滑块。数据原序、数值和单位保持不变。纯TypeScript模块用一次遍历确定性计算三项指标的最小值、最大值、平均值和首次极值位置，统计卡明确标注极值时间，原始语义化表格仍完整保留。
 
 CSV只由Rust内存中的`ActiveResultContext`生成。WebView只提交项目、Zone、运行和提取身份；目标路径来自原生保存对话框。导出使用UTF-8、CRLF、固定13列、RFC兼容转义、文本公式注入防护和同目录原子提交，拒绝现有文件。详见[分析架构](docs/architecture/phase-5c-zone-analysis-workspace.md)和[CSV契约](docs/architecture/zone-air-state-csv-export.md)。
 

@@ -262,8 +262,8 @@ export function ZoneAirStateResults({
             <article className="results-stat-card" key={key}>
               <h3>{label}</h3>
               <dl>
-                <div><dt>{t("results.analysis.minimum")}</dt><dd>{formatResultNumber(metric.minimum.value, digits)} {unit}<small>{formatElapsedSeconds(metric.minimum.simTimeSeconds, language)}</small></dd></div>
-                <div><dt>{t("results.analysis.maximum")}</dt><dd>{formatResultNumber(metric.maximum.value, digits)} {unit}<small>{formatElapsedSeconds(metric.maximum.simTimeSeconds, language)}</small></dd></div>
+                <div><dt>{t("results.analysis.minimum")}</dt><dd>{formatResultNumber(metric.minimum.value, digits)} {unit}<small>{t("results.analysis.extremeTime")}: {formatElapsedSeconds(metric.minimum.simTimeSeconds, language)}</small></dd></div>
+                <div><dt>{t("results.analysis.maximum")}</dt><dd>{formatResultNumber(metric.maximum.value, digits)} {unit}<small>{t("results.analysis.extremeTime")}: {formatElapsedSeconds(metric.maximum.simTimeSeconds, language)}</small></dd></div>
                 <div><dt>{t("results.analysis.mean")}</dt><dd>{formatResultNumber(metric.mean, digits)} {unit}</dd></div>
               </dl>
             </article>
