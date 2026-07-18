@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-extract-active-run-zone-air-state"
+description = "Enables the extract_active_run_zone_air_state command without any pre-configured scope."
+commands.allow = ["extract_active_run_zone_air_state"]
+
+[[permission]]
+identifier = "deny-extract-active-run-zone-air-state"
+description = "Denies the extract_active_run_zone_air_state command without any pre-configured scope."
+commands.deny = ["extract_active_run_zone_air_state"]

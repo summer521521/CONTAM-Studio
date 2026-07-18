@@ -1,6 +1,7 @@
 import type { ReaderDiagnostic } from "./project-state";
 
 export type ZoneResultStatus = "idle" | "selecting" | "loading" | "loaded" | "cancelled" | "error";
+export type ResultLoadSource = "active_run" | "selected_manifest";
 
 export interface ZoneAirStateSample {
   index: number;
@@ -49,11 +50,14 @@ export interface ResultState {
   projectSessionId: string | null;
   zoneNumber: number | null;
   result: ZoneAirStateResult | null;
+  resultSource: ResultLoadSource | null;
+  pendingSource: ResultLoadSource | null;
   issue: ReaderDiagnostic | null;
 }
 
 export type ResultAction =
   | { type: "selection_started"; sequence: number; requestId: string; projectSessionId: string; zoneNumber: number }
+  | { type: "active_run_started"; sequence: number; requestId: string; projectSessionId: string; zoneNumber: number }
   | { type: "host_loading_started"; requestId: string }
   | { type: "load_cancelled"; sequence: number; requestId: string }
   | { type: "load_succeeded"; sequence: number; requestId: string; projectSessionId: string; result: ZoneAirStateResult }
@@ -68,6 +72,8 @@ export const INITIAL_RESULT_STATE: ResultState = {
   projectSessionId: null,
   zoneNumber: null,
   result: null,
+  resultSource: null,
+  pendingSource: null,
   issue: null,
 };
 
@@ -85,15 +91,27 @@ export function resultReducer(state: ResultState, action: ResultAction): ResultS
         activeRequestId: action.requestId,
         projectSessionId: action.projectSessionId,
         zoneNumber: action.zoneNumber,
+        pendingSource: "selected_manifest",
+        issue: null,
+      };
+    case "active_run_started":
+      return {
+        ...state,
+        status: "loading",
+        activeSequence: action.sequence,
+        activeRequestId: action.requestId,
+        projectSessionId: action.projectSessionId,
+        zoneNumber: action.zoneNumber,
+        pendingSource: "active_run",
         issue: null,
       };
     case "host_loading_started":
-      return state.activeRequestId === action.requestId
+      return state.activeRequestId === action.requestId && state.pendingSource === "selected_manifest"
         ? { ...state, status: "loading" }
         : state;
     case "load_cancelled":
       return current(state, action.sequence, action.requestId)
-        ? { ...state, status: "cancelled", activeSequence: null, activeRequestId: null, issue: null }
+        ? { ...state, status: "cancelled", activeSequence: null, activeRequestId: null, pendingSource: null, issue: null }
         : state;
     case "load_succeeded":
       return current(state, action.sequence, action.requestId)
@@ -105,18 +123,27 @@ export function resultReducer(state: ResultState, action: ResultAction): ResultS
             projectSessionId: action.projectSessionId,
             zoneNumber: action.result.zone_number,
             result: action.result,
+            resultSource: state.pendingSource,
+            pendingSource: null,
             issue: null,
           }
         : state;
     case "load_failed":
       return current(state, action.sequence, action.requestId)
-        ? { ...state, status: "error", activeSequence: null, activeRequestId: null, issue: action.issue }
+        ? { ...state, status: "error", activeSequence: null, activeRequestId: null, pendingSource: null, issue: action.issue }
         : state;
     case "project_or_zone_changed":
       return { ...INITIAL_RESULT_STATE };
     case "issue_cleared":
       return { ...state, issue: null };
   }
+}
+
+export function resultIsOlderThanActiveRun(
+  state: ResultState,
+  activeRunId: string | null,
+): boolean {
+  return Boolean(state.result && activeRunId && state.result.run_id !== activeRunId);
 }
 
 export function resultResponseIssue(

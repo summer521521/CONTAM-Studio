@@ -26,7 +26,9 @@ interface WelcomePageProps {
   openDisabled: boolean;
   onPlaceholder: (action: string) => void;
   resultState: ResultState;
-  onLoadResults: () => void;
+  activeRunId: string | null;
+  onLoadLatestResults: () => void;
+  onSelectManifestResults: () => void;
 }
 
 export function WelcomePage({
@@ -39,7 +41,9 @@ export function WelcomePage({
   openDisabled,
   onPlaceholder,
   resultState,
-  onLoadResults,
+  activeRunId,
+  onLoadLatestResults,
+  onSelectManifestResults,
 }: WelcomePageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -126,7 +130,9 @@ export function WelcomePage({
             </div>
             <ZoneAirStateResults
               state={resultState}
-              onLoad={onLoadResults}
+              activeRunId={activeRunId}
+              onLoadLatest={onLoadLatestResults}
+              onSelectManifest={onSelectManifestResults}
               disabled={openDisabled}
             />
           </div>

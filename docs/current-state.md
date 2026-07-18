@@ -8,7 +8,7 @@
 - Python桥新增`run_active_project`白名单操作，复用Phase 4A `run_contamx()`；项目SHA不匹配在求解器probe和运行目录创建前以`run_project_mismatch`拒绝。
 - ContamX异常进程经过有界wait/terminate/kill/管道关闭和流线程冻结。无法确认退出时保留不可信残留目录，但不写Phase 5A可接受manifest或最终生成物哈希。
 - Rust验证成功响应与活动项目、官方3.4.0.3身份、受控manifest路径和非空SIM一致，只向WebView发送安全摘要；最新成功manifest路径仅存Rust内存，项目或Patch副本切换时清除。
-- 非GUI官方运行已成功并由Phase 5A验证器接受。自动验证已完成；真实桌面手动验收为`pending_user`。本切片不自动加载刚运行的结果。
+- 非GUI官方运行已成功并由Phase 5A验证器接受。自动验证与真实桌面手动验收均已完成；用户验收证据见[PR #11评论](https://github.com/summer521521/CONTAM-Studio/pull/11#issuecomment-5011099169)。Phase 4B-1已完成。
 
 ## Phase 5B-1桌面Zone空气状态摘要
 
@@ -16,6 +16,14 @@
 - Python桥新增显式`extract_zone_air_state`操作，复用Phase 5A接口并在SimRead启动前验证当前项目规范化路径、源SHA-256和Zone身份。
 - React新增真实`zone_air_state`摘要和可滚动表格，当前只显示用户选择运行清单对应的当前Zone；未接入ContamX运行、任意SIM、曲线或导出。
 - Phase 5B-1自动测试和真实Tauri交互已完成；官方Zone 1 `One`显示577个样本，首样本为293.15 K、-1.4222 Pa和1.2041 kg/m³，中英文与双主题正常，源PRJ及Phase 4 manifest/SIM保持不变。
+
+## Phase 5B-2最新成功运行直达结果
+
+- 当前切片新增显式ACL命令`extract_active_run_zone_air_state`。React只提交request、活动项目session和Zone编号；命令不打开文件选择器，也不接受manifest、运行根或`run_id`。
+- Rust验证`ActiveRunContext`与当前项目session/SHA-256一致，manifest严格位于`<app-local-data>/runs/<run_id>/evidence/manifest.json`，并复用Phase 5B-1相同的Python Phase 5A桥与结果契约。
+- 活动运行入口返回的`run_id`必须与最新成功运行一致；Python返回后还会再次确认活动项目和运行未被替换。WebView只收到安全结果视图。
+- 手动“选择已有运行清单”入口继续可用。新运行完成后旧表格不会被自动替换，而是显示非错误的过期提示，等待用户主动加载最新运行。
+- 自动检查、非GUI官方闭环和真实桌面手动验收均已通过；用户验收证据见[PR #12评论](https://github.com/summer521521/CONTAM-Studio/pull/12#issuecomment-5011558413)。Phase 5B-2已完成。
 
 ## Phase 0初始状态
 

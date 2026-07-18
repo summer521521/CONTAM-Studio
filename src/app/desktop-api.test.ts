@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyZoneVolumePatchToCopy,
+  extractActiveRunZoneAirState,
   planZoneVolumePatch,
   selectAndExtractZoneAirState,
   selectAndReadPrjZones,
@@ -25,6 +26,15 @@ describe("desktop API boundary", () => {
     expect(selectAndExtractZoneAirState.toString()).not.toContain("resultRoot");
     expect(selectAndExtractZoneAirState.toString()).not.toContain("sourcePath");
     expect(selectAndExtractZoneAirState.toString()).not.toContain("simreadPath");
+  });
+
+  it("loads the Rust-held active run without accepting paths or run objects", () => {
+    expect(extractActiveRunZoneAirState).toHaveLength(3);
+    const source = extractActiveRunZoneAirState.toString();
+    for (const forbidden of ["manifestPath", "sourcePath", "resultRoot", "runId", "simreadPath"]) {
+      expect(source).not.toContain(forbidden);
+    }
+    expect(source).toContain("extract_active_run_zone_air_state");
   });
 
   it("sends only request and project session identity for ContamX runs", () => {

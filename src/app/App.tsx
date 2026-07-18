@@ -14,6 +14,7 @@ import { ZoneVolumePatchDialog } from "../components/workbench/ZoneVolumePatchDi
 import i18n from "../i18n";
 import {
   applyZoneVolumePatchToCopy,
+  extractActiveRunZoneAirState,
   planZoneVolumePatch,
   selectAndReadPrjZones,
   selectAndExtractZoneAirState,
@@ -39,6 +40,7 @@ import {
   resultResponseIssue,
   ZONE_RESULT_STAGE_EVENT,
   type ZoneResultStageEvent,
+  type ResultLoadSource,
 } from "./result-state";
 import { INITIAL_RUN_STATE, runReducer, runResponseIssue } from "./run-state";
 import {
@@ -199,30 +201,41 @@ function App() {
 
   const currentZone = selectedZone(projectState);
 
-  const loadZoneResults = useCallback(async () => {
+  const loadZoneResults = useCallback(async (source: ResultLoadSource) => {
     if (!projectState.projectSessionId || !currentZone) return;
     const sequence = ++resultSequence.current;
     const requestId = crypto.randomUUID();
     dispatchResult({
-      type: "selection_started",
+      type: source === "active_run" ? "active_run_started" : "selection_started",
       sequence,
       requestId,
       projectSessionId: projectState.projectSessionId,
       zoneNumber: currentZone.contam_number,
     });
     try {
-      const response = await selectAndExtractZoneAirState(
-        requestId,
-        projectState.projectSessionId,
-        currentZone.contam_number,
-      );
+      const response = await (source === "active_run"
+        ? extractActiveRunZoneAirState
+        : selectAndExtractZoneAirState)(
+          requestId,
+          projectState.projectSessionId,
+          currentZone.contam_number,
+        );
       if (!mounted.current || sequence !== resultSequence.current) return;
       if (response.cancelled) {
         dispatchResult({ type: "load_cancelled", sequence, requestId });
         return;
       }
       const issue = resultResponseIssue(response, requestId);
-      if (issue || !response.result || response.project_session_id !== projectState.projectSessionId) {
+      const expectedActiveRunId =
+        source === "active_run" && runState.projectSessionId === projectState.projectSessionId
+          ? runState.summary?.run_id ?? null
+          : null;
+      if (
+        issue ||
+        !response.result ||
+        response.project_session_id !== projectState.projectSessionId ||
+        (source === "active_run" && response.result.run_id !== expectedActiveRunId)
+      ) {
         dispatchResult({
           type: "load_failed",
           sequence,
@@ -257,7 +270,16 @@ function App() {
         },
       });
     }
-  }, [currentZone, projectState.projectSessionId]);
+  }, [currentZone, projectState.projectSessionId, runState.projectSessionId, runState.summary]);
+
+  const loadLatestRunResults = useCallback(
+    () => loadZoneResults("active_run"),
+    [loadZoneResults],
+  );
+  const selectRunManifestResults = useCallback(
+    () => loadZoneResults("selected_manifest"),
+    [loadZoneResults],
+  );
 
   const startVolumeEdit = useCallback(() => {
     if (!currentZone || !projectState.projectSessionId) return;
@@ -446,6 +468,11 @@ function App() {
     resultState.status === "loading" ||
     runState.status === "running";
   const runDisabled = openDisabled || projectState.status !== "loaded" || !projectState.project;
+  const activeRunId =
+    runState.projectSessionId === projectState.projectSessionId
+      ? runState.summary?.run_id ?? null
+      : null;
+  const resultLoadDisabled = openDisabled || !currentZone;
 
   const toggleProject = () => {
     if (workbench.projectCollapsed) projectPanelRef.current?.expand();
@@ -567,7 +594,9 @@ function App() {
                   openDisabled={openDisabled}
                   onPlaceholder={showPlaceholder}
                   resultState={resultState}
-                  onLoadResults={loadZoneResults}
+                  activeRunId={activeRunId}
+                  onLoadLatestResults={loadLatestRunResults}
+                  onSelectManifestResults={selectRunManifestResults}
                 />
               </Panel>
               <Separator className="resize-handle resize-handle-vertical" />
@@ -584,6 +613,8 @@ function App() {
                   activeTab={workbench.bottomTab}
                   projectState={projectState}
                   runState={runState}
+                  onViewCurrentZoneResults={loadLatestRunResults}
+                  viewRunResultsDisabled={resultLoadDisabled || !activeRunId}
                   onTabChange={(bottomTab) => updateWorkbench({ bottomTab })}
                   onCollapse={toggleBottom}
                 />

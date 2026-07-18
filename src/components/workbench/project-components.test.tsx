@@ -238,6 +238,8 @@ describe("real project components", () => {
           },
         }}
         runState={INITIAL_RUN_STATE}
+        onViewCurrentZoneResults={() => undefined}
+        viewRunResultsDisabled={true}
         onTabChange={() => undefined}
         onCollapse={() => undefined}
       />,
@@ -257,8 +259,10 @@ describe("real project components", () => {
   it("renders a real Zone air-state table and null day type", () => {
     const markup = renderToStaticMarkup(
       <ZoneAirStateResults
-        state={{ ...INITIAL_RESULT_STATE, status: "loaded", result: zoneResult }}
-        onLoad={() => undefined}
+        state={{ ...INITIAL_RESULT_STATE, status: "loaded", result: zoneResult, resultSource: "selected_manifest" }}
+        activeRunId={null}
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
         disabled={false}
       />,
     );
@@ -272,7 +276,9 @@ describe("real project components", () => {
     const markup = renderToStaticMarkup(
       <ZoneAirStateResults
         state={{ ...INITIAL_RESULT_STATE, status: "cancelled" }}
-        onLoad={() => undefined}
+        activeRunId={null}
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
         disabled={false}
       />,
     );
@@ -284,7 +290,9 @@ describe("real project components", () => {
     const cancelled = renderToStaticMarkup(
       <ZoneAirStateResults
         state={{ ...INITIAL_RESULT_STATE, status: "cancelled", result: zoneResult }}
-        onLoad={() => undefined}
+        activeRunId={null}
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
         disabled={false}
       />,
     );
@@ -305,7 +313,9 @@ describe("real project components", () => {
             context: {},
           },
         }}
-        onLoad={() => undefined}
+        activeRunId={null}
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
         disabled={false}
       />,
     );
@@ -320,6 +330,34 @@ describe("real project components", () => {
     expect(i18n.t("results.cancelledRetained")).toBe(
       "This load was cancelled; the last successful results remain visible.",
     );
+    await i18n.changeLanguage("zh-CN");
+  });
+
+  it("shows latest-run actions and a non-error stale result notice", async () => {
+    await i18n.changeLanguage("en");
+    const empty = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={INITIAL_RESULT_STATE}
+        activeRunId="run-2"
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
+        disabled={false}
+      />,
+    );
+    expect(empty).toContain("Load latest run results");
+    expect(empty).toContain("Choose existing run manifest");
+
+    const stale = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{ ...INITIAL_RESULT_STATE, status: "loaded", result: zoneResult, resultSource: "selected_manifest" }}
+        activeRunId="run-2"
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
+        disabled={false}
+      />,
+    );
+    expect(stale).toContain("This table still comes from an earlier run");
+    expect(stale).not.toContain('class="results-inline-status is-error"');
     await i18n.changeLanguage("zh-CN");
   });
 
@@ -345,12 +383,15 @@ describe("real project components", () => {
             source_unchanged: true,
           },
         }}
+        onViewCurrentZoneResults={() => undefined}
+        viewRunResultsDisabled={false}
         onTabChange={() => undefined}
         onCollapse={() => undefined}
       />,
     );
     expect(markup).toContain("contamx3.exe 3.4.0.3");
     expect(markup).toContain("run-1");
+    expect(markup).toContain("查看当前Zone结果");
     expect(markup).not.toContain("F:\\");
     expect(markup).not.toContain("manifest");
   });

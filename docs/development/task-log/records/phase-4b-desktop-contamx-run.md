@@ -34,7 +34,7 @@ validation:
   - Official ContamX 3.4.0.3 non-GUI run succeeded with exit code 0 and one 545892-byte SIM
   - Phase 5A accepted the generated manifest; source hash, size and directory entries remained unchanged
 automated_validation_status: completed
-manual_gui_validation_status: pending_user
+manual_gui_validation_status: passed
 delivery_status: committed, pushed, and Draft PR 11 created
 pull_request: https://github.com/summer521521/CONTAM-Studio/pull/11
 token_usage:
@@ -43,5 +43,5 @@ token_usage:
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: GUI手动验收由用户完成；本任务未使用Computer Use，也未为纯GUI验收生成截图；Token不由客户端提供；最终提交SHA通过git log --follow追溯。
+notes: 用户已完成真实Tauri手动验收，证据为https://github.com/summer521521/CONTAM-Studio/pull/11#issuecomment-5011099169；原任务时间、自动测试和Token记录保持不变；最终提交SHA通过git log --follow追溯。
 ```

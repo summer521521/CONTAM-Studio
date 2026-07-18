@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 4B-1 Desktop run"
+    "phase": "Phase 5B-2 Latest run results"
   },
   "common": {
     "yes": "Yes",
@@ -52,7 +52,7 @@
     "recent": "Recent projects",
     "recentEmpty": "No recent projects",
     "recentHint": "Recent projects are not stored or scanned automatically.",
-    "phaseTitle": "Current phase: Phase 4B-1 controlled desktop run",
+    "phaseTitle": "Current phase: Phase 5B-2 latest run results",
     "phaseBody": "Run the active project from the top toolbar and inspect a safe summary; loading this run into results remains a later slice.",
     "offlineTitle": "Offline first",
     "offlineBody": "This phase sends no network requests; the core desktop UI runs locally.",
@@ -147,16 +147,27 @@
   "results": {
     "tab": "Zone air-state results",
     "load": "Load run results",
+    "loadLatest": "Load latest run results",
+    "selectManifest": "Choose existing run manifest",
+    "selectOtherManifest": "Choose another run manifest",
     "selecting": "Selecting a Phase 4 run manifest…",
-    "loading": "Loading run results…",
+    "loading": "Loading selected run results…",
+    "loadingLatest": "Loading latest run results…",
     "cancelled": "Run manifest selection was cancelled; no results were loaded.",
     "selectingRetained": "Selecting another Phase 4 run manifest; the current results remain visible.",
-    "loadingRetained": "Extracting new run results; the current results remain visible.",
+    "loadingRetained": "Extracting selected run results; the current results remain visible.",
+    "loadingLatestRetained": "Extracting latest run results; the current results remain visible.",
     "cancelledRetained": "This load was cancelled; the last successful results remain visible.",
     "failedRetained": "This load failed ({{error}}); the last successful results remain visible.",
     "empty": "Select a Zone and load a Phase 4 run manifest.",
+    "emptyWithActiveRun": "The latest successful run is available for this Zone; extraction still requires your explicit action.",
+    "emptyWithoutActiveRun": "Run the current project first, or choose an existing Phase 4 run manifest.",
     "manifestLabel": "Phase 4 run manifest",
     "summaryTitle": "Real Zone air-state summary",
+    "sourceLabel": "Result source",
+    "sourceActiveRun": "Latest successful run in this desktop session",
+    "sourceSelectedManifest": "User-selected Phase 4 run manifest",
+    "staleRun": "A newer run has completed. This table still comes from an earlier run; load the latest run results.",
     "zone": "Zone",
     "runId": "Run ID",
     "extractionId": "Extraction ID",
@@ -196,7 +207,8 @@
     "timedOut": "Timed out",
     "simCount": "Primary SIM count",
     "sourceUnchanged": "Source unchanged",
-    "nextSlice": "A later slice will connect this active run directly to the Zone results view."
+    "viewCurrentZoneResults": "View current Zone results",
+    "resultActionHint": "Extraction requires an explicit click; completing a run does not invoke SimRead automatically."
   },
   "patch": {
     "editVolume": "Modify volume",
@@ -307,6 +319,10 @@
       "run_source_changed": "The source project or directory changed during the run",
       "run_response_contract_invalid": "ContamX run response violated the desktop contract",
       "run_response_path_invalid": "Run evidence was outside the controlled application directory",
+      "active_run_missing": "No latest successful run is available; run the project or choose an existing manifest",
+      "active_run_invalid": "The latest run evidence is no longer valid; rerun the project or choose an existing manifest",
+      "active_run_project_mismatch": "The latest run does not belong to the current project; run the project again",
+      "active_run_result_mismatch": "The extracted result did not match the latest successful run; try again",
       "result_project_mismatch": "The run manifest does not belong to this project",
       "result_zone_mismatch": "The run result does not match the current Zone",
       "result_manifest_not_found": "The Phase 4 run manifest was not found",

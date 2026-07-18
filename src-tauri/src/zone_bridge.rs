@@ -1297,6 +1297,14 @@ fn safe_run_relative_path(value: &str) -> bool {
             .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
 }
 
+fn run_id_is_valid(run_id: &str) -> bool {
+    !run_id.is_empty()
+        && run_id.len() <= 80
+        && run_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
 fn validate_contamx_run_result(
     raw: RawContamXRunResult,
     active: &ActiveProjectContext,
@@ -1304,12 +1312,7 @@ fn validate_contamx_run_result(
 ) -> Result<(ContamXRunSummaryView, ActiveRunContext), ReaderDiagnostic> {
     let run = raw.run;
     let manifest = &run.manifest;
-    let run_id_valid = !run.run_id.is_empty()
-        && run.run_id.len() <= 80
-        && run
-            .run_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-');
+    let run_id_valid = run_id_is_valid(&run.run_id);
     let primary_valid = !run.primary_artifacts.is_empty()
         && run.primary_artifacts.len() <= 64
         && run.primary_artifacts.iter().all(|artifact| {
@@ -1427,6 +1430,7 @@ fn validate_zone_air_state_result(
     raw: RawZoneAirStateExtraction,
     active: &ActiveProjectContext,
     zone_number: i64,
+    expected_run_id: Option<&str>,
 ) -> Result<ZoneAirStateResultView, ReaderDiagnostic> {
     let selected = active
         .zones
@@ -1462,6 +1466,13 @@ fn validate_zone_air_state_result(
         && raw.parsed_result.day_type_source == "not_available_in_simread_nfr_v1"
         && raw.parsed_result.time_contract == "elapsed_seconds_from_first_sample"
         && raw.first_sample == raw.parsed_result.samples[0];
+    if expected_run_id.is_some_and(|run_id| raw.run_id != run_id) {
+        return Err(host_diagnostic(
+            "active_run_result_mismatch",
+            "The extracted result did not match the active run.",
+            BTreeMap::new(),
+        ));
+    }
     if !valid || raw.sample_count > 100_000 {
         return Err(host_diagnostic(
             "python_response_result_invalid",
@@ -1510,6 +1521,110 @@ fn validate_zone_air_state_result(
         day_type_source: raw.parsed_result.day_type_source,
         time_contract: raw.parsed_result.time_contract,
     })
+}
+
+fn validate_active_run_context(
+    active_run: &ActiveRunContext,
+    active: &ActiveProjectContext,
+    run_root: &Path,
+) -> Result<PathBuf, ReaderDiagnostic> {
+    if active_run.project_session_id != active.project_session_id
+        || active_run.source_sha256 != active.source_sha256
+    {
+        return Err(host_diagnostic(
+            "active_run_project_mismatch",
+            "The active run does not belong to the current project.",
+            BTreeMap::new(),
+        ));
+    }
+    if !active_run.succeeded || !run_id_is_valid(&active_run.run_id) {
+        return Err(host_diagnostic(
+            "active_run_invalid",
+            "The active run context is invalid.",
+            BTreeMap::new(),
+        ));
+    }
+    let root = std::fs::canonicalize(run_root).map_err(|_| {
+        host_diagnostic(
+            "active_run_invalid",
+            "The controlled run root is unavailable.",
+            BTreeMap::new(),
+        )
+    })?;
+    let expected_manifest = root
+        .join(&active_run.run_id)
+        .join("evidence")
+        .join("manifest.json");
+    let manifest = std::fs::canonicalize(&active_run.manifest_path).map_err(|_| {
+        host_diagnostic(
+            "active_run_invalid",
+            "The active run manifest is unavailable.",
+            BTreeMap::new(),
+        )
+    })?;
+    if !manifest.is_file() || manifest != expected_manifest {
+        return Err(host_diagnostic(
+            "active_run_invalid",
+            "The active run manifest escaped the controlled workspace.",
+            BTreeMap::new(),
+        ));
+    }
+    Ok(manifest)
+}
+
+async fn extract_zone_air_state_with_manifest(
+    app: &AppHandle,
+    request_id: &str,
+    active: &ActiveProjectContext,
+    zone_number: i64,
+    manifest_path: PathBuf,
+    expected_run_id: Option<&str>,
+) -> Result<ZoneAirStateResultView, ReaderDiagnostic> {
+    let result_root = app
+        .path()
+        .app_local_data_dir()
+        .map(|path| path.join("result-extractions"))
+        .map_err(|_| {
+            host_diagnostic(
+                "result_root_invalid",
+                "The application result workspace is unavailable.",
+                BTreeMap::new(),
+            )
+        })?;
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": EXTRACT_ZONE_AIR_STATE_OPERATION,
+        "manifest_path": manifest_path,
+        "source_path": active.source_path,
+        "source_sha256": active.source_sha256,
+        "result_root": result_root,
+        "zone_number": zone_number,
+    });
+    let bridge_id = request_id.to_owned();
+    let raw = tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, EXTRACT_TIMEOUT)
+    })
+    .await
+    .map_err(|_| {
+        host_diagnostic(
+            "bridge_task_failed",
+            "The Zone result task ended unexpectedly.",
+            BTreeMap::new(),
+        )
+    })??;
+    if !raw.ok {
+        return Err(sanitize_python_error(&raw).unwrap_or_else(|error| error));
+    }
+    let extraction: RawZoneAirStateExtraction =
+        serde_json::from_value(raw.result.expect("validated result")).map_err(|_| {
+            host_diagnostic(
+                "python_response_result_invalid",
+                "Python Zone air-state result was invalid.",
+                BTreeMap::new(),
+            )
+        })?;
+    validate_zone_air_state_result(extraction, active, zone_number, expected_run_id)
 }
 
 #[tauri::command]
@@ -1764,69 +1879,16 @@ pub async fn select_and_extract_zone_air_state(
             ),
         );
     }
-    let result_root = match app.path().app_local_data_dir() {
-        Ok(path) => path.join("result-extractions"),
-        Err(_) => {
-            return result_failure(
-                &request_id,
-                host_diagnostic(
-                    "result_root_invalid",
-                    "The application result workspace is unavailable.",
-                    BTreeMap::new(),
-                ),
-            )
-        }
-    };
-    let request = json!({
-        "protocol_version": PROTOCOL_VERSION,
-        "request_id": request_id,
-        "operation": EXTRACT_ZONE_AIR_STATE_OPERATION,
-        "manifest_path": manifest_path,
-        "source_path": active.source_path,
-        "source_sha256": active.source_sha256,
-        "result_root": result_root,
-        "zone_number": zone_number,
-    });
-    let bridge_id = request_id.clone();
-    let raw = match tauri::async_runtime::spawn_blocking(move || {
-        execute_bridge_request(&request, &bridge_id, EXTRACT_TIMEOUT)
-    })
+    match extract_zone_air_state_with_manifest(
+        &app,
+        &request_id,
+        &active,
+        zone_number,
+        manifest_path,
+        None,
+    )
     .await
     {
-        Ok(Ok(envelope)) => envelope,
-        Ok(Err(error)) => return result_failure(&request_id, error),
-        Err(_) => {
-            return result_failure(
-                &request_id,
-                host_diagnostic(
-                    "bridge_task_failed",
-                    "The Zone result task ended unexpectedly.",
-                    BTreeMap::new(),
-                ),
-            )
-        }
-    };
-    if !raw.ok {
-        return result_failure(
-            &request_id,
-            sanitize_python_error(&raw).unwrap_or_else(|error| error),
-        );
-    }
-    let extraction: RawZoneAirStateExtraction =
-        match serde_json::from_value(raw.result.expect("validated result")) {
-            Ok(value) => value,
-            Err(_) => {
-                return result_failure(
-                    &request_id,
-                    host_diagnostic(
-                        "python_response_result_invalid",
-                        "Python Zone air-state result was invalid.",
-                        BTreeMap::new(),
-                    ),
-                )
-            }
-        };
-    match validate_zone_air_state_result(extraction, &active, zone_number) {
         Ok(result) => DesktopZoneAirStateResponse {
             request_id,
             cancelled: false,
@@ -1835,6 +1897,146 @@ pub async fn select_and_extract_zone_air_state(
             error: None,
         },
         Err(error) => result_failure(&request_id, error),
+    }
+}
+
+#[tauri::command]
+pub async fn extract_active_run_zone_air_state(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    zone_number: i64,
+) -> DesktopZoneAirStateResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || zone_number <= 0
+    {
+        return result_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "Active run result request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return result_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let (active, active_run) = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_missing",
+                    "No active project session exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_mismatch",
+                    "Project session did not match.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if !active
+            .zones
+            .iter()
+            .any(|zone| zone.contam_number == zone_number)
+        {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "result_zone_mismatch",
+                    "The selected Zone is not part of the active project.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        let Some(active_run) = state.active_run.clone() else {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "active_run_missing",
+                    "No successful active run is available.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        (active, active_run)
+    };
+    let run_root = match app.path().app_local_data_dir() {
+        Ok(path) => path.join("runs"),
+        Err(_) => {
+            return result_failure(
+                &request_id,
+                host_diagnostic(
+                    "active_run_invalid",
+                    "The controlled run root is unavailable.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let manifest_path = match validate_active_run_context(&active_run, &active, &run_root) {
+        Ok(path) => path,
+        Err(error) => return result_failure(&request_id, error),
+    };
+    let result = match extract_zone_air_state_with_manifest(
+        &app,
+        &request_id,
+        &active,
+        zone_number,
+        manifest_path.clone(),
+        Some(&active_run.run_id),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(error) => return result_failure(&request_id, error),
+    };
+    let state = store.state.lock().expect("desktop session mutex poisoned");
+    let project_still_current = state.active_project.as_ref().is_some_and(|project| {
+        project.project_session_id == active.project_session_id
+            && project.source_sha256 == active.source_sha256
+    });
+    let run_still_current = state.active_run.as_ref().is_some_and(|run| {
+        run.succeeded
+            && run.project_session_id == active.project_session_id
+            && run.source_sha256 == active.source_sha256
+            && run.run_id == active_run.run_id
+            && run.manifest_path == manifest_path
+    });
+    if !project_still_current || !run_still_current || result.run_id != active_run.run_id {
+        return result_failure(
+            &request_id,
+            host_diagnostic(
+                "active_run_result_mismatch",
+                "The active run changed during result extraction.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    DesktopZoneAirStateResponse {
+        request_id,
+        cancelled: false,
+        project_session_id: Some(active.project_session_id),
+        result: Some(result),
+        error: None,
     }
 }
 
@@ -2828,6 +3030,139 @@ mod tests {
     }
 
     #[test]
+    fn active_run_context_is_bound_to_the_app_local_run_manifest() {
+        let root =
+            std::env::temp_dir().join(format!("contam-active-run-context-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let manifest = root
+            .join("20260718T120000Z-abcdef12")
+            .join("evidence")
+            .join("manifest.json");
+        fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        fs::write(&manifest, b"{}").unwrap();
+        let root = fs::canonicalize(root).unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "session-active-run".into(),
+            source_path: primary_fixture(),
+            source_sha256: "a".repeat(64),
+            source_size_bytes: 1,
+            reader_mode: READER_MODE.into(),
+            header_version: "3.4.0.4".into(),
+            zones: vec![],
+        };
+        let context = ActiveRunContext {
+            project_session_id: active.project_session_id.clone(),
+            source_sha256: active.source_sha256.clone(),
+            run_id: "20260718T120000Z-abcdef12".into(),
+            manifest_path: manifest,
+            succeeded: true,
+        };
+        assert_eq!(
+            validate_active_run_context(&context, &active, &root).unwrap(),
+            fs::canonicalize(&context.manifest_path).unwrap()
+        );
+
+        let mut project_mismatch = context.clone();
+        project_mismatch.source_sha256 = "b".repeat(64);
+        assert_eq!(
+            validate_active_run_context(&project_mismatch, &active, &root)
+                .unwrap_err()
+                .code,
+            "active_run_project_mismatch"
+        );
+
+        let mut invalid_id = context.clone();
+        invalid_id.run_id = "../escape".into();
+        assert_eq!(
+            validate_active_run_context(&invalid_id, &active, &root)
+                .unwrap_err()
+                .code,
+            "active_run_invalid"
+        );
+
+        let mut missing = context.clone();
+        missing.manifest_path = root
+            .join("20260718T120000Z-missing12")
+            .join("evidence")
+            .join("manifest.json");
+        missing.run_id = "20260718T120000Z-missing12".into();
+        assert_eq!(
+            validate_active_run_context(&missing, &active, &root)
+                .unwrap_err()
+                .code,
+            "active_run_invalid"
+        );
+
+        let outside = root
+            .parent()
+            .unwrap()
+            .join(format!("outside-manifest-{}.json", std::process::id()));
+        fs::write(&outside, b"{}").unwrap();
+        let mut escaped = context.clone();
+        escaped.manifest_path = outside.clone();
+        assert_eq!(
+            validate_active_run_context(&escaped, &active, &root)
+                .unwrap_err()
+                .code,
+            "active_run_invalid"
+        );
+
+        fs::remove_file(outside).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn active_run_result_must_match_the_expected_run() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-active-result").result.unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "session-active-result".into(),
+            source_path: fixture,
+            source_sha256: project.source_sha256,
+            source_size_bytes: project.source_size_bytes,
+            reader_mode: project.reader_mode,
+            header_version: project.header_version,
+            zones: project.zones,
+        };
+        assert_eq!(
+            validate_zone_air_state_result(
+                raw_air_state_result(),
+                &active,
+                1,
+                Some("different-run")
+            )
+            .unwrap_err()
+            .code,
+            "active_run_result_mismatch"
+        );
+    }
+
+    #[test]
+    fn active_run_extraction_has_no_dialog_and_reuses_the_trusted_bridge() {
+        let source = include_str!("zone_bridge.rs");
+        let active_start = source
+            .find("pub async fn extract_active_run_zone_air_state")
+            .unwrap();
+        let active_end = source[active_start..]
+            .find("pub async fn run_active_contam_project")
+            .map(|offset| active_start + offset)
+            .unwrap();
+        let active_command = &source[active_start..active_end];
+        assert!(!active_command.contains(".dialog()"));
+        assert!(active_command.contains("validate_active_run_context"));
+        assert!(active_command.contains("extract_zone_air_state_with_manifest"));
+
+        let manual_start = source
+            .find("pub async fn select_and_extract_zone_air_state")
+            .unwrap();
+        let manual_end = source[manual_start..]
+            .find("pub async fn extract_active_run_zone_air_state")
+            .map(|offset| manual_start + offset)
+            .unwrap();
+        assert!(source[manual_start..manual_end].contains(".dialog()"));
+    }
+
+    #[test]
     fn zone_air_state_contract_rejects_untrusted_samples_and_paths_are_not_serialized() {
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "read-results").result.unwrap();
@@ -2840,7 +3175,8 @@ mod tests {
             header_version: project.header_version,
             zones: project.zones,
         };
-        let view = validate_zone_air_state_result(raw_air_state_result(), &active, 1).unwrap();
+        let view =
+            validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
         let serialized = serde_json::to_string(&view).unwrap();
         assert_eq!(view.sample_count, 1);
         assert!(!serialized.contains("source_path"));
@@ -2885,7 +3221,7 @@ mod tests {
             },
         ] {
             assert_eq!(
-                validate_zone_air_state_result(invalid, &active, 1)
+                validate_zone_air_state_result(invalid, &active, 1, None)
                     .unwrap_err()
                     .code,
                 "python_response_result_invalid"
@@ -2900,7 +3236,7 @@ mod tests {
         decreasing_time.parsed_result.sample_count = 2;
         decreasing_time.parsed_result.samples.push(second);
         assert_eq!(
-            validate_zone_air_state_result(decreasing_time, &active, 1)
+            validate_zone_air_state_result(decreasing_time, &active, 1, None)
                 .unwrap_err()
                 .code,
             "python_response_result_invalid"
@@ -2909,7 +3245,7 @@ mod tests {
         let mut non_finite = raw_air_state_result();
         non_finite.parsed_result.samples[0].temperature_k = f64::INFINITY;
         assert_eq!(
-            validate_zone_air_state_result(non_finite, &active, 1)
+            validate_zone_air_state_result(non_finite, &active, 1, None)
                 .unwrap_err()
                 .code,
             "python_response_result_invalid"
@@ -2918,7 +3254,7 @@ mod tests {
         let mut count_mismatch = raw_air_state_result();
         count_mismatch.sample_count = 2;
         assert_eq!(
-            validate_zone_air_state_result(count_mismatch, &active, 1)
+            validate_zone_air_state_result(count_mismatch, &active, 1, None)
                 .unwrap_err()
                 .code,
             "python_response_result_invalid"
@@ -2946,11 +3282,12 @@ mod tests {
             "plan_zone_volume_patch",
             "apply_zone_volume_patch_to_copy",
             "select_and_extract_zone_air_state",
+            "extract_active_run_zone_air_state",
             "run_active_contam_project",
         ] {
             assert!(build_script.contains(command));
         }
-        assert_eq!(capability["permissions"].as_array().unwrap().len(), 6);
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 7);
         let forbidden = [
             "sourcePath",
             "outputPath",
@@ -2961,6 +3298,7 @@ mod tests {
             assert!(!desktop_api.contains(value), "found {value}");
         }
         assert!(desktop_api.contains("runActiveContamProject"));
+        assert!(desktop_api.contains("extractActiveRunZoneAirState"));
         assert!(desktop_api.contains("requestId"));
         assert!(desktop_api.contains("projectSessionId"));
         assert!(!package_json.contains("@tauri-apps/plugin-dialog"));
