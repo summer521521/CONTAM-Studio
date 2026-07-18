@@ -4,12 +4,14 @@ import hashlib
 import io
 import json
 import subprocess
+import shutil
 from pathlib import Path
 
 import pytest
 
 from contam_studio_core import simread_runner
 from contam_studio_core.simread_models import SimReadToolInfo
+from contam_studio_core.zone_air_state_results import ZoneResultError
 
 
 def test_simread_requires_explicit_or_environment_path(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -76,6 +78,8 @@ def _valid_manifest(tmp_path: Path) -> tuple[Path, dict]:
             {
                 "relative_path": "workspace/model.prj",
                 "source_path": str(source),
+                "source_sha256": sha(source),
+                "source_size_bytes": source.stat().st_size,
                 "snapshot_sha256": sha(prj),
                 "snapshot_size_bytes": prj.stat().st_size,
                 "source_unchanged": True,
@@ -317,3 +321,535 @@ def test_direct_sim_cli_is_not_a_trusted_entry(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert json.loads(captured.err)["code"] == "result_manifest_not_found"
+
+
+def _orchestration_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    source_dir = tmp_path / "source"
+    run_dir = tmp_path / "run"
+    (run_dir / "workspace").mkdir(parents=True)
+    (run_dir / "evidence").mkdir()
+    source = source_dir / "model.prj"
+    source_dir.mkdir()
+    shutil.copy2(
+        Path(__file__).parents[2]
+        / "fixtures"
+        / "contam"
+        / "official-contamxpy"
+        / "test_GetPrjInfo.prj",
+        source,
+    )
+    prj = run_dir / "workspace" / "model.prj"
+    sim = run_dir / "workspace" / "model.sim"
+    shutil.copy2(source, prj)
+    sim.write_bytes(b"sim-result")
+
+    def sha(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    source_sha = sha(source)
+    payload = {
+        "schema_version": "1.0",
+        "run_id": "orchestration-run",
+        "status": "succeeded",
+        "execution_mode": "isolated_contamx_process",
+        "timed_out": False,
+        "exit_code": 0,
+        "source": {
+            "path": str(source),
+            "sha256": source_sha,
+            "size_bytes": source.stat().st_size,
+            "unchanged": True,
+        },
+        "input_snapshots": [
+            {
+                "relative_path": "workspace/model.prj",
+                "source_path": str(source),
+                "source_sha256": source_sha,
+                "source_size_bytes": source.stat().st_size,
+                "snapshot_sha256": sha(prj),
+                "snapshot_size_bytes": prj.stat().st_size,
+                "classification": "input_snapshot",
+                "source_unchanged": True,
+            }
+        ],
+        "artifacts": [
+            {
+                "relative_path": "workspace/model.sim",
+                "sha256": sha(sim),
+                "size_bytes": sim.stat().st_size,
+                "classification": "simulation_result",
+            }
+        ],
+        "solver": {
+            "name": "contamx3.exe",
+            "version": "3.4.0.3",
+            "architecture": "windows-x64",
+            "size_bytes": 1605120,
+            "sha256": "3b9a5ee9a6a3ea3cdc569df607f4ec2a1ad4e74e53fef8fbec0b7e540a5d3aad",
+            "provenance": "NIST contam-x-3.4.0.3-win64.zip",
+        },
+        "diagnostics": [],
+    }
+    manifest = run_dir / "evidence" / "manifest.json"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    return manifest, source, prj, sim
+
+
+class _FakeStdin:
+    def __init__(self, owner):
+        self.owner = owner
+
+    def write(self, data):
+        self.owner.stdin_bytes += data
+        return len(data)
+
+    def flush(self):
+        return None
+
+    def close(self):
+        return None
+
+
+class _FakeSimReadProcess:
+    def __init__(self, stdout=b"simread stdout", stderr=b"simread stderr"):
+        self.stdout = io.BytesIO(stdout)
+        self.stderr = io.BytesIO(stderr)
+        self.stdin_bytes = b""
+        self.stdin = _FakeStdin(self)
+
+    def wait(self, timeout=None):
+        return 0
+
+    def terminate(self):
+        return None
+
+    def kill(self):
+        return None
+
+
+def _patch_fake_simread(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, calls: list) -> Path:
+    tool_path = tmp_path / "tools" / "simread.exe"
+    tool_path.parent.mkdir()
+    tool_path.write_bytes(b"fake-simread")
+    tool = SimReadToolInfo(
+        str(tool_path),
+        "simread.exe",
+        "3.4.0.3",
+        "a" * 64,
+        tool_path.stat().st_size,
+        "windows-x64",
+        "NIST test double",
+        simread_runner.SIMREAD_INVOCATION_CONTRACT,
+    )
+    monkeypatch.setattr(simread_runner, "probe_simread", lambda _path: tool)
+    monkeypatch.setattr(simread_runner, "_recheck_simread_identity", lambda _tool: None)
+
+    def popen(args, **kwargs):
+        calls.append((args, kwargs))
+        workspace = Path(kwargs["cwd"])
+        (workspace / "model.nfr").write_text(
+            "Date\tTime\tNode\tT (C)\tP (Pa)\tD (kg/m3)\n"
+            "1/1\t00:00:00\t1\t20.000\t-1.4222e+00\t1.2041\n",
+            encoding="ascii",
+            newline="\n",
+        )
+        (workspace / "model.xrf").write_bytes(b"xrf")
+        process = _FakeSimReadProcess()
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    return tool_path
+
+
+def test_extract_orchestration_success_has_bound_inputs_and_schema(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    monkeypatch.setenv("CONTAM_STUDIO_TEST", "must-not-propagate")
+    result = simread_runner.extract_zone_air_state(
+        manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+    )
+    assert result["sample_count"] == 1
+    process = calls[-1]
+    args, kwargs = calls[0]
+    assert args == [str(tool_path), "model.sim"]
+    assert kwargs["shell"] is False
+    assert Path(kwargs["cwd"]).name == "workspace"
+    assert "CONTAM_STUDIO_TEST" not in kwargs["env"]
+    assert process.stdin_bytes == b"\n\nn\ny\n1\nn\n"
+    payload = json.loads(Path(result["result_manifest_path"]).read_text(encoding="utf-8"))
+    assert isinstance(payload["run_manifest"], dict)
+    assert payload["run_manifest"]["sha256"] == payload["source_run"]["run_manifest_sha256"]
+    assert payload["source_run"]["solver"]["name"] == "contamx3.exe"
+    assert payload["input_artifacts"][0]["classification"] == "input_snapshot"
+    assert all(item["classification"] != "input_snapshot" for item in payload["generated_outputs"])
+    assert payload["process"]["stream_capture_complete"] is True
+
+
+def test_zone_missing_writes_manifest_without_starting_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=99
+        )
+    assert error.value.diagnostic.code == "zone_result_not_found"
+    assert not any(isinstance(item, _FakeSimReadProcess) for item in calls)
+    result_manifests = list((tmp_path / "results").rglob("result-manifest.json"))
+    assert len(result_manifests) == 1
+    payload = json.loads(result_manifests[0].read_text(encoding="utf-8"))
+    assert payload["process"]["process_started"] is False
+    assert payload["generated_outputs"] == []
+
+
+def test_parse_failure_preserves_process_and_generated_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    monkeypatch.setattr(
+        simread_runner,
+        "parse_zone_air_state",
+        lambda *_args: (_ for _ in ()).throw(
+            ZoneResultError(simread_runner.ResultDiagnostic("zone_result_contract_invalid", "bad"))
+        ),
+    )
+    with pytest.raises(ZoneResultError):
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    result_manifests = list((tmp_path / "results").rglob("result-manifest.json"))
+    assert len(result_manifests) == 1
+    payload = json.loads(result_manifests[0].read_text(encoding="utf-8"))
+    assert payload["process"]["process_started"] is True
+    assert payload["exit_code"] == 0
+    assert payload["parsed_result"] is None
+    assert {item["suffix"] for item in payload["generated_outputs"]} == {".nfr", ".xrf"}
+    assert payload["stdout"]["size_bytes"] > 0
+    assert payload["stderr"]["size_bytes"] > 0
+    assert payload["stdout"]["capture_complete"] is True
+
+
+def test_phase4_snapshot_fields_and_diagnostics_are_required(tmp_path: Path) -> None:
+    path, payload = _valid_manifest(tmp_path)
+    del payload["input_snapshots"][0]["source_sha256"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner._validate_phase4_manifest(path)
+    assert error.value.diagnostic.code == "result_manifest_invalid"
+
+    path, payload = _valid_manifest(tmp_path / "second")
+    payload["diagnostics"] = [{"code": "unexpected", "message": "x"}]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner._validate_phase4_manifest(path)
+    assert error.value.diagnostic.code == "result_run_evidence_invalid"
+
+    path, payload = _valid_manifest(tmp_path / "third")
+    del payload["input_snapshots"][0]["source_size_bytes"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner._validate_phase4_manifest(path)
+    assert error.value.diagnostic.code == "result_manifest_invalid"
+
+
+@pytest.mark.parametrize("field", ["source_sha256", "snapshot_sha256"])
+def test_phase4_source_and_snapshot_hashes_must_match(tmp_path: Path, field: str) -> None:
+    path, payload = _valid_manifest(tmp_path)
+    payload["input_snapshots"][0][field] = "0" * 64
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner._validate_phase4_manifest(path)
+    assert error.value.diagnostic.code == "result_prj_snapshot_mismatch"
+
+
+def test_phase4_top_source_and_snapshot_sizes_must_match(tmp_path: Path) -> None:
+    path, payload = _valid_manifest(tmp_path)
+    payload["source"]["size_bytes"] += 1
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner._validate_phase4_manifest(path)
+    assert error.value.diagnostic.code == "result_run_evidence_invalid"
+
+    path, payload = _valid_manifest(tmp_path / "mismatch")
+    payload["input_snapshots"][0]["snapshot_size_bytes"] += 1
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner._validate_phase4_manifest(path)
+    assert error.value.diagnostic.code == "result_prj_snapshot_mismatch"
+
+
+def test_result_root_conflicts_are_rejected_before_creation(tmp_path: Path) -> None:
+    manifest, source, _, _ = _orchestration_fixture(tmp_path)
+    for root in (source.parent, source.parent / "nested"):
+        with pytest.raises(simread_runner.SimReadError) as error:
+            simread_runner.extract_zone_air_state(
+                manifest, simread_path=tmp_path / "missing.exe", result_root=root, zone_number=1
+            )
+        assert error.value.diagnostic.code == "result_root_conflicts_with_source"
+        assert not root.exists() if root != source.parent else True
+
+
+def test_result_root_inside_phase4_run_is_rejected(tmp_path: Path) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    run_dir = manifest.parent.parent
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest,
+            simread_path=tmp_path / "missing.exe",
+            result_root=run_dir / "results",
+            zone_number=1,
+        )
+    assert error.value.diagnostic.code == "result_root_conflicts_with_source"
+    assert not (run_dir / "results").exists()
+
+
+def test_workspace_sim_change_after_probe_blocks_popen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    original = simread_runner._recheck_workspace_inputs
+    count = 0
+
+    def mutate_on_second(*args):
+        nonlocal count
+        count += 1
+        if count == 2:
+            Path(args[3]).write_bytes(b"changed")
+        return original(*args)
+
+    monkeypatch.setattr(simread_runner, "_recheck_workspace_inputs", mutate_on_second)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "result_snapshot_mismatch"
+    assert not any(isinstance(item, _FakeSimReadProcess) for item in calls)
+
+
+def test_simread_replacement_after_probe_blocks_formal_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    def replace_before_formal(_tool):
+        tool_path.write_bytes(b"replaced")
+        raise simread_runner.SimReadError(
+            simread_runner.ResultDiagnostic("simread_unsupported", "identity changed")
+        )
+
+    monkeypatch.setattr(simread_runner, "_recheck_simread_identity", replace_before_formal)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_unsupported"
+    assert not any(isinstance(item, _FakeSimReadProcess) for item in calls)
+
+
+def test_workspace_input_change_after_process_is_recorded_as_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    original_capture = simread_runner._capture_process_outcome
+
+    def capture_then_mutate(process, *, timeout, evidence, stdin_write_complete=True):
+        outcome = original_capture(
+            process,
+            timeout=timeout,
+            evidence=evidence,
+            stdin_write_complete=stdin_write_complete,
+        )
+        Path(evidence.parent / "workspace" / "model.sim").write_bytes(b"changed-after-run")
+        return outcome
+
+    monkeypatch.setattr(simread_runner, "_capture_process_outcome", capture_then_mutate)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "result_snapshot_mismatch"
+    result_manifests = list((tmp_path / "results").rglob("result-manifest.json"))
+    assert len(result_manifests) == 1
+    payload = json.loads(result_manifests[0].read_text(encoding="utf-8"))
+    assert payload["process"]["process_started"] is True
+    assert payload["stdout"]["capture_complete"] is True
+
+
+def test_simread_identity_change_after_process_is_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    count = 0
+
+    def check_identity(_tool):
+        nonlocal count
+        count += 1
+        if count == 2:
+            raise simread_runner.SimReadError(
+                simread_runner.ResultDiagnostic("simread_unsupported", "identity changed")
+            )
+
+    monkeypatch.setattr(simread_runner, "_recheck_simread_identity", check_identity)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_unsupported"
+    payload = json.loads(
+        next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8")
+    )
+    assert payload["process"]["process_started"] is True
+    assert payload["generated_outputs"]
+
+
+def test_stdin_failure_keeps_real_process_stream_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class FailingStdin(_FakeStdin):
+        def write(self, data):
+            raise OSError("stdin closed")
+
+    def popen(args, **kwargs):
+        process = _FakeSimReadProcess(b"real stdout", b"real stderr")
+        process.stdin = FailingStdin(process)
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_stdin_failed"
+    result_manifests = list((tmp_path / "results").rglob("result-manifest.json"))
+    payload = json.loads(result_manifests[0].read_text(encoding="utf-8"))
+    assert payload["process"]["process_started"] is True
+    assert payload["process"]["stdin_write_complete"] is False
+    assert payload["stdout"]["size_bytes"] == len(b"real stdout")
+    assert payload["stderr"]["size_bytes"] == len(b"real stderr")
+
+
+def test_timeout_records_termination_and_stream_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class TimeoutProcess(_FakeSimReadProcess):
+        def __init__(self):
+            super().__init__(b"timeout stdout", b"timeout stderr")
+            self.wait_calls = 0
+
+        def wait(self, timeout=None):
+            self.wait_calls += 1
+            if self.wait_calls == 1:
+                raise subprocess.TimeoutExpired("simread", timeout)
+            return -15
+
+    def popen(args, **kwargs):
+        process = TimeoutProcess()
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_process_timeout"
+    payload = json.loads(
+        next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8")
+    )
+    assert payload["timed_out"] is True
+    assert payload["process"]["termination_attempted"] is True
+    assert payload["stdout"]["size_bytes"] == len(b"timeout stdout")
+
+
+def test_stream_failure_cannot_produce_success_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class BrokenStream:
+        def read(self, _size):
+            raise OSError("pipe failed")
+
+    def popen(args, **kwargs):
+        process = _FakeSimReadProcess()
+        process.stdout = BrokenStream()
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_stream_capture_failed"
+    payload = json.loads(
+        next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8")
+    )
+    assert payload["status"] == "failed"
+    assert payload["parsed_result"] is None
+    assert payload["stdout"]["capture_complete"] is False
+
+
+def test_result_model_matches_written_schema() -> None:
+    from contam_studio_core.simread_models import ResultExtractionManifest, RunManifestEvidence
+
+    model = ResultExtractionManifest(
+        "1.0",
+        "x",
+        "failed",
+        "isolated_simread_conversion",
+        "start",
+        "end",
+        1,
+        {"solver": {"name": "contamx3.exe"}},
+        RunManifestEvidence("evidence/manifest.json", "a" * 64, True),
+        (),
+        None,
+        {"executable": "simread.exe", "arguments": []},
+        {
+            "process_started": False,
+            "stdin_write_complete": False,
+            "termination_attempted": False,
+            "termination_succeeded": None,
+            "stream_capture_complete": True,
+            "diagnostic_code": "x",
+        },
+        "workspace",
+        None,
+        False,
+        {},
+        {},
+        (),
+        "zone_air_state",
+        1,
+        None,
+        (),
+    ).to_dict()
+    assert isinstance(model["run_manifest"], dict)
+    assert "process" in model and "exit_code" in model and "timed_out" in model

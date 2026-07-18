@@ -97,6 +97,16 @@ class ZoneAirStateSeries:
 
 
 @dataclass(frozen=True, slots=True)
+class RunManifestEvidence:
+    path: str
+    sha256: str
+    unchanged: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"path": self.path, "sha256": self.sha256, "unchanged": self.unchanged}
+
+
+@dataclass(frozen=True, slots=True)
 class ResultExtractionManifest:
     schema_version: str
     extraction_id: str
@@ -106,11 +116,14 @@ class ResultExtractionManifest:
     ended_at_utc: str
     duration_ms: int
     source_run: dict[str, Any]
-    run_manifest: dict[str, Any]
+    run_manifest: RunManifestEvidence
     input_artifacts: tuple[dict[str, Any], ...]
-    simread: dict[str, Any]
+    simread: dict[str, Any] | None
     command: dict[str, Any]
+    process: dict[str, Any]
     working_directory: str
+    exit_code: int | None
+    timed_out: bool
     stdout: dict[str, Any]
     stderr: dict[str, Any]
     generated_outputs: tuple[dict[str, Any], ...]
@@ -129,11 +142,14 @@ class ResultExtractionManifest:
             "ended_at_utc": self.ended_at_utc,
             "duration_ms": self.duration_ms,
             "source_run": self.source_run,
-            "run_manifest": self.run_manifest,
+            "run_manifest": self.run_manifest.to_dict(),
             "input_artifacts": list(self.input_artifacts),
             "simread": self.simread,
             "command": self.command,
+            "process": self.process,
             "working_directory": self.working_directory,
+            "exit_code": self.exit_code,
+            "timed_out": self.timed_out,
             "stdout": self.stdout,
             "stderr": self.stderr,
             "generated_outputs": list(self.generated_outputs),

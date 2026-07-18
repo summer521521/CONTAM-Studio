@@ -6,13 +6,13 @@ SimRead使用NIST官方`simread.exe` 3.4.0.3。调用采用参数数组、`shell
 
 首个结果类型为`zone_air_state`，严格表头为`Date`, `Time`, `Node`, `T (C)`, `P (Pa)`, `D (kg/m3)`。温度按确定性公式`K=C+273.15`转换，压力和密度直接读取；日期和时间转换为年内日和从首个样本起算的累计秒数。官方`.nfr`不提供CONTAM真实日类型，因此`day_type`固定为`null`，并以`day_type_source=not_available_in_simread_nfr_v1`说明，不推断工作日、周末或schedule day type。NaN、Infinity、非ASCII、缺列、重复时间和错误Zone均整体拒绝。
 
-每次提取创建新的`extraction_id`、workspace和evidence，成功与失败均写`result-manifest.json`。原始SIM、PRJ和Phase 4 manifest保持不变。当前不提供GUI、曲线、导出、其他结果类型或直接SIM二进制解析。
+每次提取创建新的`extraction_id`、workspace和evidence。工作区创建后，无论SimRead进程失败还是严格解析失败，都通过同一result-manifest结构保留命令、进程状态、stdout/stderr和已生成物证据；工作区创建前的manifest、路径和配置拒绝不会伪造提取清单。原始SIM、PRJ和Phase 4 manifest保持不变。当前不提供GUI、曲线、导出、其他结果类型或直接SIM二进制解析。
 # Phase 5A加固边界
 
 Phase 4运行清单由同一份完整bytes读取、UTF-8解码、JSON解析并计算SHA-256。提取开始、复制后、SimRead启动前、SimRead完成后和写入结果清单前都会复核manifest、PRJ和SIM证据；任何变化整体失败。
 
 Phase 4求解器身份必须完整匹配`contamx3.exe`、3.4.0.3、Windows x64、1605120字节和已验证SHA-256，且来源必须为NIST官方包。PRJ和SIM是提取输入快照，不是SimRead生成物；`generated_outputs`只记录`.nfr`、`.xrf`等实际生成文件。
 
-工作区创建后，成功和失败使用同等级result-manifest，记录命令语义、进程是否启动、退出码、超时、stdout/stderr捕获状态和生成物哈希。不存在的Zone在启动SimRead前拒绝。SimRead解析失败仍保留已生成文本与流证据。
+工作区创建后，成功和失败使用同一`ResultExtractionManifest`模型，记录命令语义、进程是否启动、stdin写入、退出码、超时、终止状态、stdout/stderr捕获状态和生成物哈希。不存在的Zone在启动SimRead前拒绝，并写入`process_started=false`的失败清单；SimRead解析失败仍保留已生成文本与流证据。工作区创建前的拒绝没有可审计工作区，因此不写result-manifest。
 
 公开CLI只有`probe-simread`和以Phase 4 manifest为第一个参数的`extract`，不接受直接NFR或SIM。`day_type`在当前模型中返回`null`，并以`day_type_source=not_available_in_simread_nfr_v1`说明官方NFR未提供CONTAM日类型；不推断工作日、周末或schedule day type。`sim_time_seconds`是从首个样本起算的累计秒数。

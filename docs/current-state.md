@@ -156,7 +156,8 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 当前没有GUI结果页、曲线、导出、路径流量、污染物浓度或直接SIM二进制解析。
 ## Phase 5A加固状态
 
-- Phase 4 manifest现在以单次bytes快照严格验证，完整绑定官方ContamX身份、PRJ/SIM哈希和运行目录。
-- 提取阶段在多个时点复核manifest及PRJ/SIM；工作区创建后成功和失败均保留result-manifest、流证据和SimRead生成物。
+- Phase 4 manifest现在以单次bytes快照严格验证，完整绑定官方ContamX身份、PRJ/SIM哈希和运行目录；主PRJ的source与snapshot字段必须逐项一致，成功清单diagnostics必须为空。
+- 提取阶段在多个时点复核Phase 4证据、工作区PRJ/SIM和SimRead二进制身份；工作区创建后成功和失败均通过同一result-manifest模型保留进程、流证据和SimRead生成物。工作区创建前的拒绝不写伪造清单。
 - Zone在启动SimRead前预验证；公开CLI不接受直接NFR或SIM。
 - `day_type`返回null并标注不可用来源；累计时间从首个样本起算。当前仍只支持`zone_air_state`，无GUI和其他结果类型。
+- 当前Phase 5A Python测试共247项通过，新增编排级TOCTOU、进程失败和清单Schema验证；真实Zone 1仍为577个样本。
