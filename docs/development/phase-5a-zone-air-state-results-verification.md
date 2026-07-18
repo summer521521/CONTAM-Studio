@@ -27,12 +27,12 @@
 - `simread.exe`和Phase 4 `contamx3.exe`均使用完整名称、版本、PE架构、大小和SHA-256绑定；manifest哈希在提取前后保持一致。
 - 真实失败A：Zone 99在SimRead启动前返回`zone_result_not_found`，失败manifest记录`process_started=false`，没有NFR/XRF。
 - 受控失败B：让严格解析器拒绝真实SimRead生成的NFR；失败manifest记录`process_started=true`、退出码、stdout/stderr和NFR/XRF哈希，Phase 4证据未改变。
-- 自动测试共253项通过；新增直接编排`extract_zone_air_state()`的Phase 4快照字段、源/快照交叉绑定、结果工作区路径、Zone预验证、SimRead替换检测、工作区输入TOCTOU、解析失败证据、stdin失败、wait异常后的terminate/kill收口、终止确认、流线程完成状态、最终证据和结果清单Schema测试。
+- 自动测试共255项通过；新增直接编排`extract_zone_air_state()`的Phase 4快照字段、源/快照交叉绑定、结果工作区路径、Zone预验证、SimRead替换检测、工作区输入TOCTOU、解析失败证据、stdin失败、wait异常后的terminate/kill收口、终止确认、真实阻塞流关闭与二次join、证据冻结、最终证据和结果清单Schema测试。
 - 最新真实成功提取目录为`20260718T055139Z-b89db45f`；最新受控的SimRead运行后解析失败目录为`20260718T054836Z-e10e83de`，后者保留了命令、stdout/stderr证据以及`.nfr`/`.xrf`生成物哈希。
 
 ## 证据链收尾
 
 - Phase 4主PRJ的`source_path`、`source_sha256`、`source_size_bytes`与快照的同名源字段、`snapshot_sha256`、`snapshot_size_bytes`以及运行目录实际PRJ逐项相等；成功Phase 4清单的`diagnostics`必须为空。
 - 提取工作区在复制后、Zone读取和SimRead探测后、正式启动前、进程结束后及写result-manifest前复核PRJ/SIM；SimRead在探测、正式启动前和写清单前复核同一文件身份。result-manifest的`run_manifest`现在是包含`path`、`sha256`和`unchanged`的结构化对象，`source_run.solver`完整记录ContamX身份。
-- 失败清单通过同一模型路径生成，保留真实`process`状态（stdin、退出码、超时、terminate/kill请求、退出确认、流捕获）及实际stdout/stderr元数据。工作区创建前的配置、路径和Phase 4清单拒绝不生成伪造清单；工作区创建后的失败保留审计目录，并在写入前记录各类最终证据状态。
+- 失败清单通过同一模型路径生成，保留真实`process`状态（stdin、退出码、超时、terminate/kill请求、退出确认、管道关闭、流捕获与冻结）及实际stdout/stderr元数据。工作区创建前的配置、路径和Phase 4清单拒绝不生成伪造清单；工作区创建后的失败保留审计目录，并在写入前记录各类最终证据状态。未确认退出的NFR/XRF不写最终哈希和大小，而是标记为非稳定快照。
 - 最新真实成功回归提取目录为`20260718T070716Z-c7f0bbb5`，仍返回577个样本，首样本为day_type=`null`、sim_time_seconds=0、293.15 K、-1.4222 Pa、1.2041 kg/m³；Zone 99回归目录`final-zone99`在SimRead启动前生成失败清单，`process_started=false`且无生成物。

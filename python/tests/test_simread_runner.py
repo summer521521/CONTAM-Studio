@@ -5,6 +5,7 @@ import io
 import json
 import subprocess
 import shutil
+import threading
 from pathlib import Path
 
 import pytest
@@ -487,6 +488,9 @@ def test_extract_orchestration_success_has_bound_inputs_and_schema(
     assert payload["input_artifacts"][0]["classification"] == "input_snapshot"
     assert all(item["classification"] != "input_snapshot" for item in payload["generated_outputs"])
     assert payload["process"]["stream_capture_complete"] is True
+    assert payload["process"]["stream_evidence_frozen"] is True
+    assert payload["process"]["generated_outputs_stable"] is True
+    assert payload["process"]["pipe_close_complete"] is True
 
 
 def test_zone_missing_writes_manifest_without_starting_process(
@@ -816,6 +820,37 @@ def test_stream_failure_cannot_produce_success_manifest(
     assert payload["stdout"]["capture_complete"] is False
 
 
+def test_confirmed_exit_keeps_generated_artifact_hashes_when_stream_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class BrokenStream:
+        def read(self, _size):
+            raise OSError("pipe failed")
+
+    def popen(_args, **kwargs):
+        process = _FakeSimReadProcess()
+        process.stdout = BrokenStream()
+        workspace = Path(kwargs["cwd"])
+        (workspace / "model.nfr").write_bytes(b"stable-output")
+        (workspace / "model.xrf").write_bytes(b"stable-xrf")
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    with pytest.raises(simread_runner.SimReadError):
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    payload = json.loads(next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8"))
+    assert payload["process"]["exit_confirmed"] is True
+    assert payload["process"]["generated_outputs_stable"] is True
+    assert all(item["stable"] is True for item in payload["generated_outputs"])
+
+
 def test_wait_oserror_still_terminates_and_records_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -957,6 +992,82 @@ def test_live_stream_thread_is_not_reported_complete(
     payload = json.loads(next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8"))
     assert payload["process"]["stream_capture_complete"] is False
     assert payload["stdout"]["capture_complete"] is False
+
+
+def test_unconfirmed_process_closes_blocked_streams_and_freezes_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class BlockingStream:
+        def __init__(self):
+            self.started = threading.Event()
+            self.closed = threading.Event()
+            self.done = threading.Event()
+
+        def read(self, _size):
+            self.started.set()
+            self.closed.wait(0.5)
+            self.done.set()
+            return b""
+
+        def close(self):
+            self.closed.set()
+
+    class Process:
+        def __init__(self):
+            self.stdout = BlockingStream()
+            self.stderr = BlockingStream()
+            self.stdin_bytes = b""
+            self.stdin = _FakeStdin(self)
+
+        def wait(self, timeout=None):
+            raise OSError("wait unavailable")
+
+        def terminate(self):
+            raise OSError("terminate unavailable")
+
+        def kill(self):
+            raise OSError("kill unavailable")
+
+    def popen(_args, **_kwargs):
+        process = Process()
+        workspace = Path(_kwargs["cwd"])
+        (workspace / "model.nfr").write_bytes(b"partial")
+        (workspace / "model.xrf").write_bytes(b"partial")
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    monkeypatch.setattr(simread_runner, "STREAM_JOIN_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(simread_runner, "STREAM_CLOSE_JOIN_TIMEOUT_SECONDS", 0.5)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_process_termination_failed"
+    process = calls[-1]
+    assert process.stdout.started.wait(1)
+    assert process.stderr.started.wait(1)
+    assert process.stdout.closed.is_set() and process.stderr.closed.is_set()
+    assert process.stdout.done.wait(1) and process.stderr.done.wait(1)
+    result_manifest = next((tmp_path / "results").rglob("result-manifest.json"))
+    payload = json.loads(result_manifest.read_text(encoding="utf-8"))
+    assert payload["process"]["exit_confirmed"] is False
+    assert payload["process"]["termination_succeeded"] is False
+    assert payload["process"]["stream_evidence_frozen"] is True
+    assert payload["process"]["generated_outputs_stable"] is False
+    artifacts = {item["relative_path"]: item for item in payload["generated_outputs"]}
+    assert artifacts["workspace/model.nfr"]["sha256"] is None
+    assert artifacts["workspace/model.nfr"]["size_bytes"] is None
+    assert artifacts["workspace/model.nfr"]["stable"] is False
+    stdout_path = result_manifest.parent / "stdout.bin"
+    before = (stdout_path.stat().st_mtime_ns, stdout_path.stat().st_size, hashlib.sha256(stdout_path.read_bytes()).hexdigest())
+    assert process.stdout.done.wait(1)
+    after = (stdout_path.stat().st_mtime_ns, stdout_path.stat().st_size, hashlib.sha256(stdout_path.read_bytes()).hexdigest())
+    assert before == after
 
 
 def test_final_evidence_records_workspace_mutation_after_parse(

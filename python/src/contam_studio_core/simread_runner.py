@@ -54,6 +54,8 @@ EXPECTED_SHA256 = EXPECTED_SIMREAD_SHA256
 SIMREAD_ENVIRONMENT = "CONTAM_STUDIO_SIMREAD"
 PROBE_TIMEOUT_SECONDS = 5
 EXTRACT_TIMEOUT_SECONDS = 30
+STREAM_JOIN_TIMEOUT_SECONDS = 3
+STREAM_CLOSE_JOIN_TIMEOUT_SECONDS = 1
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_STREAM_BYTES = 4 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
@@ -177,36 +179,73 @@ class _BoundedCapture:
         self.truncated = False
         self.error: BaseException | None = None
         self.thread_finished = False
+        self._lock = threading.Lock()
+        self._output = None
+        self._frozen = False
 
     def drain(self) -> None:
         try:
-            output = self.target.open("wb") if self.target else None
-            try:
-                while True:
-                    chunk = self.stream.read(65536)
-                    if not chunk:
+            with self._lock:
+                if not self._frozen:
+                    self._output = self.target.open("wb") if self.target else None
+            while True:
+                chunk = self.stream.read(65536)
+                if not chunk:
+                    break
+                remaining = MAX_STREAM_BYTES - len(self.data)
+                with self._lock:
+                    if self._frozen:
                         break
-                    remaining = MAX_STREAM_BYTES - len(self.data)
                     if remaining > 0:
                         kept = chunk[:remaining]
                         self.data.extend(kept)
-                        if output:
-                            output.write(kept)
+                        if self._output:
+                            self._output.write(kept)
                     if len(chunk) > remaining:
                         self.truncated = True
-            finally:
-                if output:
-                    output.flush()
-                    os.fsync(output.fileno())
-                    output.close()
         except BaseException as error:  # noqa: BLE001 - propagated as structured evidence error.
             self.error = error
         finally:
+            with self._lock:
+                output = self._output
+                self._output = None
+            if output:
+                try:
+                    output.flush()
+                    os.fsync(output.fileno())
+                except BaseException as error:  # noqa: BLE001 - evidence error is structured below.
+                    self.error = self.error or error
+                finally:
+                    try:
+                        output.close()
+                    except BaseException as error:  # noqa: BLE001 - evidence error is structured below.
+                        self.error = self.error or error
             self.thread_finished = True
+
+    def freeze(self) -> None:
+        with self._lock:
+            self._frozen = True
+            output = self._output
+            self._output = None
+        if output:
+            try:
+                output.flush()
+                os.fsync(output.fileno())
+            except BaseException as error:  # noqa: BLE001 - evidence error is structured below.
+                self.error = self.error or error
+            finally:
+                try:
+                    output.close()
+                except BaseException as error:  # noqa: BLE001 - evidence error is structured below.
+                    self.error = self.error or error
 
     @property
     def capture_complete(self) -> bool:
         return self.thread_finished and self.error is None
+
+    @property
+    def evidence_frozen(self) -> bool:
+        return self._frozen
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +262,23 @@ class SimReadProcessOutcome:
     stdout: _BoundedCapture
     stderr: _BoundedCapture
     stream_capture_complete: bool
+    stream_evidence_frozen: bool
+    generated_outputs_stable: bool
+    pipe_close_complete: bool
     diagnostic: ResultDiagnostic | None = None
+
+
+def _close_parent_pipes(process: subprocess.Popen) -> bool:
+    complete = True
+    for name in ("stdin", "stdout", "stderr"):
+        stream = getattr(process, name, None)
+        if stream is None:
+            continue
+        try:
+            stream.close()
+        except Exception:  # noqa: BLE001 - pipe-close failures become structured evidence.
+            complete = False
+    return complete
 
 
 def _capture_process_outcome(
@@ -298,13 +353,31 @@ def _capture_process_outcome(
                 "simread_process_termination_failed", "SimRead进程终止状态无法可靠确认。"
             )
     for thread in threads:
-        thread.join(timeout=3)
+        thread.join(timeout=STREAM_JOIN_TIMEOUT_SECONDS)
     stream_capture_complete = all(
         capture.capture_complete and not thread.is_alive()
         for thread, capture in zip(threads, (stdout, stderr), strict=True)
     )
+    pipe_close_complete = True
+    if not exit_confirmed or not stream_capture_complete:
+        pipe_close_complete = _close_parent_pipes(process)
+        for capture in (stdout, stderr):
+            capture.freeze()
+        for thread in threads:
+            thread.join(timeout=STREAM_CLOSE_JOIN_TIMEOUT_SECONDS)
+    else:
+        pipe_close_complete = _close_parent_pipes(process)
+        for capture in (stdout, stderr):
+            capture.freeze()
+    stream_capture_complete = all(
+        capture.capture_complete and not thread.is_alive()
+        for thread, capture in zip(threads, (stdout, stderr), strict=True)
+    )
+    stream_evidence_frozen = all(capture.evidence_frozen for capture in (stdout, stderr))
     if diagnostic is None and not stream_capture_complete:
         diagnostic = ResultDiagnostic("simread_stream_capture_failed", "SimRead输出证据捕获失败。")
+    elif diagnostic is None and not pipe_close_complete:
+        diagnostic = ResultDiagnostic("simread_stream_capture_failed", "SimRead输出管道关闭失败。")
     elif diagnostic is None and initial_wait_error:
         diagnostic = ResultDiagnostic("simread_process_failed", "SimRead进程状态读取失败。")
     elif diagnostic is None and timed_out:
@@ -322,6 +395,9 @@ def _capture_process_outcome(
         stdout=stdout,
         stderr=stderr,
         stream_capture_complete=stream_capture_complete,
+        stream_evidence_frozen=stream_evidence_frozen,
+        generated_outputs_stable=exit_confirmed,
+        pipe_close_complete=pipe_close_complete,
         diagnostic=diagnostic,
     )
 
@@ -761,7 +837,12 @@ def _recheck_workspace_inputs(
             _fail("result_snapshot_mismatch", "SimRead工作区输入快照已变化。")
 
 
-def _artifact_records(workspace: Path, excluded_names: set[str] | None = None) -> list[dict[str, Any]]:
+def _artifact_records(
+    workspace: Path,
+    excluded_names: set[str] | None = None,
+    *,
+    stable: bool = True,
+) -> list[dict[str, Any]]:
     excluded = {name.casefold() for name in (excluded_names or set())}
     records = []
     for path in sorted(workspace.iterdir(), key=lambda value: value.name.casefold()):
@@ -770,8 +851,12 @@ def _artifact_records(workspace: Path, excluded_names: set[str] | None = None) -
         records.append(
             {
                 "relative_path": f"workspace/{path.name}",
-                "size_bytes": path.stat().st_size,
-                "sha256": _sha256_file(path),
+                "size_bytes": path.stat().st_size if stable else None,
+                "sha256": _sha256_file(path) if stable else None,
+                "stable": stable,
+                "evidence_semantics": "captured_evidence"
+                if stable
+                else "snapshot_at_manifest_creation",
                 "suffix": path.suffix,
                 "classification": "simulation_result"
                 if path.suffix.casefold() == ".nfr"
@@ -782,13 +867,22 @@ def _artifact_records(workspace: Path, excluded_names: set[str] | None = None) -
 
 
 def _stream_evidence(capture: _BoundedCapture, evidence_path: Path) -> dict[str, Any]:
-    size = evidence_path.stat().st_size if evidence_path.exists() else 0
+    stable = capture.evidence_frozen and capture.error is None
+    size = evidence_path.stat().st_size if stable and evidence_path.exists() else None
     return {
         "relative_path": f"evidence/{evidence_path.name}",
         "size_bytes": size,
-        "sha256": _sha256_file(evidence_path) if evidence_path.exists() else _sha256_bytes(b""),
+        "sha256": _sha256_file(evidence_path) if stable and evidence_path.exists() else None,
         "truncated": capture.truncated,
         "capture_complete": capture.capture_complete,
+        "stable": stable,
+        "evidence_semantics": (
+            "captured_evidence"
+            if capture.capture_complete
+            else "frozen_partial_evidence"
+            if stable
+            else "unstable_at_manifest_creation"
+        ),
     }
 
 
@@ -881,6 +975,12 @@ def _normalize_result_manifest(payload: dict[str, Any]) -> dict[str, Any]:
     process.setdefault("exit_confirmed", payload.get("exit_code") is not None)
     process.setdefault("termination_succeeded", None)
     process.setdefault("stream_capture_complete", bool(process["process_started"]))
+    process.setdefault("stream_evidence_frozen", bool(process["process_started"]))
+    process.setdefault(
+        "generated_outputs_stable",
+        None if not process["process_started"] else payload.get("exit_code") is not None,
+    )
+    process.setdefault("pipe_close_complete", bool(process["process_started"]))
     process.setdefault("diagnostic_code", None)
     return ResultExtractionManifest(
         schema_version=str(payload.get("schema_version", SCHEMA_VERSION)),
@@ -1004,6 +1104,10 @@ def _failure_manifest(
         "termination_succeeded": None,
         "stream_capture_complete": stdout.get("capture_complete", True)
         and stderr.get("capture_complete", True),
+        "stream_evidence_frozen": stdout.get("stable", True)
+        and stderr.get("stable", True),
+        "generated_outputs_stable": None,
+        "pipe_close_complete": True if not process_started else False,
         "diagnostic_code": diagnostic.code,
     }
     if process_outcome is not None:
@@ -1016,6 +1120,9 @@ def _failure_manifest(
             "exit_confirmed": process_outcome.exit_confirmed,
             "termination_succeeded": process_outcome.termination_succeeded,
             "stream_capture_complete": process_outcome.stream_capture_complete,
+            "stream_evidence_frozen": process_outcome.stream_evidence_frozen,
+            "generated_outputs_stable": process_outcome.generated_outputs_stable,
+            "pipe_close_complete": process_outcome.pipe_close_complete,
             "diagnostic_code": diagnostic.code,
         }
     return {
@@ -1038,7 +1145,15 @@ def _failure_manifest(
         "stdout": stdout,
         "stderr": stderr,
         "generated_outputs": (
-            _artifact_records(workspace, {evidence.prj_path.name, evidence.sim_path.name})
+            _artifact_records(
+                workspace,
+                {evidence.prj_path.name, evidence.sim_path.name},
+                stable=(
+                    process_outcome.generated_outputs_stable
+                    if process_outcome is not None
+                    else False
+                ),
+            )
             if workspace.exists()
             else []
         ),
@@ -1108,6 +1223,8 @@ def extract_zone_air_state(
         "sha256": _sha256_bytes(b""),
         "truncated": False,
         "capture_complete": True,
+        "stable": True,
+        "evidence_semantics": "captured_evidence",
     }
     stderr_meta = {
         "relative_path": "evidence/stderr.bin",
@@ -1115,6 +1232,8 @@ def extract_zone_air_state(
         "sha256": _sha256_bytes(b""),
         "truncated": False,
         "capture_complete": True,
+        "stable": True,
+        "evidence_semantics": "captured_evidence",
     }
     (evidence_dir / "stdout.bin").write_bytes(b"")
     (evidence_dir / "stderr.bin").write_bytes(b"")
@@ -1229,17 +1348,17 @@ def extract_zone_air_state(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-        except OSError:
+        except (OSError, ValueError, AttributeError):
             _fail("simread_process_start_failed", "SimRead进程启动失败。")
         process_started = True
         stdin = b"\n\nn\ny\n" + str(zone_number).encode("ascii") + b"\nn\n"
         try:
             process.stdin.write(stdin)
             process.stdin.flush()
-        except OSError:
+        except Exception:  # noqa: BLE001 - all stdin failures must enter structured process cleanup.
             try:
                 process.stdin.close()
-            except OSError:
+            except (OSError, ValueError, AttributeError):
                 pass
             try:
                 process_outcome = _capture_process_outcome(
@@ -1257,7 +1376,7 @@ def extract_zone_air_state(
         finally:
             try:
                 process.stdin.close()
-            except OSError:
+            except (OSError, ValueError, AttributeError):
                 pass
         process_outcome = _capture_process_outcome(
             process, timeout=EXTRACT_TIMEOUT_SECONDS, evidence=evidence_dir
@@ -1375,6 +1494,9 @@ def extract_zone_air_state(
                 "exit_confirmed": process_outcome.exit_confirmed if process_outcome else True,
                 "termination_succeeded": process_outcome.termination_succeeded if process_outcome else None,
                 "stream_capture_complete": process_outcome.stream_capture_complete if process_outcome else True,
+                "stream_evidence_frozen": process_outcome.stream_evidence_frozen if process_outcome else True,
+                "generated_outputs_stable": process_outcome.generated_outputs_stable if process_outcome else True,
+                "pipe_close_complete": process_outcome.pipe_close_complete if process_outcome else True,
                 "diagnostic_code": None,
             },
             "working_directory": "workspace",

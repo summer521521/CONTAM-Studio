@@ -13,8 +13,8 @@ Phase 4运行清单由同一份完整bytes读取、UTF-8解码、JSON解析并�
 
 Phase 4求解器身份必须完整匹配`contamx3.exe`、3.4.0.3、Windows x64、1605120字节和已验证SHA-256，且来源必须为NIST官方包。PRJ和SIM是提取输入快照，不是SimRead生成物；`generated_outputs`只记录`.nfr`、`.xrf`等实际生成文件。
 
-工作区创建后，成功和失败使用同一`ResultExtractionManifest`模型，记录命令语义、进程是否启动、stdin写入、退出码、超时、终止请求与退出确认、stdout/stderr捕获状态和生成物哈希。wait异常、超时、stdin或流失败均进入有界的terminate→wait→kill→wait收口流程；`termination_succeeded`只有在确认退出后才为真，流线程未结束时`capture_complete=false`。不存在的Zone在启动SimRead前拒绝，并写入`process_started=false`的失败清单；SimRead解析失败仍保留已生成文本与流证据。工作区创建前的拒绝没有可审计工作区，因此不写result-manifest。
+工作区创建后，成功和失败使用同一`ResultExtractionManifest`模型，记录命令语义、进程是否启动、stdin写入、退出码、超时、终止请求与退出确认、stdout/stderr捕获状态和生成物哈希。wait异常、超时、stdin或流失败均进入有界的terminate→wait→kill→wait收口流程；随后关闭父进程stdin/stdout/stderr并进行二次join。`termination_succeeded`只有在确认退出后才为真，流线程未结束时`capture_complete=false`；`stream_evidence_frozen`只表示本进程不会继续写流证据，不能替代`exit_confirmed`。不存在的Zone在启动SimRead前拒绝，并写入`process_started=false`的失败清单；SimRead解析失败仍保留已生成文本与流证据。工作区创建前的拒绝没有可审计工作区，因此不写result-manifest。
 
-写入成功或失败清单前都执行统一最终证据复核，分别记录Phase 4 manifest、Phase 4 PRJ/SIM、提取工作区PRJ/SIM和SimRead二进制是否保持不变；证据变化会导致失败，但不会丢失已创建工作区中的失败清单。
+写入成功或失败清单前都执行统一最终证据复核，分别记录Phase 4 manifest、Phase 4 PRJ/SIM、提取工作区PRJ/SIM和SimRead二进制是否保持不变；证据变化会导致失败，但不会丢失已创建工作区中的失败清单。只有确认SimRead退出时，`generated_outputs_stable=true`，生成物才写入最终`sha256`和`size_bytes`；无法确认退出时生成物使用`stable=false`及空哈希/大小表示manifest创建时的非稳定快照。
 
 公开CLI只有`probe-simread`和以Phase 4 manifest为第一个参数的`extract`，不接受直接NFR或SIM。`day_type`在当前模型中返回`null`，并以`day_type_source=not_available_in_simread_nfr_v1`说明官方NFR未提供CONTAM日类型；不推断工作日、周末或schedule day type。`sim_time_seconds`是从首个样本起算的累计秒数。
