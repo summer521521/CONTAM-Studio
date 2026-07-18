@@ -36,11 +36,11 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 - 分支`codex/phase-4a-contamx-run-core`在Windows x64、Python 3.12.10环境实现独立`contamx_runner`模块；当前不接入React、Tauri或桌面运行按钮。
 - 使用NIST官方`contam-x-3.4.0.3-win64.zip`（CONTAM 3.4.0.8发布页，SHA-256为`3F11B44513F1046D378226B3D63644493B78F0E8241DC70F83E319A458A14052`）。包内实测可执行文件为`contamx3.exe`，Windows文件版本和官方`--Version`输出均为`3.4.0.3`，PE架构为Windows x64；求解器未复制进仓库。
-- 求解器只接受CLI绝对路径或`CONTAM_STUDIO_CONTAMX`，不回退PATH、磁盘扫描、注册表或自动下载。
-- 每次运行在调用者指定的运行根目录创建新的`run_id/workspace`和`evidence`，复制并校验PRJ快照，以参数数组、`shell=False`、固定工作目录运行ContamX，并记录stdout/stderr、退出码、超时、源目录清单和全部生成物哈希。
+- 求解器只接受CLI绝对路径或`CONTAM_STUDIO_CONTAMX`，不回退PATH、磁盘扫描、注册表或自动下载；当前还必须同时匹配官方3.4.0.3 EXE的文件名、大小、SHA-256、PE架构、Windows版本资源和受限`--Version`输出。
+- 每次运行只在源项目目录树之外创建新的`run_id/workspace`和`evidence`；PRJ和显式配套文件绑定最初证据，并对复制前源、复制后源和workspace副本进行三方校验，进程启动前与结束后再次复核。ContamX使用参数数组、`shell=False`、固定工作目录和白名单Windows环境运行，manifest记录源目录文件/子目录清单、输入完整性、流证据、退出码、超时和全部生成物哈希。
 - 真实运行已使用官方`test_GetPrjInfo.prj`完成，退出码为0，生成非空`.sim`以及`.log`、`.xlog`等文件；源PRJ哈希、大小和源目录内容保持不变。运行输出仅保留在`F:\Codex_File`任务目录中，未提交二进制或运行产物。
 - 运行核心只把非空`.sim`作为主要结果存在证据，不解析SIM内容；失败、超时和非零退出同样保留失败manifest。当前仍不支持GUI运行、批量运行、结果读取、进程树完整治理、求解器打包和分发。
-- Phase 4A新增运行核心测试14项；与既有测试合计156项通过，Ruff、前端测试/构建和Rust测试/检查保持通过。
+- Phase 4A运行核心及边界加固完成后，Python测试合计180项通过；Ruff、前端测试/构建和Rust测试/检查保持通过。
 
 ## Phase 1验证
 

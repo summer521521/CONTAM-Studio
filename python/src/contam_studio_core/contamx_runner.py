@@ -34,7 +34,13 @@ EXPECTED_SOLVER_NAME = "contamx3.exe"
 EXPECTED_ARCHITECTURE = "windows-x64"
 EXPECTED_RESULT_SUFFIX = ".sim"
 RUN_TIMEOUT_SECONDS = 60
+VERSION_TIMEOUT_SECONDS = 5
 MAX_STREAM_BYTES = 4 * 1024 * 1024
+MAX_VERSION_OUTPUT_BYTES = 64 * 1024
+EXPECTED_SOLVER_VERSION = "3.4.0.3"
+EXPECTED_SOLVER_SIZE_BYTES = 1_605_120
+EXPECTED_SOLVER_SHA256 = "3b9a5ee9a6a3ea3cdc569df607f4ec2a1ad4e74e53fef8fbec0b7e540a5d3aad"
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 ERROR_EXIT_CODES = {
     "contamx_solver_not_configured": 2,
     "contamx_solver_not_found": 3,
@@ -56,6 +62,9 @@ ERROR_EXIT_CODES = {
     "run_source_changed": 19,
     "run_manifest_write_failed": 20,
     "run_internal_error": 21,
+    "run_stream_capture_failed": 22,
+    "run_process_termination_failed": 23,
+    "run_root_conflicts_with_source": 24,
 }
 
 
@@ -148,7 +157,7 @@ def _windows_file_version(path: Path) -> str:
             info.file_version_ls & 0xFFFF,
         )
         return ".".join(str(part) for part in parts)
-    except (AttributeError, OSError, ValueError):
+    except (AttributeError, OSError, ValueError, TypeError, ctypes.ArgumentError):
         _fail("contamx_solver_version_unavailable", "无法可靠读取ContamX文件版本资源。")
     raise AssertionError("unreachable")
 
@@ -167,22 +176,142 @@ def _pe_architecture(path: Path) -> str:
     return EXPECTED_ARCHITECTURE
 
 
+def _controlled_environment() -> dict[str, str]:
+    """Construct only the Windows variables needed by a native executable."""
+    system_root = os.environ.get("SystemRoot") or os.environ.get("WINDIR")
+    environment: dict[str, str] = {}
+    for name in ("SystemRoot", "WINDIR", "TEMP", "TMP"):
+        value = os.environ.get(name)
+        if value:
+            environment[name] = value
+    if system_root:
+        environment["PATH"] = os.pathsep.join(
+            (
+                str(Path(system_root) / "System32"),
+                system_root,
+                str(Path(system_root) / "System32" / "Wbem"),
+            )
+        )
+    return environment
+
+
+@dataclass(slots=True)
+class _VersionCapture:
+    data: bytearray
+    error: BaseException | None = None
+    truncated: bool = False
+
+    def __init__(self) -> None:
+        self.data = bytearray()
+        self.error = None
+        self.truncated = False
+
+
+def _drain_version_stream(stream, capture: _VersionCapture) -> None:
+    try:
+        while True:
+            chunk = stream.read(16 * 1024)
+            if not chunk:
+                return
+            remaining = MAX_VERSION_OUTPUT_BYTES - len(capture.data)
+            if remaining > 0:
+                capture.data.extend(chunk[:remaining])
+            if len(chunk) > remaining:
+                capture.truncated = True
+    except BaseException as error:  # noqa: BLE001 - captured and reported structurally.
+        capture.error = error
+
+
+def _probe_version_command(path: Path) -> str:
+    try:
+        process = subprocess.Popen(
+            [str(path), "--Version"],
+            cwd=path.parent,
+            env=_controlled_environment(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+        )
+    except OSError:
+        _fail("contamx_solver_version_unavailable", "无法执行ContamX版本探测。")
+    assert process.stdout is not None and process.stderr is not None
+    stdout_capture = _VersionCapture()
+    stderr_capture = _VersionCapture()
+    stdout_thread = threading.Thread(target=_drain_version_stream, args=(process.stdout, stdout_capture), daemon=True)
+    stderr_thread = threading.Thread(target=_drain_version_stream, args=(process.stderr, stderr_capture), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+    timed_out = False
+    termination_failed = False
+    try:
+        process.wait(timeout=VERSION_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            process.terminate()
+            process.wait(timeout=2)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                process.kill()
+                process.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                termination_failed = True
+    stdout_thread.join(timeout=2)
+    stderr_thread.join(timeout=2)
+    if termination_failed:
+        _fail("contamx_solver_version_unavailable", "ContamX版本探测未能在限定时间内结束。")
+    if timed_out:
+        _fail("contamx_solver_version_unavailable", "ContamX版本探测超时。")
+    if stdout_thread.is_alive() or stderr_thread.is_alive() or stdout_capture.error or stderr_capture.error:
+        _fail("contamx_solver_version_unavailable", "ContamX版本探测输出无法完整读取。")
+    if stdout_capture.truncated or stderr_capture.truncated or process.returncode != 0:
+        _fail("contamx_solver_version_unavailable", "ContamX版本探测证据无效。")
+    if bool(stdout_capture.data) == bool(stderr_capture.data):
+        _fail("contamx_solver_version_unavailable", "ContamX版本探测输出通道不符合已验证契约。")
+    version_data = stdout_capture.data or stderr_capture.data
+    try:
+        output = version_data.decode("ascii", errors="strict").strip()
+    except UnicodeDecodeError:
+        _fail("contamx_solver_version_unavailable", "ContamX版本探测输出不是ASCII。")
+    if output != "3.4.0.3 64 bit":
+        _fail("contamx_solver_unsupported", "ContamX版本探测结果不是已验证版本。")
+    return output
+
+
 def probe_solver(solver: Path | None = None) -> ContamXSolverInfo:
     path = _solver_path(solver)
-    sha256, size = _file_hash_and_size(path)
+    try:
+        sha256, size = _file_hash_and_size(path)
+    except OSError:
+        _fail("contamx_solver_unsupported", "无法读取ContamX静态身份证据。")
+    if size != EXPECTED_SOLVER_SIZE_BYTES or sha256.casefold() != EXPECTED_SOLVER_SHA256:
+        _fail("contamx_solver_unsupported", "ContamX文件大小或哈希不是已验证的官方版本。")
+    version = _windows_file_version(path)
+    architecture = _pe_architecture(path)
+    if version != EXPECTED_SOLVER_VERSION or architecture != EXPECTED_ARCHITECTURE:
+        _fail("contamx_solver_unsupported", "ContamX身份证据与已验证NIST版本不一致。")
+    version_output = _probe_version_command(path)
+    if version_output != "3.4.0.3 64 bit":
+        _fail("contamx_solver_unsupported", "ContamX版本命令与已验证NIST版本不一致。")
     return ContamXSolverInfo(
         path=str(path),
         name=path.name,
-        version=_windows_file_version(path),
+        version=version,
         sha256=sha256,
         size_bytes=size,
-        architecture=_pe_architecture(path),
-        provenance="NIST official CONTAM 3.4.0.8 Windows 64-bit package",
+        architecture=architecture,
+        provenance="NIST contam-x-3.4.0.3-win64.zip (verified SHA-256)",
     )
 
 
-def _directory_files(directory: Path) -> tuple[str, ...]:
-    return tuple(sorted(item.name for item in directory.iterdir() if item.is_file()))
+def _directory_entries(directory: Path) -> tuple[str, ...]:
+    entries: list[str] = []
+    for item in directory.iterdir():
+        if item.is_file():
+            entries.append(f"file:{item.name}")
+        elif item.is_dir():
+            entries.append(f"directory:{item.name}")
+    return tuple(sorted(entries))
 
 
 def _safe_relative(path: Path, root: Path) -> str:
@@ -224,32 +353,44 @@ class _StreamCapture:
     total_bytes: int = 0
     truncated: bool = False
     digest: object = None
+    capture_error: BaseException | None = None
 
     def __post_init__(self) -> None:
         self.digest = hashlib.sha256()
 
     def read(self, stream) -> None:
-        with self.path.open("wb") as output:
-            while True:
-                chunk = stream.read(64 * 1024)
-                if not chunk:
-                    break
-                self.total_bytes += len(chunk)
-                if self.total_bytes <= self.buffer_limit:
-                    output.write(chunk)
-                    self.digest.update(chunk)
-                else:
-                    allowed = max(0, self.buffer_limit - (self.total_bytes - len(chunk)))
-                    if allowed:
-                        output.write(chunk[:allowed])
-                        self.digest.update(chunk[:allowed])
-                    self.truncated = True
+        try:
+            with self.path.open("wb") as output:
+                while True:
+                    chunk = stream.read(64 * 1024)
+                    if not chunk:
+                        break
+                    self.total_bytes += len(chunk)
+                    if self.total_bytes <= self.buffer_limit:
+                        output.write(chunk)
+                        self.digest.update(chunk)
+                    else:
+                        allowed = max(0, self.buffer_limit - (self.total_bytes - len(chunk)))
+                        if allowed:
+                            output.write(chunk[:allowed])
+                            self.digest.update(chunk[:allowed])
+                        self.truncated = True
+        except BaseException as error:  # noqa: BLE001 - propagated after the process drains.
+            self.capture_error = error
 
     def evidence(self, root: Path) -> RunStreamEvidence:
+        if not self.path.is_file():
+            return RunStreamEvidence(
+                relative_path=_safe_relative(self.path, root),
+                size_bytes=0,
+                sha256=EMPTY_SHA256,
+                truncated=self.truncated,
+            )
+        sha256, size = _file_hash_and_size(self.path)
         return RunStreamEvidence(
             relative_path=_safe_relative(self.path, root),
-            size_bytes=self.path.stat().st_size,
-            sha256=self.digest.hexdigest(),
+            size_bytes=size,
+            sha256=sha256,
             truncated=self.truncated,
         )
 
@@ -284,10 +425,7 @@ def _collect_artifacts(workspace: Path, snapshot_names: set[str]) -> tuple[RunAr
 
 
 def _process_environment() -> dict[str, str]:
-    environment = os.environ.copy()
-    for key in (SOLVER_ENVIRONMENT, "CONTAM_STUDIO_PYTHON", "PYTHONPATH", "PYTHONHOME"):
-        environment.pop(key, None)
-    return environment
+    return _controlled_environment()
 
 
 def _start_process(
@@ -314,18 +452,36 @@ def _start_process(
     stdout_thread.start()
     stderr_thread.start()
     timed_out = False
+    termination_failed = False
+    wait_failed = False
     try:
         process.wait(timeout=RUN_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         timed_out = True
-        process.terminate()
         try:
+            process.terminate()
             process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                process.kill()
+                process.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                termination_failed = True
+    except OSError:
+        wait_failed = True
     stdout_thread.join(timeout=5)
     stderr_thread.join(timeout=5)
+    if termination_failed:
+        _fail("run_process_termination_failed", "ContamX超时后无法确认进程已结束。")
+    if (
+        stdout_thread.is_alive()
+        or stderr_thread.is_alive()
+        or stdout_capture.capture_error is not None
+        or stderr_capture.capture_error is not None
+    ):
+        _fail("run_stream_capture_failed", "ContamX标准输出或标准错误证据无法完整读取。")
+    if wait_failed:
+        _fail("run_process_failed", "无法确认ContamX进程退出状态。")
     return process.returncode, timed_out
 
 
@@ -348,6 +504,117 @@ def _manifest_result(
     )
 
 
+def _normalize_inputs(
+    source: Path,
+    companion_paths: Iterable[Path],
+) -> tuple[tuple[Path, ...], dict[Path, tuple[str, int]]]:
+    input_paths = (source, *(Path(item).expanduser().resolve() for item in companion_paths))
+    seen_paths: set[Path] = set()
+    seen_names: set[str] = set()
+    baselines: dict[Path, tuple[str, int]] = {}
+    for input_path in input_paths:
+        if input_path in seen_paths or input_path.name.casefold() in seen_names:
+            _fail("run_snapshot_failed", "输入路径重复或多个输入映射到同一快照文件名。")
+        seen_paths.add(input_path)
+        seen_names.add(input_path.name.casefold())
+        if not input_path.is_file():
+            _fail("run_snapshot_failed", "显式配套输入文件不存在。", path=input_path.name)
+        if input_path != source and input_path.parent != source.parent:
+            _fail("run_snapshot_failed", "配套输入文件必须来自源PRJ目录。", path=input_path.name)
+        try:
+            baselines[input_path] = _file_hash_and_size(input_path)
+        except OSError:
+            _fail("run_snapshot_failed", "无法读取输入文件快照证据。", path=input_path.name)
+    return input_paths, baselines
+
+
+def _copy_verified_input(
+    input_path: Path,
+    destination: Path,
+    expected: tuple[str, int],
+) -> RunInputSnapshot:
+    try:
+        before = _file_hash_and_size(input_path)
+        if before != expected:
+            _fail("run_snapshot_mismatch", "输入文件在运行快照创建前发生变化。", path=input_path.name)
+        shutil.copy2(input_path, destination)
+        copied = _file_hash_and_size(destination)
+        after = _file_hash_and_size(input_path)
+    except ContamXRunnerError:
+        raise
+    except OSError:
+        _fail("run_snapshot_failed", "无法复制输入快照。", path=input_path.name)
+    if before != after or before != copied:
+        _fail("run_snapshot_mismatch", "输入快照与复制前后源文件证据不一致。", path=input_path.name)
+    return RunInputSnapshot(
+        relative_path=f"workspace/{input_path.name}",
+        source_path=str(input_path),
+        source_sha256=before[0],
+        source_size_bytes=before[1],
+        snapshot_sha256=copied[0],
+        snapshot_size_bytes=copied[1],
+    )
+
+
+def _current_input_records(
+    records: Iterable[RunInputSnapshot],
+    input_paths: tuple[Path, ...],
+    baselines: dict[Path, tuple[str, int]],
+) -> tuple[tuple[RunInputSnapshot, ...], bool]:
+    path_by_source = {str(path): path for path in input_paths}
+    final_records: list[RunInputSnapshot] = []
+    all_unchanged = True
+    for record in records:
+        input_path = path_by_source[record.source_path]
+        try:
+            unchanged = _file_hash_and_size(input_path) == baselines[input_path]
+        except OSError:
+            unchanged = False
+        all_unchanged = all_unchanged and unchanged
+        final_records.append(
+            RunInputSnapshot(
+                relative_path=record.relative_path,
+                source_path=record.source_path,
+                source_sha256=record.source_sha256,
+                source_size_bytes=record.source_size_bytes,
+                snapshot_sha256=record.snapshot_sha256,
+                snapshot_size_bytes=record.snapshot_size_bytes,
+                classification=record.classification,
+                source_unchanged=unchanged,
+            )
+        )
+    for input_path in input_paths:
+        if str(input_path) in {record.source_path for record in final_records}:
+            continue
+        try:
+            all_unchanged = all_unchanged and _file_hash_and_size(input_path) == baselines[input_path]
+        except OSError:
+            all_unchanged = False
+    return tuple(final_records), all_unchanged
+
+
+def _validate_snapshots_before_start(
+    records: Iterable[RunInputSnapshot],
+    input_paths: tuple[Path, ...],
+    baselines: dict[Path, tuple[str, int]],
+    workspace: Path,
+) -> None:
+    records_by_source = {record.source_path: record for record in records}
+    if len(records_by_source) != len(input_paths):
+        _fail("run_snapshot_mismatch", "运行输入快照集合不完整。")
+    for input_path in input_paths:
+        record = records_by_source.get(str(input_path))
+        if record is None:
+            _fail("run_snapshot_mismatch", "运行输入快照缺失。", path=input_path.name)
+        try:
+            current = _file_hash_and_size(input_path)
+            copied = _file_hash_and_size(workspace / input_path.name)
+        except OSError:
+            _fail("run_snapshot_mismatch", "无法在进程启动前复核输入快照。", path=input_path.name)
+        if current != baselines[input_path] or copied != baselines[input_path]:
+            _fail("run_snapshot_mismatch", "输入文件或快照在进程启动前发生变化。", path=input_path.name)
+
+
 def run_contamx(
     source_path: Path,
     *,
@@ -355,19 +622,33 @@ def run_contamx(
     run_root: Path,
     companion_paths: Iterable[Path] = (),
 ) -> ContamXRunResult:
-    source = Path(source_path).expanduser().resolve()
+    source = Path(source_path).expanduser().resolve(strict=False)
     if source.suffix.casefold() != ".prj":
         _fail("run_source_invalid", "运行输入必须是.prj文件。")
     if not source.is_file():
         _fail("run_source_not_found", "运行源PRJ不存在。")
-    root = Path(run_root).expanduser().resolve()
+    source_directory = source.parent.resolve(strict=True)
+    root = Path(run_root).expanduser().resolve(strict=False)
+    if root == source_directory or root.is_relative_to(source_directory):
+        _fail("run_root_conflicts_with_source", "运行根目录不得位于源PRJ目录树中。")
+    try:
+        source_hash, source_size = _file_hash_and_size(source)
+        source_entries_before = _directory_entries(source_directory)
+    except OSError:
+        _fail("run_source_invalid", "无法读取源PRJ或源目录完整性证据。")
+    input_paths, input_baselines = _normalize_inputs(source, companion_paths)
+    if input_baselines[source] != (source_hash, source_size):
+        _fail("run_snapshot_mismatch", "主PRJ在初始证据采集后发生变化。")
+    solver_info = probe_solver(solver)
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError:
         _fail("run_root_invalid", "运行根目录无法创建或访问。")
     if not root.is_dir():
         _fail("run_root_invalid", "运行根目录不是目录。")
-    solver_info = probe_solver(solver)
+    root = root.resolve(strict=True)
+    if root == source_directory or root.is_relative_to(source_directory):
+        _fail("run_root_conflicts_with_source", "运行根目录规范化后位于源PRJ目录树中。")
     run_id = _make_run_id()
     run_directory = root / run_id
     try:
@@ -379,80 +660,103 @@ def run_contamx(
     except FileExistsError:
         _fail("run_workspace_exists", "运行目录已存在，拒绝复用。")
     except OSError:
+        try:
+            if run_directory.is_dir():
+                shutil.rmtree(run_directory)
+        except OSError:
+            pass
         _fail("run_root_invalid", "无法创建独立运行工作区。")
 
-    source_hash, source_size = _file_hash_and_size(source)
-    source_files_before = _directory_files(source.parent)
     started = _utc_now()
     snapshot_records: list[RunInputSnapshot] = []
-    input_paths = [source, *[Path(item).expanduser().resolve() for item in companion_paths]]
+    diagnostics: list[RunDiagnostic] = []
     for input_path in input_paths:
-        if not input_path.is_file():
-            _fail("run_snapshot_failed", "显式配套输入文件不存在。", path=input_path.name)
-        if input_path.parent != source.parent and input_path != source:
-            _fail("run_snapshot_failed", "配套输入文件必须来自源PRJ目录。", path=input_path.name)
-        destination = workspace / input_path.name
         try:
-            shutil.copy2(input_path, destination)
-            copied_hash, copied_size = _file_hash_and_size(destination)
-            original_hash, original_size = _file_hash_and_size(input_path)
-        except OSError:
-            _fail("run_snapshot_failed", "无法复制输入快照。", path=input_path.name)
-        if copied_hash != original_hash or copied_size != original_size:
-            _fail("run_snapshot_mismatch", "输入快照哈希或大小与源文件不一致。", path=input_path.name)
-        snapshot_records.append(
-            RunInputSnapshot(
-                relative_path=f"workspace/{input_path.name}",
-                source_path=str(input_path),
-                source_sha256=original_hash,
-                source_size_bytes=original_size,
-                snapshot_sha256=copied_hash,
-                snapshot_size_bytes=copied_size,
+            snapshot_records.append(
+                _copy_verified_input(input_path, workspace / input_path.name, input_baselines[input_path])
             )
-        )
+        except ContamXRunnerError as error:
+            diagnostics.append(error.diagnostic)
+            break
 
     stdout_capture = _StreamCapture(evidence / "stdout.bin")
     stderr_capture = _StreamCapture(evidence / "stderr.bin")
-    stdout_capture.path.touch()
-    stderr_capture.path.touch()
+    try:
+        stdout_capture.path.touch(exist_ok=False)
+        stderr_capture.path.touch(exist_ok=False)
+    except OSError:
+        diagnostics.append(RunDiagnostic("run_stream_capture_failed", "无法创建ContamX流证据文件。"))
     exit_code: int | None = None
     timed_out = False
-    diagnostics: list[RunDiagnostic] = []
-    try:
-        exit_code, timed_out = _start_process(
-            solver_info,
-            source.name,
-            workspace,
-            stdout_capture,
-            stderr_capture,
-        )
-    except ContamXRunnerError as error:
-        diagnostics.append(error.diagnostic)
+    process_started = False
+    if not diagnostics:
+        try:
+            _validate_snapshots_before_start(snapshot_records, input_paths, input_baselines, workspace)
+            process_started = True
+            exit_code, timed_out = _start_process(
+                solver_info,
+                source.name,
+                workspace,
+                stdout_capture,
+                stderr_capture,
+            )
+        except ContamXRunnerError as error:
+            diagnostics.append(error.diagnostic)
     ended = _utc_now()
-    source_hash_after, source_size_after = _file_hash_and_size(source)
-    source_files_after = _directory_files(source.parent)
+    final_snapshot_records, inputs_unchanged = _current_input_records(
+        snapshot_records,
+        input_paths,
+        input_baselines,
+    )
+    try:
+        source_entries_after = _directory_entries(source_directory)
+        source_hash_after, source_size_after = _file_hash_and_size(source)
+    except OSError:
+        source_entries_after = ()
+        source_hash_after, source_size_after = "", -1
     unchanged = (
         source_hash_after == source_hash
         and source_size_after == source_size
-        and source_files_after == source_files_before
+        and source_entries_after == source_entries_before
+        and inputs_unchanged
     )
     if not unchanged:
-        diagnostics.append(RunDiagnostic("run_source_changed", "源PRJ或其目录内容在运行期间发生变化。"))
+        diagnostics.append(
+            RunDiagnostic("run_source_changed", "源PRJ、配套输入或源目录内容在运行期间发生变化。")
+        )
     if timed_out:
         diagnostics.append(RunDiagnostic("run_process_timeout", "ContamX运行超过固定超时并已终止。"))
-    elif exit_code not in (None, 0):
+    elif process_started and exit_code not in (None, 0):
         diagnostics.append(RunDiagnostic("run_process_failed", "ContamX返回非零退出码。", {"exit_code": exit_code}))
-    stdout_evidence = stdout_capture.evidence(run_directory)
-    stderr_evidence = stderr_capture.evidence(run_directory)
+    try:
+        stdout_evidence = stdout_capture.evidence(run_directory)
+        stderr_evidence = stderr_capture.evidence(run_directory)
+    except OSError:
+        stdout_evidence = RunStreamEvidence("evidence/stdout.bin", 0, EMPTY_SHA256, stdout_capture.truncated)
+        stderr_evidence = RunStreamEvidence("evidence/stderr.bin", 0, EMPTY_SHA256, stderr_capture.truncated)
+        if not any(item.code == "run_stream_capture_failed" for item in diagnostics):
+            diagnostics.append(RunDiagnostic("run_stream_capture_failed", "无法读取ContamX流证据文件。"))
     if stdout_capture.truncated:
         diagnostics.append(RunDiagnostic("run_stdout_too_large", "ContamX标准输出超过证据上限并已截断。"))
     if stderr_capture.truncated:
         diagnostics.append(RunDiagnostic("run_stderr_too_large", "ContamX标准错误超过证据上限并已截断。"))
-    artifacts = _collect_artifacts(workspace, {item.name for item in input_paths})
+    try:
+        artifacts = _collect_artifacts(workspace, {item.name for item in input_paths})
+    except OSError:
+        artifacts = ()
+        diagnostics.append(RunDiagnostic("run_internal_error", "无法完整记录运行工作区生成物。"))
     primary = tuple(item for item in artifacts if item.suffix == EXPECTED_RESULT_SUFFIX and item.size_bytes > 0)
-    if not primary:
+    if process_started and not primary:
         diagnostics.append(RunDiagnostic("run_expected_artifact_missing", "未发现非空的官方主要SIM结果文件。"))
-    if unchanged and not timed_out and exit_code == 0 and primary and not stdout_capture.truncated and not stderr_capture.truncated:
+    if (
+        unchanged
+        and not timed_out
+        and exit_code == 0
+        and primary
+        and not stdout_capture.truncated
+        and not stderr_capture.truncated
+        and not diagnostics
+    ):
         status = "succeeded"
     elif timed_out:
         status = "timed_out"
@@ -463,8 +767,8 @@ def run_contamx(
         "sha256": source_hash,
         "size_bytes": source_size,
         "unchanged": unchanged,
-        "directory_files_before": list(source_files_before),
-        "directory_files_after": list(source_files_after),
+        "directory_entries_before": list(source_entries_before),
+        "directory_entries_after": list(source_entries_after),
     }
     manifest = ContamXRunManifest(
         schema_version=SCHEMA_VERSION,
@@ -475,7 +779,7 @@ def run_contamx(
         ended_at_utc=_iso(ended),
         duration_ms=max(0, int((ended - started).total_seconds() * 1000)),
         source=source_dict,
-        input_snapshots=tuple(snapshot_records),
+        input_snapshots=tuple(final_snapshot_records),
         solver=solver_info,
         command={"executable": solver_info.name, "arguments": [source.name]},
         working_directory="workspace",

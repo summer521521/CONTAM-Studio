@@ -35,6 +35,7 @@ class RunInputSnapshot:
     snapshot_sha256: str
     snapshot_size_bytes: int
     classification: str = "input_snapshot"
+    source_unchanged: bool = True
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -45,6 +46,7 @@ class RunInputSnapshot:
             "snapshot_sha256": self.snapshot_sha256,
             "snapshot_size_bytes": self.snapshot_size_bytes,
             "classification": self.classification,
+            "source_unchanged": self.source_unchanged,
         }
 
 
