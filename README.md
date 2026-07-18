@@ -126,3 +126,13 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [AI安全边界](docs/ai/ai-safety-boundary.md)
 - [许可策略](docs/licensing/licensing-strategy.md)
 - [深度研究报告](docs/research/2026-07-contam-studio-deep-research.md)
+## Phase 5A结果读取
+
+Phase 5A已验证使用与Phase 4相同NIST官方包中的`simread.exe`，从成功的ContamX运行清单复制PRJ和SIM到独立后处理工作区，并严格读取Zone空气状态文本结果。当前只支持`zone_air_state`（K、Pa、kg/m³）和官方`.nfr`文本契约；不读取任意SIM，不提供GUI、曲线、导出或其他结果类型。
+
+```powershell
+python\.venv\Scripts\python.exe -m contam_studio_core.zone_air_state_results probe-simread --simread <simread.exe> --json
+python\.venv\Scripts\python.exe -m contam_studio_core.zone_air_state_results extract <Phase4-manifest.json> --simread <simread.exe> --result-root <result-root> --zone-number 1 --json
+```
+
+详细边界见[SimRead结果提取架构](docs/architecture/simread-result-extraction.md)和[Phase 5A验证记录](docs/development/phase-5a-zone-air-state-results-verification.md)。

@@ -148,3 +148,9 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - Windows 10/11 64位安装、签名、sidecar生命周期和依赖兼容性。
 - 中英文CONTAM术语表及其与官方术语的一致性。
 - AI提供方的本地/联网边界、上下文披露、审批协议和确定性验证契约。
+## Phase 5A官方SimRead结果提取
+
+- 已验证与Phase 4相同NIST官方包中的`simread.exe`：3.4.0.3、Windows x64、34816字节，SHA-256为`85AF9B559DEBB6ECF9BA2F73705CEF60F14D32C5F8ED9B524823FA3AC85A6958`。
+- 结果入口绑定成功的Phase 4 manifest，复制PRJ和SIM到全新提取工作区；不接受任意SIM路径，不修改Phase 4运行证据。
+- 首个结果类型为`zone_air_state`，通过官方`.nfr`文本严格读取Zone空气状态，单位为K、Pa和kg/m³。真实Zone 1 `One`得到577个样本，首样本为293.15 K、-1.4222 Pa、1.2041 kg/m³。
+- 当前没有GUI结果页、曲线、导出、路径流量、污染物浓度或直接SIM二进制解析。
