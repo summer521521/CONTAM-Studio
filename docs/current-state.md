@@ -25,7 +25,7 @@
 ```text
 src/                  React工作台、组件、国际化和样式
 src-tauri/            最小Tauri宿主、配置、能力和Windows图标
-python/               隔离检查、严格Zone读取、Phase 2C JSON桥、Phase 3A-0副本Patch和测试
+python/               隔离检查、严格Zone读取、Phase 3B JSON桥、副本Patch和测试
 fixtures/contam/      有来源记录的contamxpy与NIST官方PRJ样例
 docs/                 项目决策、状态与界面截图
 package.json          前端脚本和依赖
@@ -80,7 +80,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 文件选择和读取合并为Rust侧唯一的`select_and_read_prj_zones`命令。React只提交`request_id`，无法向命令指定源路径；Rust打开原生对话框，验证本地文件、`.prj`扩展名并规范化路径后才调用Python。
 - `build.rs`通过`AppManifest`登记该命令，main窗口capability只授予`core:default`与`allow-select-and-read-prj-zones`；前端dialog依赖和权限已移除，未开放文件系统、Shell、HTTP、远程URL或自动更新能力。
 - React不读取文件、不启动进程；Rust宿主把内部持有的规范化选择路径作为JSON请求字段，通过参数数组启动一次性Python进程，并将结构化Envelope返回前端。取消选择以独立`cancelled`响应返回，不伪装为读取错误。
-- Python桥使用协议`1.0`、操作`read_simple_zones`和`request_id`，成功与失败共用同一顶层结构；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
+- Python桥现使用协议`1.1`，显式允许读取、计划Zone体积Patch和应用到副本三个操作；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
 - Python解释器按`CONTAM_STUDIO_PYTHON`绝对路径、仓库内`python/.venv/Scripts/python.exe`顺序发现；缺失时返回`python_runtime_not_found`，不回退到PATH、全局Python或Microsoft Store别名。
 - Rust端超时为10秒，stdout上限2 MiB、stderr上限16 KiB；超时终止进程，并拒绝非UTF-8、无效JSON、协议不匹配、request_id不匹配、非零退出、超大输出及任意非空stderr。
 - Python响应先进入不可序列化到WebView的Raw类型；Rust验证诊断code，以固定消息替换Python原始message，并对白名单context执行类型检查与120字符截断。成功diagnostics和失败error使用同一规则，TypeScript清理保留为第二道防线。
@@ -113,11 +113,22 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - `test_GetPrjInfo`修改副本经Phase 2A隔离contamxpy 0.0.9交叉验证，官方API返回7个Zone和首个Zone体积650.0；生成物只存在于隔离临时目录并已清理，contamxpy不是Patch运行依赖。
 - 独立CLI支持`plan --json`、`plan --diff`和`apply --output ... --json`；成功stdout不混入诊断，失败stderr为结构化JSON且不显示Traceback，默认不覆盖。
 - Phase 3A-0新增56项Python测试，完整Python测试共133项通过；Ruff、前端及Rust回归检查也在本次提交前通过。
-- 当前实现未接入React或Tauri，不支持源文件覆盖、Zone名称或其他字段、多Patch、并发编辑、稳定UUID、撤销、完整PRJ保存或AI自动应用。
+- Phase 3A-0交付时尚未接入React或Tauri；其领域函数在Phase 3B被复用，仍不支持源文件覆盖、Zone名称或其他字段、多Patch、稳定UUID、撤销、完整PRJ保存或AI自动应用。
+
+## Phase 3B Zone体积桌面审阅与副本闭环
+
+- Rust新增仅存在于进程内的活动项目session和完整Patch上下文；打开新项目会清除旧Patch，session不落盘、不写入`localStorage`且不是稳定UUID。
+- 前端计划请求只提交`request_id`、`project_session_id`、Zone编号和新体积记号；应用请求只提交`request_id`、session和`patch_id`，不能提供源路径、输出路径或完整Patch。
+- Python协议升级为`1.1`，显式白名单支持读取、计划和应用三个操作；计划复用Phase 3A-0领域函数并返回完整Patch和单行Diff，应用严格解码Rust保存的Patch、创建副本并再次严格读取。
+- Rust验证完整计划结果后只向WebView返回安全审阅视图；源路径、字节范围、前置条件和完整Patch不跨IPC。Python诊断仍在Rust边界清理，TypeScript清理仅作为第二道防线。
+- 用户明确点击“另存为新副本”后，输出路径才由Rust原生保存对话框取得。取消不启动Python且保留审阅；源路径、既有输出、错误后缀或无效父目录均失败关闭。
+- 应用成功后Rust验证应用结果和重读文档，桌面切换到新副本并保持目标Zone选择；失败保留原项目。打开、计划和应用由宿主门闩串行化，session和`patch_id`防止旧操作覆盖新状态。
+- main窗口ACL仅授予`core:default`和打开、计划、应用三个受控应用命令；前端仍无dialog、文件系统、Shell或HTTP权限。
+- Python测试142项、前端Vitest 28项和Rust测试12项已通过；Ruff、前端构建、Cargo检查及格式检查通过。实际Tauri窗口验证在文件选择阶段被用户按下`Escape`中止，未据此声称完整桌面闭环或正式Phase 3B截图已验证。
 
 ## 尚未实现
 
-桌面GUI目前只把严格Zone子集作为真实数据，其余欢迎页、结果和运行内容仍为模拟或占位。Python核心虽已建立单字段、副本限定的Patch和文本Diff，但GUI尚未接入审批或应用。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、快照、撤销、多Patch、ContamX发现与用户可触发运行、结果读取、AI调用、网络服务或Python打包分发；Phase 3A-0不得解释为整个PRJ已经可编辑或可保存。
+桌面GUI已接入一个Zone体积的Diff审阅与另存副本，但其余欢迎页、结果和运行内容仍为模拟或占位。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、快照、撤销、多Patch、ContamX发现与用户可触发运行、结果读取、AI调用、网络服务或Python打包分发；Phase 3B不得解释为整个PRJ已经可编辑或可保存。
 
 ## 待验证问题
 

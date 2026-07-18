@@ -67,9 +67,10 @@ def test_success_envelope_preserves_request_id_and_source() -> None:
     assert envelope["error"] is None
     result = envelope["result"]
     assert isinstance(result, dict)
-    assert result["declared_zone_count"] == 7
-    assert result["first_zone"]["name"] == "One"
-    assert result["source_unchanged"] is True
+    assert result["result_type"] == "read_zones"
+    assert result["project"]["declared_zone_count"] == 7
+    assert result["project"]["first_zone"]["name"] == "One"
+    assert result["project"]["source_unchanged"] is True
     assert _sha256(OFFICIAL_PRJ) == before_hash
     assert sorted(path.name for path in OFFICIAL_PRJ.parent.iterdir()) == before_names
 
@@ -156,4 +157,133 @@ def test_cli_success_stdout_is_only_json_and_stderr_is_empty() -> None:
     assert completed.stdout.count(b"\n") == 1
     envelope = json.loads(completed.stdout)
     assert envelope["ok"] is True
-    assert envelope["result"]["declared_zone_count"] == 7
+    assert envelope["result"]["project"]["declared_zone_count"] == 7
+
+
+def test_plan_operation_returns_domain_patch_and_diff(monkeypatch) -> None:
+    called: list[tuple[Path, int, str]] = []
+    real_plan = bridge_module.plan_zone_volume_patch
+
+    def tracked(path: Path, number: int, token: str):
+        called.append((path, number, token))
+        return real_plan(path, number, token)
+
+    monkeypatch.setattr(bridge_module, "plan_zone_volume_patch", tracked)
+    request = _request(
+        OFFICIAL_PRJ,
+        operation="plan_zone_volume_patch",
+        contam_number=1,
+        new_volume_token="650.0",
+    )
+    envelope = handle_request(request)
+
+    assert envelope["ok"] is True
+    assert called == [(OFFICIAL_PRJ, 1, "650.0")]
+    result = envelope["result"]
+    assert result["result_type"] == "zone_volume_patch_plan"
+    assert result["patch"]["target"]["contam_number"] == 1
+    assert result["patch"]["replacement"]["new_token"] == "650.0"
+    assert result["diff_text"].count("\n") == 4
+
+
+def test_apply_operation_strictly_decodes_patch_and_returns_new_project(tmp_path: Path) -> None:
+    patch = bridge_module.plan_zone_volume_patch(OFFICIAL_PRJ, 1, "650.0")
+    output = tmp_path / "copy.prj"
+    request = _request(
+        OFFICIAL_PRJ,
+        operation="apply_zone_volume_patch_to_copy",
+        output_path=str(output),
+        patch=patch.to_dict(),
+    )
+
+    envelope = handle_request(request)
+
+    assert envelope["ok"] is True
+    result = envelope["result"]
+    assert result["result_type"] == "zone_volume_patch_application"
+    assert result["application"]["output_sha256"] == result["project"]["source_sha256"]
+    assert result["application"]["output_size_bytes"] == result["project"]["source_size_bytes"]
+    assert result["project"]["first_zone"]["volume_m3"] == 650.0
+    assert output.is_file()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda patch: {key: value for key, value in patch.items() if key != "preview"},
+        lambda patch: {**patch, "source_size_bytes": "10978"},
+        lambda patch: {**patch, "unexpected": True},
+        lambda patch: {**patch, "target": {**patch["target"], "byte_start": "100"}},
+    ],
+    ids=["missing", "wrong-scalar", "extra", "nested-wrong-scalar"],
+)
+def test_apply_rejects_invalid_patch_contract(tmp_path: Path, mutation) -> None:
+    patch = bridge_module.plan_zone_volume_patch(OFFICIAL_PRJ, 1, "650.0").to_dict()
+    envelope = handle_request(
+        _request(
+            OFFICIAL_PRJ,
+            operation="apply_zone_volume_patch_to_copy",
+            output_path=str(tmp_path / "copy.prj"),
+            patch=mutation(patch),
+        )
+    )
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "bridge_request_invalid"
+    assert not (tmp_path / "copy.prj").exists()
+
+
+def test_apply_rejects_tampered_patch_without_overwriting_existing_output(tmp_path: Path) -> None:
+    patch = bridge_module.plan_zone_volume_patch(OFFICIAL_PRJ, 1, "650.0").to_dict()
+    patch["preconditions"]["source_sha256"] = "0" * 64
+    output = tmp_path / "existing.prj"
+    output.write_bytes(b"keep")
+
+    envelope = handle_request(
+        _request(
+            OFFICIAL_PRJ,
+            operation="apply_zone_volume_patch_to_copy",
+            output_path=str(output),
+            patch=patch,
+        )
+    )
+
+    assert envelope["ok"] is False
+    assert output.read_bytes() == b"keep"
+
+
+def test_apply_cleans_new_copy_if_success_response_construction_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    patch = bridge_module.plan_zone_volume_patch(OFFICIAL_PRJ, 1, "650.0")
+    output = tmp_path / "copy.prj"
+
+    def fail(_application, _project):
+        raise RuntimeError("secret response failure")
+
+    monkeypatch.setattr(bridge_module, "_build_apply_result", fail)
+    envelope = handle_request(
+        _request(
+            OFFICIAL_PRJ,
+            operation="apply_zone_volume_patch_to_copy",
+            output_path=str(output),
+            patch=patch.to_dict(),
+        )
+    )
+
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "bridge_internal_error"
+    assert not output.exists()
+    assert "secret" not in json.dumps(envelope)
+
+
+def test_volume_token_and_request_size_limits_are_enforced() -> None:
+    request = _request(
+        OFFICIAL_PRJ,
+        operation="plan_zone_volume_patch",
+        contam_number=1,
+        new_volume_token="1" * 81,
+    )
+    envelope = handle_request(request)
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "bridge_request_invalid"
+    assert MAX_REQUEST_BYTES == 128 * 1024

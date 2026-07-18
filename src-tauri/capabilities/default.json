@@ -1,7 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal capability for the local workbench and its controlled PRJ open command.",
+  "description": "Minimal capability for controlled PRJ open and reviewed copy-only volume patches.",
   "windows": ["main"],
-  "permissions": ["core:default", "allow-select-and-read-prj-zones"]
+  "permissions": [
+    "core:default",
+    "allow-select-and-read-prj-zones",
+    "allow-plan-zone-volume-patch",
+    "allow-apply-zone-volume-patch-to-copy"
+  ]
 }

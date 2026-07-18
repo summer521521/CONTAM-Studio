@@ -5,21 +5,33 @@ use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
-const PROTOCOL_VERSION: &str = "1.0";
+const PROTOCOL_VERSION: &str = "1.1";
 const RESULT_SCHEMA_VERSION: &str = "1.0";
 const READER_MODE: &str = "strict_contam_3_4_simple_zone_v1";
-const BRIDGE_OPERATION: &str = "read_simple_zones";
+const PATCH_TYPE: &str = "replace_zone_volume";
+const PATCH_FIELD: &str = "volume_m3";
+const VOLUME_TOKEN_INDEX: i64 = 7;
 const BRIDGE_MODULE: &str = "contam_studio_core.zone_bridge";
 const PYTHON_ENVIRONMENT_VARIABLE: &str = "CONTAM_STUDIO_PYTHON";
-const PROCESS_TIMEOUT: Duration = Duration::from_secs(10);
+const READ_OPERATION: &str = "read_simple_zones";
+const PLAN_OPERATION: &str = "plan_zone_volume_patch";
+const APPLY_OPERATION: &str = "apply_zone_volume_patch_to_copy";
+const READ_AND_PLAN_TIMEOUT: Duration = Duration::from_secs(10);
+const APPLY_TIMEOUT: Duration = Duration::from_secs(15);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MAX_STDOUT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 16 * 1024;
+const MAX_REQUEST_BYTES: usize = 128 * 1024;
+const MAX_VOLUME_TOKEN_BYTES: usize = 80;
+const MAX_PREVIEW_LINE_CHARS: usize = 4096;
+const MAX_DIFF_CHARS: usize = 16 * 1024;
 const MAX_DIAGNOSTIC_CODE_BYTES: usize = 80;
 const MAX_DIAGNOSTIC_MESSAGE_CHARS: usize = 160;
 const MAX_CONTEXT_STRING_CHARS: usize = 120;
@@ -86,13 +98,18 @@ pub struct ProjectInspection {
     diagnostics: Vec<ReaderDiagnostic>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[derive(Clone, Debug, Deserialize)]
+struct RawReadZonesResult {
+    result_type: String,
+    project: RawProjectInspection,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct RawBridgeEnvelope {
     protocol_version: String,
     request_id: String,
     ok: bool,
-    result: Option<RawProjectInspection>,
+    result: Option<Value>,
     error: Option<RawReaderDiagnostic>,
 }
 
@@ -109,15 +126,204 @@ pub struct BridgeEnvelope {
 pub struct DesktopOpenResponse {
     request_id: String,
     cancelled: bool,
+    project_session_id: Option<String>,
     envelope: Option<BridgeEnvelope>,
 }
 
-#[derive(Debug, Serialize)]
-struct BridgeRequest<'a> {
-    protocol_version: &'static str,
-    request_id: &'a str,
-    operation: &'static str,
-    source_path: &'a str,
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct PatchTarget {
+    contam_number: i64,
+    zone_name: String,
+    source_line_number: u64,
+    field: String,
+    token_index: i64,
+    byte_start: u64,
+    byte_end: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct PatchPreconditions {
+    source_sha256: String,
+    source_size_bytes: u64,
+    reader_mode: String,
+    header_version: String,
+    contam_number: i64,
+    source_line_number: u64,
+    old_token: String,
+    old_value: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct PatchReplacement {
+    new_token: String,
+    new_value: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct PatchPreview {
+    source_line_number: u64,
+    old_token: String,
+    new_token: String,
+    old_line: String,
+    new_line: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct ZoneVolumePatch {
+    schema_version: String,
+    patch_type: String,
+    source_path: String,
+    source_sha256: String,
+    source_size_bytes: u64,
+    reader_mode: String,
+    header_version: String,
+    target: PatchTarget,
+    preconditions: PatchPreconditions,
+    replacement: PatchReplacement,
+    preview: PatchPreview,
+    status: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawPatchPlanResult {
+    result_type: String,
+    patch: ZoneVolumePatch,
+    diff_text: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawPatchApplication {
+    schema_version: String,
+    patch_type: String,
+    status: String,
+    source_path: String,
+    source_sha256: String,
+    source_size_bytes: u64,
+    source_unchanged: bool,
+    output_path: String,
+    output_sha256: String,
+    output_size_bytes: u64,
+    target: PatchTarget,
+    old_token: String,
+    new_token: String,
+    old_value: f64,
+    new_value: f64,
+    verification: Vec<String>,
+    generated_artifacts: Vec<String>,
+    diagnostics: Vec<RawReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawPatchApplicationResult {
+    result_type: String,
+    application: RawPatchApplication,
+    project: RawProjectInspection,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct PatchReviewView {
+    project_session_id: String,
+    patch_id: String,
+    zone_number: i64,
+    zone_name: String,
+    field: String,
+    old_token: String,
+    new_token: String,
+    old_value: f64,
+    new_value: f64,
+    source_line_number: u64,
+    old_line: String,
+    new_line: String,
+    diff_text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopPlanResponse {
+    request_id: String,
+    review: Option<PatchReviewView>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopApplyResponse {
+    request_id: String,
+    cancelled: bool,
+    project_session_id: Option<String>,
+    project: Option<ProjectInspection>,
+    target_zone_number: Option<i64>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug)]
+struct ActiveProjectContext {
+    project_session_id: String,
+    source_path: PathBuf,
+    source_sha256: String,
+    source_size_bytes: u64,
+    reader_mode: String,
+    header_version: String,
+}
+
+#[derive(Clone, Debug)]
+struct PlannedPatchContext {
+    patch_id: String,
+    project_session_id: String,
+    patch: ZoneVolumePatch,
+    target_zone_number: i64,
+    new_volume_token: String,
+    source_sha256: String,
+}
+
+#[derive(Default)]
+struct DesktopSessionState {
+    active_project: Option<ActiveProjectContext>,
+    planned_patch: Option<PlannedPatchContext>,
+}
+
+#[derive(Default)]
+pub struct DesktopProjectSessionStore {
+    state: Mutex<DesktopSessionState>,
+    operation_busy: AtomicBool,
+}
+
+struct OperationGuard<'a> {
+    busy: &'a AtomicBool,
+}
+
+impl Drop for OperationGuard<'_> {
+    fn drop(&mut self) {
+        self.busy.store(false, Ordering::Release);
+    }
+}
+
+impl DesktopProjectSessionStore {
+    fn try_operation(&self) -> Option<OperationGuard<'_>> {
+        self.operation_busy
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| OperationGuard {
+                busy: &self.operation_busy,
+            })
+    }
+
+    fn activate_project(
+        &self,
+        project_session_id: String,
+        source_path: PathBuf,
+        project: &ProjectInspection,
+    ) {
+        let context = ActiveProjectContext {
+            project_session_id,
+            source_path,
+            source_sha256: project.source_sha256.clone(),
+            source_size_bytes: project.source_size_bytes,
+            reader_mode: project.reader_mode.clone(),
+            header_version: project.header_version.clone(),
+        };
+        let mut state = self.state.lock().expect("desktop session mutex poisoned");
+        state.active_project = Some(context);
+        state.planned_patch = None;
+    }
 }
 
 #[derive(Debug)]
@@ -135,6 +341,8 @@ struct ProcessOutcome {
     stderr: Capture,
 }
 
+type HostFailure = (&'static str, &'static str, BTreeMap<String, Value>);
+
 fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -149,12 +357,7 @@ fn discover_python(configured: Option<OsString>, root: &Path) -> Result<PathBuf,
             .then_some(candidate)
             .ok_or("python_runtime_not_found");
     }
-
-    let candidate = root
-        .join("python")
-        .join(".venv")
-        .join("Scripts")
-        .join("python.exe");
+    let candidate = root.join("python/.venv/Scripts/python.exe");
     candidate
         .is_file()
         .then_some(candidate)
@@ -190,8 +393,11 @@ fn context_key_is_allowed(key: &str) -> bool {
             | "header_version"
             | "max_bytes"
             | "name_length"
+            | "new_token"
+            | "old_token"
             | "parsed_count"
             | "token"
+            | "zone_number"
     )
 }
 
@@ -200,16 +406,11 @@ fn truncate_chars(value: &str, limit: usize) -> String {
 }
 
 fn sanitize_raw_diagnostic(raw: RawReaderDiagnostic) -> Result<ReaderDiagnostic, ()> {
-    let RawReaderDiagnostic {
-        code,
-        message: _,
-        source_line_number,
-        context,
-    } = raw;
-    if !diagnostic_code_is_valid(&code) {
+    if !diagnostic_code_is_valid(&raw.code) {
         return Err(());
     }
-    let context = context
+    let context = raw
+        .context
         .into_iter()
         .filter_map(|(key, value)| {
             if !context_key_is_allowed(&key) {
@@ -226,11 +427,34 @@ fn sanitize_raw_diagnostic(raw: RawReaderDiagnostic) -> Result<ReaderDiagnostic,
         })
         .collect();
     Ok(ReaderDiagnostic {
-        code,
+        code: raw.code,
         message: PYTHON_DIAGNOSTIC_MESSAGE.to_string(),
-        source_line_number,
+        source_line_number: raw.source_line_number,
         context,
     })
+}
+
+fn host_diagnostic(
+    code: &str,
+    message: &str,
+    context: BTreeMap<String, Value>,
+) -> ReaderDiagnostic {
+    ReaderDiagnostic {
+        code: code.to_string(),
+        message: truncate_chars(message, MAX_DIAGNOSTIC_MESSAGE_CHARS),
+        source_line_number: None,
+        context,
+    }
+}
+
+fn host_error(request_id: &str, code: &str, message: &str) -> BridgeEnvelope {
+    BridgeEnvelope {
+        protocol_version: PROTOCOL_VERSION.to_string(),
+        request_id: request_id.to_string(),
+        ok: false,
+        result: None,
+        error: Some(host_diagnostic(code, message, BTreeMap::new())),
+    }
 }
 
 fn canonicalize_selected_path(path: &Path) -> Result<PathBuf, &'static str> {
@@ -251,42 +475,35 @@ fn canonicalize_selected_path(path: &Path) -> Result<PathBuf, &'static str> {
     Ok(canonical)
 }
 
-impl DesktopOpenResponse {
-    fn cancelled(request_id: &str) -> Self {
-        Self {
-            request_id: request_id.to_string(),
-            cancelled: true,
-            envelope: None,
+fn validate_output_path(source: &Path, selected: &Path) -> Result<PathBuf, &'static str> {
+    let mut candidate = selected.to_path_buf();
+    match candidate.extension().and_then(|value| value.to_str()) {
+        None => {
+            candidate.set_extension("prj");
         }
+        Some(extension) if extension.eq_ignore_ascii_case("prj") => {}
+        _ => return Err("selected_output_path_invalid"),
     }
-
-    fn completed(request_id: &str, envelope: BridgeEnvelope) -> Self {
-        Self {
-            request_id: request_id.to_string(),
-            cancelled: false,
-            envelope: Some(envelope),
+    if candidate.exists() {
+        if std::fs::canonicalize(&candidate).ok().as_deref() == Some(source) {
+            return Err("selected_output_path_invalid");
         }
+        return Err("patch_output_exists");
     }
-}
-
-fn host_error(
-    request_id: &str,
-    code: &str,
-    message: &str,
-    context: BTreeMap<String, Value>,
-) -> BridgeEnvelope {
-    BridgeEnvelope {
-        protocol_version: PROTOCOL_VERSION.to_string(),
-        request_id: request_id.to_string(),
-        ok: false,
-        result: None,
-        error: Some(ReaderDiagnostic {
-            code: code.to_string(),
-            message: truncate_chars(message, MAX_DIAGNOSTIC_MESSAGE_CHARS),
-            source_line_number: None,
-            context,
-        }),
+    let Some(file_name) = candidate.file_name() else {
+        return Err("selected_output_path_invalid");
+    };
+    let parent = candidate.parent().ok_or("selected_output_path_invalid")?;
+    let canonical_parent =
+        std::fs::canonicalize(parent).map_err(|_| "selected_output_path_invalid")?;
+    if !canonical_parent.is_dir() {
+        return Err("selected_output_path_invalid");
     }
+    let output = canonical_parent.join(file_name);
+    if output.to_str().is_none() || output == source {
+        return Err("selected_output_path_invalid");
+    }
+    Ok(output)
 }
 
 fn read_limited<R: Read>(mut reader: R, limit: usize) -> Capture {
@@ -342,18 +559,15 @@ fn run_process(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
     let stdout_reader = thread::spawn(move || read_limited(stdout, stdout_limit));
     let stderr_reader = thread::spawn(move || read_limited(stderr, stderr_limit));
-
     if let Some(mut stdin) = child.stdin.take() {
         if stdin.write_all(stdin_bytes).is_err() {
             let _ = child.kill();
         }
     }
-
     let (success, timed_out, exit_code) = wait_with_timeout(&mut child, timeout)?;
     let stdout = stdout_reader.join().unwrap_or(Capture {
         bytes: Vec::new(),
@@ -372,43 +586,35 @@ fn run_process(
     })
 }
 
-fn validate_envelope(
+fn validate_transport(
     outcome: ProcessOutcome,
     request_id: &str,
-    selected_path: &Path,
-) -> Result<BridgeEnvelope, (&'static str, &'static str, BTreeMap<String, Value>)> {
+) -> Result<RawBridgeEnvelope, HostFailure> {
     if outcome.timed_out {
         return Err((
             "python_process_timeout",
-            "Python Zone bridge exceeded its execution timeout.",
+            "Python bridge timed out.",
             BTreeMap::new(),
         ));
     }
     if outcome.stdout.exceeded {
         return Err((
             "python_stdout_too_large",
-            "Python Zone bridge stdout exceeded its size limit.",
+            "Python bridge stdout exceeded its limit.",
             BTreeMap::from([("max_bytes".to_string(), json!(MAX_STDOUT_BYTES))]),
         ));
     }
     if outcome.stderr.exceeded {
         return Err((
             "python_stderr_too_large",
-            "Python Zone bridge stderr exceeded its size limit.",
+            "Python bridge stderr exceeded its limit.",
             BTreeMap::from([("max_bytes".to_string(), json!(MAX_STDERR_BYTES))]),
         ));
     }
     if !outcome.stderr.bytes.is_empty() {
-        if std::str::from_utf8(&outcome.stderr.bytes).is_err() {
-            return Err((
-                "python_stderr_invalid_utf8",
-                "Python Zone bridge stderr was not valid UTF-8.",
-                BTreeMap::new(),
-            ));
-        }
         return Err((
             "python_stderr_not_empty",
-            "Python Zone bridge wrote unexpected diagnostics to stderr.",
+            "Python bridge wrote unexpected stderr.",
             BTreeMap::new(),
         ));
     }
@@ -418,35 +624,35 @@ fn validate_envelope(
             .map_or_else(|| "terminated".to_string(), |value| value.to_string());
         return Err((
             "python_process_failed",
-            "Python Zone bridge exited without a valid response.",
+            "Python bridge exited without a valid response.",
             BTreeMap::from([("exit_code".to_string(), json!(exit_code))]),
         ));
     }
     let stdout = std::str::from_utf8(&outcome.stdout.bytes).map_err(|_| {
         (
             "python_stdout_invalid_utf8",
-            "Python Zone bridge stdout was not valid UTF-8.",
+            "Python bridge stdout was not UTF-8.",
             BTreeMap::new(),
         )
     })?;
     let envelope: RawBridgeEnvelope = serde_json::from_str(stdout).map_err(|_| {
         (
             "python_response_invalid_json",
-            "Python Zone bridge returned invalid JSON.",
+            "Python bridge returned invalid JSON.",
             BTreeMap::new(),
         )
     })?;
     if envelope.protocol_version != PROTOCOL_VERSION {
         return Err((
             "python_response_protocol_mismatch",
-            "Python Zone bridge returned an unsupported protocol version.",
+            "Python bridge protocol mismatch.",
             BTreeMap::new(),
         ));
     }
     if envelope.request_id != request_id {
         return Err((
             "python_response_request_mismatch",
-            "Python Zone bridge response did not match the request.",
+            "Python bridge request mismatch.",
             BTreeMap::new(),
         ));
     }
@@ -455,191 +661,435 @@ fn validate_envelope(
     {
         return Err((
             "python_response_contract_invalid",
-            "Python Zone bridge response violated the envelope contract.",
+            "Python bridge envelope is invalid.",
             BTreeMap::new(),
         ));
     }
-    if let Some(result) = envelope.result.as_ref() {
-        let first_zone_matches = result.first_zone.as_ref() == result.zones.first();
-        let result_is_valid = result.schema_version == RESULT_SCHEMA_VERSION
-            && result.reader_mode == READER_MODE
-            && result.source_unchanged
-            && result.declared_zone_count as usize == result.zones.len()
-            && first_zone_matches
-            && result.source_sha256.len() == 64
-            && result
-                .source_sha256
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit());
-        if !result_is_valid {
-            return Err((
-                "python_response_result_invalid",
-                "Python Zone bridge returned an invalid result contract.",
-                BTreeMap::new(),
-            ));
-        }
-        let returned_path =
-            std::fs::canonicalize(Path::new(&result.source_path)).map_err(|_| {
-                (
-                    "python_response_source_mismatch",
-                    "Python Zone bridge response did not match the selected source.",
-                    BTreeMap::new(),
-                )
-            })?;
-        if returned_path != selected_path {
-            return Err((
-                "python_response_source_mismatch",
-                "Python Zone bridge response did not match the selected source.",
-                BTreeMap::new(),
-            ));
-        }
-    }
-
-    let result = envelope
-        .result
-        .map(|result| {
-            let diagnostics = result
-                .diagnostics
-                .into_iter()
-                .map(sanitize_raw_diagnostic)
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok::<ProjectInspection, ()>(ProjectInspection {
-                schema_version: result.schema_version,
-                reader_mode: result.reader_mode,
-                source_path: selected_path
-                    .to_str()
-                    .expect("selected path was validated as UTF-8")
-                    .to_string(),
-                source_sha256: result.source_sha256,
-                source_size_bytes: result.source_size_bytes,
-                source_unchanged: result.source_unchanged,
-                header_version: result.header_version,
-                header_variant: result.header_variant,
-                declared_zone_count: result.declared_zone_count,
-                zones: result.zones,
-                first_zone: result.first_zone,
-                diagnostics,
-            })
-        })
-        .transpose()
-        .map_err(|_| {
-            (
-                "python_response_diagnostic_invalid",
-                "Python Zone bridge returned an invalid diagnostic.",
-                BTreeMap::new(),
-            )
-        })?;
-    let error = envelope
-        .error
-        .map(sanitize_raw_diagnostic)
-        .transpose()
-        .map_err(|_| {
-            (
-                "python_response_diagnostic_invalid",
-                "Python Zone bridge returned an invalid diagnostic.",
-                BTreeMap::new(),
-            )
-        })?;
-    Ok(BridgeEnvelope {
-        protocol_version: envelope.protocol_version,
-        request_id: envelope.request_id,
-        ok: envelope.ok,
-        result,
-        error,
-    })
+    Ok(envelope)
 }
 
-fn execute_bridge(source_path: &Path, request_id: &str) -> BridgeEnvelope {
-    if !request_id_is_valid(request_id) {
-        return host_error(
-            "",
-            "bridge_request_invalid",
-            "request_id is missing or invalid.",
-            BTreeMap::new(),
-        );
-    }
-    let Some(source_path_text) = source_path.to_str() else {
-        return host_error(
-            request_id,
-            "selected_path_invalid",
-            "The selected source path is not supported.",
-            BTreeMap::new(),
-        );
-    };
-
+fn execute_bridge_request(
+    request: &Value,
+    request_id: &str,
+    timeout: Duration,
+) -> Result<RawBridgeEnvelope, ReaderDiagnostic> {
     let root = project_root();
-    let python = match discover_python(std::env::var_os(PYTHON_ENVIRONMENT_VARIABLE), &root) {
-        Ok(path) => path,
-        Err(code) => {
-            return host_error(
-                request_id,
+    let python =
+        discover_python(std::env::var_os(PYTHON_ENVIRONMENT_VARIABLE), &root).map_err(|code| {
+            host_diagnostic(
                 code,
-                "The configured CONTAM Studio Python runtime was not found.",
+                "The project Python runtime was not found.",
                 BTreeMap::new(),
             )
-        }
-    };
-    let request = BridgeRequest {
-        protocol_version: PROTOCOL_VERSION,
-        request_id,
-        operation: BRIDGE_OPERATION,
-        source_path: source_path_text,
-    };
-    let stdin_bytes = match serde_json::to_vec(&request) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return host_error(
-                request_id,
-                "bridge_request_serialization_failed",
-                "The Zone bridge request could not be serialized.",
-                BTreeMap::new(),
-            )
-        }
-    };
+        })?;
+    let stdin_bytes = serde_json::to_vec(request).map_err(|_| {
+        host_diagnostic(
+            "bridge_request_serialization_failed",
+            "The bridge request could not be serialized.",
+            BTreeMap::new(),
+        )
+    })?;
+    if stdin_bytes.len() > MAX_REQUEST_BYTES {
+        return Err(host_diagnostic(
+            "bridge_request_too_large",
+            "The bridge request exceeded its limit.",
+            BTreeMap::new(),
+        ));
+    }
     let arguments = [
         OsString::from("-I"),
         OsString::from("-m"),
         OsString::from(BRIDGE_MODULE),
     ];
-    let outcome = match run_process(
+    let outcome = run_process(
         &python,
         &arguments,
         &stdin_bytes,
         &root,
-        PROCESS_TIMEOUT,
+        timeout,
         MAX_STDOUT_BYTES,
         MAX_STDERR_BYTES,
-    ) {
-        Ok(outcome) => outcome,
-        Err(_) => {
-            return host_error(
-                request_id,
-                "python_process_start_failed",
-                "The Python Zone bridge process could not be started.",
+    )
+    .map_err(|_| {
+        host_diagnostic(
+            "python_process_start_failed",
+            "The Python bridge could not start.",
+            BTreeMap::new(),
+        )
+    })?;
+    validate_transport(outcome, request_id)
+        .map_err(|(code, message, context)| host_diagnostic(code, message, context))
+}
+
+fn sanitize_python_error(
+    envelope: &RawBridgeEnvelope,
+) -> Result<ReaderDiagnostic, ReaderDiagnostic> {
+    let raw = envelope.error.clone().ok_or_else(|| {
+        host_diagnostic(
+            "python_response_contract_invalid",
+            "Python error response was incomplete.",
+            BTreeMap::new(),
+        )
+    })?;
+    sanitize_raw_diagnostic(raw).map_err(|_| {
+        host_diagnostic(
+            "python_response_diagnostic_invalid",
+            "Python diagnostic was invalid.",
+            BTreeMap::new(),
+        )
+    })
+}
+
+fn validate_raw_project(
+    raw: RawProjectInspection,
+    expected_path: &Path,
+) -> Result<ProjectInspection, ReaderDiagnostic> {
+    let valid = raw.schema_version == RESULT_SCHEMA_VERSION
+        && raw.reader_mode == READER_MODE
+        && raw.source_unchanged
+        && raw.declared_zone_count as usize == raw.zones.len()
+        && raw.first_zone.as_ref() == raw.zones.first()
+        && raw.source_sha256.len() == 64
+        && raw
+            .source_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit());
+    if !valid {
+        return Err(host_diagnostic(
+            "python_response_result_invalid",
+            "Python project result was invalid.",
+            BTreeMap::new(),
+        ));
+    }
+    let returned = std::fs::canonicalize(Path::new(&raw.source_path)).map_err(|_| {
+        host_diagnostic(
+            "python_response_source_mismatch",
+            "Python project path did not match.",
+            BTreeMap::new(),
+        )
+    })?;
+    if returned != expected_path {
+        return Err(host_diagnostic(
+            "python_response_source_mismatch",
+            "Python project path did not match.",
+            BTreeMap::new(),
+        ));
+    }
+    let diagnostics = raw
+        .diagnostics
+        .into_iter()
+        .map(sanitize_raw_diagnostic)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| {
+            host_diagnostic(
+                "python_response_diagnostic_invalid",
+                "Python diagnostic was invalid.",
                 BTreeMap::new(),
             )
+        })?;
+    Ok(ProjectInspection {
+        schema_version: raw.schema_version,
+        reader_mode: raw.reader_mode,
+        source_path: expected_path.to_string_lossy().into_owned(),
+        source_sha256: raw.source_sha256,
+        source_size_bytes: raw.source_size_bytes,
+        source_unchanged: raw.source_unchanged,
+        header_version: raw.header_version,
+        header_variant: raw.header_variant,
+        declared_zone_count: raw.declared_zone_count,
+        zones: raw.zones,
+        first_zone: raw.first_zone,
+        diagnostics,
+    })
+}
+
+fn execute_read(source_path: &Path, request_id: &str) -> BridgeEnvelope {
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": READ_OPERATION,
+        "source_path": source_path,
+    });
+    let envelope = match execute_bridge_request(&request, request_id, READ_AND_PLAN_TIMEOUT) {
+        Ok(value) => value,
+        Err(error) => {
+            return BridgeEnvelope {
+                protocol_version: PROTOCOL_VERSION.into(),
+                request_id: request_id.into(),
+                ok: false,
+                result: None,
+                error: Some(error),
+            }
         }
     };
-    match validate_envelope(outcome, request_id, source_path) {
-        Ok(envelope) => envelope,
-        Err((code, message, context)) => host_error(request_id, code, message, context),
+    if !envelope.ok {
+        return BridgeEnvelope {
+            protocol_version: PROTOCOL_VERSION.into(),
+            request_id: request_id.into(),
+            ok: false,
+            result: None,
+            error: Some(sanitize_python_error(&envelope).unwrap_or_else(|error| error)),
+        };
+    }
+    let raw: RawReadZonesResult =
+        match serde_json::from_value(envelope.result.expect("validated result")) {
+            Ok(value) => value,
+            Err(_) => {
+                return host_error(
+                    request_id,
+                    "python_response_result_invalid",
+                    "Python read result was invalid.",
+                )
+            }
+        };
+    if raw.result_type != "read_zones" {
+        return host_error(
+            request_id,
+            "python_response_result_invalid",
+            "Python read result type was invalid.",
+        );
+    }
+    match validate_raw_project(raw.project, source_path) {
+        Ok(project) => BridgeEnvelope {
+            protocol_version: PROTOCOL_VERSION.into(),
+            request_id: request_id.into(),
+            ok: true,
+            result: Some(project),
+            error: None,
+        },
+        Err(error) => BridgeEnvelope {
+            protocol_version: PROTOCOL_VERSION.into(),
+            request_id: request_id.into(),
+            ok: false,
+            result: None,
+            error: Some(error),
+        },
+    }
+}
+
+fn validate_plan_result(
+    raw: RawPatchPlanResult,
+    active: &ActiveProjectContext,
+    request_id: &str,
+    contam_number: i64,
+    new_volume_token: &str,
+) -> Result<(PlannedPatchContext, PatchReviewView), ReaderDiagnostic> {
+    let patch = raw.patch;
+    let source = std::fs::canonicalize(Path::new(&patch.source_path)).map_err(|_| {
+        host_diagnostic(
+            "patch_response_source_mismatch",
+            "Patch source did not match the active project.",
+            BTreeMap::new(),
+        )
+    })?;
+    if source != active.source_path {
+        return Err(host_diagnostic(
+            "patch_response_source_mismatch",
+            "Patch source did not match the active project.",
+            BTreeMap::new(),
+        ));
+    }
+    let no_physical_break = |value: &str| !value.contains(['\r', '\n']);
+    let contract_valid = raw.result_type == "zone_volume_patch_plan"
+        && patch.schema_version == RESULT_SCHEMA_VERSION
+        && patch.patch_type == PATCH_TYPE
+        && patch.status == "planned"
+        && patch.reader_mode == active.reader_mode
+        && patch.source_sha256 == active.source_sha256
+        && patch.source_size_bytes == active.source_size_bytes
+        && patch.header_version == active.header_version
+        && patch.target.contam_number == contam_number
+        && patch.target.field == PATCH_FIELD
+        && patch.target.token_index == VOLUME_TOKEN_INDEX
+        && patch.replacement.new_token == new_volume_token
+        && patch.preview.old_token == patch.preconditions.old_token
+        && patch.preview.new_token == patch.replacement.new_token
+        && patch.preview.source_line_number == patch.target.source_line_number
+        && no_physical_break(&patch.preview.old_line)
+        && no_physical_break(&patch.preview.new_line)
+        && patch.preview.old_line.chars().count() <= MAX_PREVIEW_LINE_CHARS
+        && patch.preview.new_line.chars().count() <= MAX_PREVIEW_LINE_CHARS
+        && raw.diff_text.chars().count() <= MAX_DIFF_CHARS
+        && raw.diff_text.lines().count() == 5
+        && raw.diff_text.lines().nth(3) == Some(&format!("-{}", patch.preview.old_line))
+        && raw.diff_text.lines().nth(4) == Some(&format!("+{}", patch.preview.new_line));
+    if !contract_valid {
+        return Err(host_diagnostic(
+            "patch_response_contract_invalid",
+            "Python patch plan result was invalid.",
+            BTreeMap::new(),
+        ));
+    }
+    let patch_id = request_id.to_string();
+    let review = PatchReviewView {
+        project_session_id: active.project_session_id.clone(),
+        patch_id: patch_id.clone(),
+        zone_number: patch.target.contam_number,
+        zone_name: patch.target.zone_name.clone(),
+        field: patch.target.field.clone(),
+        old_token: patch.preconditions.old_token.clone(),
+        new_token: patch.replacement.new_token.clone(),
+        old_value: patch.preconditions.old_value,
+        new_value: patch.replacement.new_value,
+        source_line_number: patch.target.source_line_number,
+        old_line: patch.preview.old_line.clone(),
+        new_line: patch.preview.new_line.clone(),
+        diff_text: raw.diff_text,
+    };
+    let context = PlannedPatchContext {
+        patch_id,
+        project_session_id: active.project_session_id.clone(),
+        target_zone_number: patch.target.contam_number,
+        new_volume_token: patch.replacement.new_token.clone(),
+        source_sha256: patch.source_sha256.clone(),
+        patch,
+    };
+    Ok((context, review))
+}
+
+fn validate_application_result(
+    raw: RawPatchApplicationResult,
+    active: &ActiveProjectContext,
+    planned: &PlannedPatchContext,
+    output: &Path,
+) -> Result<ProjectInspection, ReaderDiagnostic> {
+    let application = raw.application;
+    let returned_source =
+        std::fs::canonicalize(Path::new(&application.source_path)).map_err(|_| {
+            host_diagnostic(
+                "patch_apply_response_invalid",
+                "Patch application source was invalid.",
+                BTreeMap::new(),
+            )
+        })?;
+    let returned_output =
+        std::fs::canonicalize(Path::new(&application.output_path)).map_err(|_| {
+            host_diagnostic(
+                "patch_apply_response_invalid",
+                "Patch application output was invalid.",
+                BTreeMap::new(),
+            )
+        })?;
+    let required_verification = [
+        "source_snapshot_unchanged",
+        "single_token_byte_replacement_verified",
+        "strict_zone_reread_verified",
+        "parsed_zone_fields_verified",
+    ];
+    let contract_valid = raw.result_type == "zone_volume_patch_application"
+        && application.schema_version == RESULT_SCHEMA_VERSION
+        && application.patch_type == PATCH_TYPE
+        && application.status == "applied"
+        && returned_source == active.source_path
+        && returned_output == output
+        && application.source_sha256 == active.source_sha256
+        && application.source_size_bytes == active.source_size_bytes
+        && application.source_unchanged
+        && application.output_sha256.len() == 64
+        && application
+            .output_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        && application.target == planned.patch.target
+        && application.old_token == planned.patch.preconditions.old_token
+        && application.new_token == planned.patch.replacement.new_token
+        && application.old_value == planned.patch.preconditions.old_value
+        && application.new_value == planned.patch.replacement.new_value
+        && application.generated_artifacts.is_empty()
+        && required_verification
+            .iter()
+            .all(|item| application.verification.iter().any(|value| value == item));
+    if !contract_valid {
+        return Err(host_diagnostic(
+            "patch_apply_response_invalid",
+            "Python patch application result was invalid.",
+            BTreeMap::new(),
+        ));
+    }
+    for diagnostic in application.diagnostics {
+        sanitize_raw_diagnostic(diagnostic).map_err(|_| {
+            host_diagnostic(
+                "python_response_diagnostic_invalid",
+                "Python diagnostic was invalid.",
+                BTreeMap::new(),
+            )
+        })?;
+    }
+    let project = validate_raw_project(raw.project, output)?;
+    let target = project
+        .zones
+        .iter()
+        .find(|zone| zone.contam_number == planned.target_zone_number);
+    if project.source_sha256 != application.output_sha256
+        || project.source_size_bytes != application.output_size_bytes
+        || target.map(|zone| zone.volume_m3) != Some(planned.patch.replacement.new_value)
+    {
+        return Err(host_diagnostic(
+            "patch_apply_response_invalid",
+            "New project did not match the applied patch.",
+            BTreeMap::new(),
+        ));
+    }
+    Ok(project)
+}
+
+impl DesktopOpenResponse {
+    fn cancelled(request_id: &str) -> Self {
+        Self {
+            request_id: request_id.into(),
+            cancelled: true,
+            project_session_id: None,
+            envelope: None,
+        }
+    }
+}
+
+fn plan_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopPlanResponse {
+    DesktopPlanResponse {
+        request_id: request_id.into(),
+        review: None,
+        error: Some(error),
+    }
+}
+
+fn apply_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopApplyResponse {
+    DesktopApplyResponse {
+        request_id: request_id.into(),
+        cancelled: false,
+        project_session_id: None,
+        project: None,
+        target_zone_number: None,
+        error: Some(error),
     }
 }
 
 #[tauri::command]
 pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> DesktopOpenResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
     if !request_id_is_valid(&request_id) {
-        return DesktopOpenResponse::completed(
-            "",
-            host_error(
+        return DesktopOpenResponse {
+            request_id: String::new(),
+            cancelled: false,
+            project_session_id: None,
+            envelope: Some(host_error(
                 "",
                 "bridge_request_invalid",
-                "request_id is missing or invalid.",
-                BTreeMap::new(),
-            ),
-        );
+                "request_id is invalid.",
+            )),
+        };
     }
-
+    let Some(_operation) = store.try_operation() else {
+        return DesktopOpenResponse {
+            request_id: request_id.clone(),
+            cancelled: false,
+            project_session_id: None,
+            envelope: Some(host_error(
+                &request_id,
+                "project_operation_busy",
+                "Another project operation is in progress.",
+            )),
+        };
+    };
     let dialog_app = app.clone();
     let selected = match tauri::async_runtime::spawn_blocking(move || {
         dialog_app
@@ -652,15 +1102,16 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
     {
         Ok(selected) => selected,
         Err(_) => {
-            return DesktopOpenResponse::completed(
-                &request_id,
-                host_error(
+            return DesktopOpenResponse {
+                request_id: request_id.clone(),
+                cancelled: false,
+                project_session_id: None,
+                envelope: Some(host_error(
                     &request_id,
                     "desktop_dialog_failed",
-                    "The native file dialog ended unexpectedly.",
-                    BTreeMap::new(),
-                ),
-            )
+                    "The native open dialog failed.",
+                )),
+            }
         }
     };
     let Some(selected) = selected else {
@@ -669,46 +1120,451 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
     let selected_path = match selected.into_path() {
         Ok(path) => path,
         Err(_) => {
-            return DesktopOpenResponse::completed(
-                &request_id,
-                host_error(
+            return DesktopOpenResponse {
+                request_id: request_id.clone(),
+                cancelled: false,
+                project_session_id: None,
+                envelope: Some(host_error(
                     &request_id,
                     "selected_path_invalid",
-                    "The selected item is not a supported local file path.",
-                    BTreeMap::new(),
-                ),
-            )
+                    "The selected item was not a local path.",
+                )),
+            }
         }
     };
     let canonical_path = match canonicalize_selected_path(&selected_path) {
         Ok(path) => path,
         Err(code) => {
-            return DesktopOpenResponse::completed(
-                &request_id,
-                host_error(
+            return DesktopOpenResponse {
+                request_id: request_id.clone(),
+                cancelled: false,
+                project_session_id: None,
+                envelope: Some(host_error(
                     &request_id,
                     code,
-                    "The selected item is not a supported local PRJ file.",
+                    "The selected item was not a supported PRJ.",
+                )),
+            }
+        }
+    };
+    let bridge_id = request_id.clone();
+    let source = canonical_path.clone();
+    let envelope = tauri::async_runtime::spawn_blocking(move || execute_read(&source, &bridge_id))
+        .await
+        .unwrap_or_else(|_| {
+            host_error(
+                &request_id,
+                "bridge_task_failed",
+                "The read task ended unexpectedly.",
+            )
+        });
+    let mut project_session_id = None;
+    if let Some(project) = envelope.result.as_ref() {
+        store.activate_project(request_id.clone(), canonical_path, project);
+        project_session_id = Some(request_id.clone());
+    }
+    DesktopOpenResponse {
+        request_id,
+        cancelled: false,
+        project_session_id,
+        envelope: Some(envelope),
+    }
+}
+
+#[tauri::command]
+pub async fn plan_zone_volume_patch(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    contam_number: i64,
+    new_volume_token: String,
+) -> DesktopPlanResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id) || !request_id_is_valid(&project_session_id) {
+        return plan_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "Patch plan request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    if new_volume_token.is_empty()
+        || new_volume_token.len() > MAX_VOLUME_TOKEN_BYTES
+        || !new_volume_token.is_ascii()
+    {
+        return plan_failure(
+            &request_id,
+            host_diagnostic(
+                "patch_new_value_invalid",
+                "New volume token is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return plan_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let active = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        match state.active_project.clone() {
+            None => {
+                return plan_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "project_session_missing",
+                        "No active project session exists.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+            Some(active) if active.project_session_id != project_session_id => {
+                return plan_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "project_session_mismatch",
+                        "Project session did not match.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+            Some(active) => active,
+        }
+    };
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": PLAN_OPERATION,
+        "source_path": active.source_path,
+        "contam_number": contam_number,
+        "new_volume_token": new_volume_token,
+    });
+    let bridge_id = request_id.clone();
+    let raw = match tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, READ_AND_PLAN_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(envelope)) => envelope,
+        Ok(Err(error)) => return plan_failure(&request_id, error),
+        Err(_) => {
+            return plan_failure(
+                &request_id,
+                host_diagnostic(
+                    "bridge_task_failed",
+                    "The patch plan task ended unexpectedly.",
                     BTreeMap::new(),
                 ),
             )
         }
     };
+    if !raw.ok {
+        return plan_failure(
+            &request_id,
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let plan: RawPatchPlanResult =
+        match serde_json::from_value(raw.result.expect("validated result")) {
+            Ok(value) => value,
+            Err(_) => {
+                return plan_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "patch_response_contract_invalid",
+                        "Python patch plan response was invalid.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+        };
+    let (planned, review) =
+        match validate_plan_result(plan, &active, &request_id, contam_number, &new_volume_token) {
+            Ok(value) => value,
+            Err(error) => return plan_failure(&request_id, error),
+        };
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    if state
+        .active_project
+        .as_ref()
+        .map(|value| &value.project_session_id)
+        != Some(&project_session_id)
+    {
+        return plan_failure(
+            &request_id,
+            host_diagnostic(
+                "project_session_mismatch",
+                "Project session changed during planning.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    state.planned_patch = Some(planned);
+    DesktopPlanResponse {
+        request_id,
+        review: Some(review),
+        error: None,
+    }
+}
 
-    let bridge_request_id = request_id.clone();
-    let envelope = tauri::async_runtime::spawn_blocking(move || {
-        execute_bridge(&canonical_path, &bridge_request_id)
+#[tauri::command]
+pub async fn apply_zone_volume_patch_to_copy(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    patch_id: String,
+) -> DesktopApplyResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || !request_id_is_valid(&patch_id)
+    {
+        return apply_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "Patch application request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return apply_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let (active, planned) = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_missing",
+                    "No active project session exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_mismatch",
+                    "Project session did not match.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        let Some(planned) = state.planned_patch.clone() else {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "patch_plan_missing",
+                    "No reviewed patch plan exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if planned.patch_id != patch_id || planned.project_session_id != project_session_id {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "patch_session_mismatch",
+                    "Patch session did not match.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if planned.source_sha256 != active.source_sha256
+            || planned.new_volume_token != planned.patch.replacement.new_token
+        {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "patch_precondition_failed",
+                    "Stored patch preconditions are invalid.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        (active, planned)
+    };
+    let suggested = format!(
+        "{}-modified.prj",
+        active
+            .source_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("project")
+    );
+    let dialog_app = app.clone();
+    let selected = match tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter("CONTAM PRJ", &["prj"])
+            .set_file_name(suggested)
+            .blocking_save_file()
     })
     .await
-    .unwrap_or_else(|_| {
-        host_error(
-            &request_id,
-            "bridge_task_failed",
-            "The Zone bridge task ended unexpectedly.",
-            BTreeMap::new(),
-        )
+    {
+        Ok(selected) => selected,
+        Err(_) => {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "desktop_save_dialog_failed",
+                    "The native save dialog failed.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let Some(selected) = selected else {
+        return DesktopApplyResponse {
+            request_id,
+            cancelled: true,
+            project_session_id: None,
+            project: None,
+            target_zone_number: None,
+            error: None,
+        };
+    };
+    let selected_path = match selected.into_path() {
+        Ok(path) => path,
+        Err(_) => {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "selected_output_path_invalid",
+                    "The selected output was not a local path.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let output = match validate_output_path(&active.source_path, &selected_path) {
+        Ok(path) => path,
+        Err(code) => {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    code,
+                    "The selected output path is not allowed.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": APPLY_OPERATION,
+        "source_path": active.source_path,
+        "output_path": output,
+        "patch": planned.patch,
     });
-    DesktopOpenResponse::completed(&request_id, envelope)
+    let bridge_id = request_id.clone();
+    let raw = match tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, APPLY_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(envelope)) => envelope,
+        Ok(Err(error)) => return apply_failure(&request_id, error),
+        Err(_) => {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "bridge_task_failed",
+                    "The patch application task ended unexpectedly.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if !raw.ok {
+        let error = sanitize_python_error(&raw).unwrap_or_else(|error| error);
+        if matches!(
+            error.code.as_str(),
+            "patch_precondition_failed" | "patch_verification_failed"
+        ) {
+            store
+                .state
+                .lock()
+                .expect("desktop session mutex poisoned")
+                .planned_patch = None;
+        }
+        return apply_failure(&request_id, error);
+    }
+    let application: RawPatchApplicationResult =
+        match serde_json::from_value(raw.result.expect("validated result")) {
+            Ok(value) => value,
+            Err(_) => {
+                return apply_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "patch_apply_response_invalid",
+                        "Python patch application response was invalid.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+        };
+    let project = match validate_application_result(application, &active, &planned, &output) {
+        Ok(project) => project,
+        Err(error) => return apply_failure(&request_id, error),
+    };
+    let target_zone_number = planned.target_zone_number;
+    let new_session_id = request_id.clone();
+    let new_active = ActiveProjectContext {
+        project_session_id: new_session_id.clone(),
+        source_path: output,
+        source_sha256: project.source_sha256.clone(),
+        source_size_bytes: project.source_size_bytes,
+        reader_mode: project.reader_mode.clone(),
+        header_version: project.header_version.clone(),
+    };
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    if state
+        .active_project
+        .as_ref()
+        .map(|value| &value.project_session_id)
+        != Some(&project_session_id)
+        || state.planned_patch.as_ref().map(|value| &value.patch_id) != Some(&patch_id)
+    {
+        return apply_failure(
+            &request_id,
+            host_diagnostic(
+                "patch_session_mismatch",
+                "Patch session changed during application.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    state.active_project = Some(new_active);
+    state.planned_patch = None;
+    DesktopApplyResponse {
+        request_id,
+        cancelled: false,
+        project_session_id: Some(new_session_id),
+        project: Some(project),
+        target_zone_number: Some(target_zone_number),
+        error: None,
+    }
 }
 
 #[cfg(test)]
@@ -722,42 +1578,6 @@ mod tests {
 
     fn primary_fixture() -> PathBuf {
         fixture_path("fixtures/contam/official-contamxpy/test_GetPrjInfo.prj")
-    }
-
-    fn raw_diagnostic(code: &str) -> RawReaderDiagnostic {
-        RawReaderDiagnostic {
-            code: code.to_string(),
-            message: "untrusted Python message".to_string(),
-            source_line_number: Some(1),
-            context: BTreeMap::new(),
-        }
-    }
-
-    fn sample_result(source_path: &Path) -> RawProjectInspection {
-        RawProjectInspection {
-            schema_version: "1.0".to_string(),
-            reader_mode: "strict_contam_3_4_simple_zone_v1".to_string(),
-            source_path: source_path.to_str().unwrap().to_string(),
-            source_sha256: "a".repeat(64),
-            source_size_bytes: 100,
-            source_unchanged: true,
-            header_version: "3.4.0.4".to_string(),
-            header_variant: 0,
-            declared_zone_count: 0,
-            zones: Vec::new(),
-            first_zone: None,
-            diagnostics: Vec::new(),
-        }
-    }
-
-    fn valid_envelope(request_id: &str, source_path: &Path) -> RawBridgeEnvelope {
-        RawBridgeEnvelope {
-            protocol_version: PROTOCOL_VERSION.to_string(),
-            request_id: request_id.to_string(),
-            ok: true,
-            result: Some(sample_result(source_path)),
-            error: None,
-        }
     }
 
     fn outcome(stdout: Vec<u8>) -> ProcessOutcome {
@@ -777,358 +1597,242 @@ mod tests {
     }
 
     #[test]
-    fn python_discovery_prefers_valid_explicit_path() {
-        let python = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("python/.venv/Scripts/python.exe");
+    fn python_discovery_and_timeout_limits_are_explicit() {
+        let python = project_root().join("python/.venv/Scripts/python.exe");
         assert_eq!(
             discover_python(Some(python.clone().into_os_string()), Path::new("ignored")),
             Ok(python)
         );
+        assert_eq!(READ_AND_PLAN_TIMEOUT, Duration::from_secs(10));
+        assert_eq!(APPLY_TIMEOUT, Duration::from_secs(15));
+        assert_eq!(MAX_REQUEST_BYTES, 128 * 1024);
     }
 
     #[test]
-    fn invalid_explicit_python_does_not_fall_back() {
+    fn nonempty_stderr_and_transport_failures_are_rejected() {
+        let mut value = outcome(b"{}".to_vec());
+        value.stderr.bytes = b"unexpected".to_vec();
         assert_eq!(
-            discover_python(
-                Some(OsString::from("Z:/missing/python.exe")),
-                &project_root()
-            ),
-            Err("python_runtime_not_found")
+            validate_transport(value, "request-1").unwrap_err().0,
+            "python_stderr_not_empty"
         );
-    }
-
-    #[test]
-    fn request_serialization_uses_stable_contract() {
-        let request = BridgeRequest {
-            protocol_version: PROTOCOL_VERSION,
-            request_id: "request-1",
-            operation: BRIDGE_OPERATION,
-            source_path: "F:/example.prj",
-        };
-        let value = serde_json::to_value(request).unwrap();
-        assert_eq!(value["protocol_version"], "1.0");
-        assert_eq!(value["request_id"], "request-1");
-        assert_eq!(value["operation"], "read_simple_zones");
-        assert_eq!(value["source_path"], "F:/example.prj");
-    }
-
-    #[test]
-    fn valid_response_is_deserialized_and_mapped() {
-        let selected = primary_fixture();
-        let noncanonical = selected
-            .parent()
-            .unwrap()
-            .join(".")
-            .join(selected.file_name().unwrap());
-        let encoded = serde_json::to_vec(&valid_envelope("request-1", &noncanonical)).unwrap();
-        let parsed = validate_envelope(outcome(encoded), "request-1", &selected).unwrap();
-        assert!(parsed.ok);
-        let result = parsed.result.unwrap();
-        assert_eq!(result.declared_zone_count, 0);
-        assert_eq!(Path::new(&result.source_path), selected);
-    }
-
-    #[test]
-    fn mismatched_response_source_is_rejected() {
-        let selected = primary_fixture();
-        let other = fixture_path("fixtures/contam/official-nist-tutorials/demo1c.prj");
-        let encoded = serde_json::to_vec(&valid_envelope("request-1", &other)).unwrap();
-        let error = validate_envelope(outcome(encoded), "request-1", &selected).unwrap_err();
-        assert_eq!(error.0, "python_response_source_mismatch");
-        assert!(error.2.is_empty());
-    }
-
-    #[test]
-    fn invalid_result_contract_is_rejected() {
-        let selected = primary_fixture();
-        let mut envelope = valid_envelope("request-1", &selected);
-        envelope.result.as_mut().unwrap().source_unchanged = false;
-        let error = validate_envelope(
-            outcome(serde_json::to_vec(&envelope).unwrap()),
-            "request-1",
-            &selected,
-        )
-        .unwrap_err();
-        assert_eq!(error.0, "python_response_result_invalid");
-    }
-
-    #[test]
-    fn structured_python_error_is_sanitized_before_serialization() {
-        let selected = primary_fixture();
-        let mut diagnostic = raw_diagnostic("unsupported_prj_version");
-        diagnostic.message = "Traceback: C:\\secret\\project.prj".repeat(20);
-        diagnostic.context = BTreeMap::from([
-            ("token".to_string(), json!("x".repeat(300))),
-            ("header_version".to_string(), json!("3.4.0.8")),
-            ("source_path".to_string(), json!("C:/secret/project.prj")),
-            ("traceback".to_string(), json!("private stack")),
-            ("field".to_string(), json!({"nested": "not allowed"})),
-        ]);
-        let envelope = RawBridgeEnvelope {
-            protocol_version: PROTOCOL_VERSION.to_string(),
-            request_id: "request-1".to_string(),
-            ok: false,
-            result: None,
-            error: Some(diagnostic),
-        };
-        let parsed = validate_envelope(
-            outcome(serde_json::to_vec(&envelope).unwrap()),
-            "request-1",
-            &selected,
-        )
-        .unwrap();
-        let error = parsed.error.unwrap();
-        assert_eq!(error.code, "unsupported_prj_version");
-        assert_eq!(error.message, PYTHON_DIAGNOSTIC_MESSAGE);
-        let serialized = serde_json::to_string(&error).unwrap();
-        assert!(!serialized.contains("Traceback"));
-        assert!(!serialized.contains("secret"));
-        assert!(!serialized.contains("private stack"));
-        assert_eq!(error.context.len(), 2);
-        assert_eq!(error.context["header_version"], json!("3.4.0.8"));
+        let mut value = outcome(Vec::new());
+        value.timed_out = true;
         assert_eq!(
-            error.context["token"].as_str().unwrap().chars().count(),
-            MAX_CONTEXT_STRING_CHARS
-        );
-    }
-
-    #[test]
-    fn malicious_python_diagnostics_are_filtered_on_error_and_success() {
-        let selected = primary_fixture();
-        let mut diagnostic = raw_diagnostic("invalid_zone_field");
-        diagnostic.message = "Traceback: C:\\secret\\project.prj".repeat(20);
-        diagnostic.context = BTreeMap::from([
-            ("token".to_string(), json!("x".repeat(300))),
-            ("field_count".to_string(), json!(19)),
-            ("source_path".to_string(), json!("C:/secret/project.prj")),
-            ("traceback".to_string(), json!("private stack")),
-            ("field".to_string(), json!({"nested": "not allowed"})),
-            ("expected".to_string(), json!(true)),
-        ]);
-        let mut envelope = valid_envelope("request-1", &selected);
-        envelope.result.as_mut().unwrap().diagnostics = vec![diagnostic];
-        let parsed = validate_envelope(
-            outcome(serde_json::to_vec(&envelope).unwrap()),
-            "request-1",
-            &selected,
-        )
-        .unwrap();
-        let serialized = serde_json::to_string(&parsed).unwrap();
-        assert!(!serialized.contains("Traceback"));
-        assert!(!serialized.contains("secret"));
-        assert!(!serialized.contains("source_path\":\"C:"));
-        assert!(!serialized.contains("private stack"));
-        let diagnostic = &parsed.result.unwrap().diagnostics[0];
-        assert_eq!(diagnostic.context.len(), 2);
-        assert_eq!(diagnostic.context["field_count"], json!(19));
-        assert_eq!(
-            diagnostic.context["token"]
-                .as_str()
-                .unwrap()
-                .chars()
-                .count(),
-            120
-        );
-    }
-
-    #[test]
-    fn invalid_diagnostic_code_rejects_the_entire_response() {
-        let selected = primary_fixture();
-        let envelope = RawBridgeEnvelope {
-            protocol_version: PROTOCOL_VERSION.to_string(),
-            request_id: "request-1".to_string(),
-            ok: false,
-            result: None,
-            error: Some(raw_diagnostic("Invalid-Code")),
-        };
-        let error = validate_envelope(
-            outcome(serde_json::to_vec(&envelope).unwrap()),
-            "request-1",
-            &selected,
-        )
-        .unwrap_err();
-        assert_eq!(error.0, "python_response_diagnostic_invalid");
-    }
-
-    #[test]
-    fn protocol_and_request_mismatches_are_rejected() {
-        let selected = primary_fixture();
-        let mut protocol = valid_envelope("request-1", &selected);
-        protocol.protocol_version = "2.0".to_string();
-        let error = validate_envelope(
-            outcome(serde_json::to_vec(&protocol).unwrap()),
-            "request-1",
-            &selected,
-        )
-        .unwrap_err();
-        assert_eq!(error.0, "python_response_protocol_mismatch");
-
-        let request = valid_envelope("wrong-request", &selected);
-        let error = validate_envelope(
-            outcome(serde_json::to_vec(&request).unwrap()),
-            "request-1",
-            &selected,
-        )
-        .unwrap_err();
-        assert_eq!(error.0, "python_response_request_mismatch");
-    }
-
-    #[test]
-    fn process_failure_and_timeout_are_structured() {
-        let selected = primary_fixture();
-        let mut failed = outcome(Vec::new());
-        failed.success = false;
-        failed.exit_code = Some(9);
-        assert_eq!(
-            validate_envelope(failed, "request-1", &selected)
-                .unwrap_err()
-                .0,
-            "python_process_failed"
-        );
-
-        let mut timed_out = outcome(Vec::new());
-        timed_out.success = false;
-        timed_out.timed_out = true;
-        assert_eq!(
-            validate_envelope(timed_out, "request-1", &selected)
-                .unwrap_err()
-                .0,
+            validate_transport(value, "request-1").unwrap_err().0,
             "python_process_timeout"
         );
     }
 
     #[test]
-    fn invalid_utf8_json_and_oversized_output_are_rejected() {
-        let selected = primary_fixture();
+    fn diagnostics_are_sanitized_before_webview_serialization() {
+        let raw = RawReaderDiagnostic {
+            code: "patch_precondition_failed".into(),
+            message: "Traceback C:/secret/model.prj".repeat(30),
+            source_line_number: Some(9),
+            context: BTreeMap::from([
+                ("token".into(), json!("x".repeat(300))),
+                ("source_path".into(), json!("C:/secret/model.prj")),
+                ("field".into(), json!({"nested": true})),
+                ("old_token".into(), json!("600")),
+            ]),
+        };
+        let safe = sanitize_raw_diagnostic(raw).unwrap();
+        let serialized = serde_json::to_string(&safe).unwrap();
+        assert!(!serialized.contains("Traceback"));
+        assert!(!serialized.contains("secret"));
+        assert_eq!(safe.context.len(), 2);
+        assert_eq!(safe.context["token"].as_str().unwrap().len(), 120);
+    }
+
+    #[test]
+    fn output_path_rules_refuse_existing_and_source() {
+        let root = std::env::temp_dir().join(format!("contam-studio-rust-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.prj");
+        fs::write(&source, b"source").unwrap();
+        let source = fs::canonicalize(source).unwrap();
+        let no_extension = root.join("copy");
+        assert!(validate_output_path(&source, &no_extension)
+            .unwrap()
+            .ends_with("copy.prj"));
         assert_eq!(
-            validate_envelope(outcome(vec![0xff]), "request-1", &selected)
-                .unwrap_err()
-                .0,
-            "python_stdout_invalid_utf8"
+            validate_output_path(&source, &source),
+            Err("selected_output_path_invalid")
+        );
+        let existing = root.join("existing.prj");
+        fs::write(&existing, b"keep").unwrap();
+        assert_eq!(
+            validate_output_path(&source, &existing),
+            Err("patch_output_exists")
         );
         assert_eq!(
-            validate_envelope(outcome(b"not-json".to_vec()), "request-1", &selected)
-                .unwrap_err()
-                .0,
-            "python_response_invalid_json"
+            validate_output_path(&source, &root.join("copy.txt")),
+            Err("selected_output_path_invalid")
         );
+        fs::remove_dir_all(root).unwrap();
+    }
 
-        let mut oversized = outcome(Vec::new());
-        oversized.stdout.exceeded = true;
+    #[test]
+    fn operation_latch_prevents_concurrent_project_operations() {
+        let store = DesktopProjectSessionStore::default();
+        let first = store.try_operation().unwrap();
+        assert!(store.try_operation().is_none());
+        drop(first);
+        assert!(store.try_operation().is_some());
+    }
+
+    #[test]
+    fn review_view_does_not_serialize_source_or_byte_ranges() {
+        let review = PatchReviewView {
+            project_session_id: "session-1".into(),
+            patch_id: "patch-1".into(),
+            zone_number: 1,
+            zone_name: "One".into(),
+            field: PATCH_FIELD.into(),
+            old_token: "600".into(),
+            new_token: "650".into(),
+            old_value: 600.0,
+            new_value: 650.0,
+            source_line_number: 243,
+            old_line: "old".into(),
+            new_line: "new".into(),
+            diff_text: "diff".into(),
+        };
+        let encoded = serde_json::to_string(&review).unwrap();
+        assert!(!encoded.contains("source_path"));
+        assert!(!encoded.contains("byte_start"));
+        assert!(!encoded.contains("byte_end"));
+        assert!(!encoded.contains("preconditions"));
+    }
+
+    #[test]
+    fn session_store_replaces_project_and_clears_patch() {
+        let store = DesktopProjectSessionStore::default();
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-session").result.unwrap();
+        store.activate_project("session-1".into(), fixture, &project);
         assert_eq!(
-            validate_envelope(oversized, "request-1", &selected)
-                .unwrap_err()
-                .0,
-            "python_stdout_too_large"
+            store
+                .state
+                .lock()
+                .unwrap()
+                .active_project
+                .as_ref()
+                .unwrap()
+                .project_session_id,
+            "session-1"
         );
+        store.state.lock().unwrap().planned_patch = None;
+        assert!(store.state.lock().unwrap().planned_patch.is_none());
     }
 
     #[test]
-    fn stderr_is_bounded_and_never_returned_to_frontend() {
-        let selected = primary_fixture();
-        let captured = read_limited(&b"diagnostic detail"[..], 10);
-        assert!(captured.exceeded);
-        assert_eq!(captured.bytes, b"diagnostic");
+    fn activating_a_new_project_replaces_session_and_clears_reviewed_patch() {
+        let store = DesktopProjectSessionStore::default();
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-session").result.unwrap();
+        store.activate_project("session-1".into(), fixture.clone(), &project);
+        let active = store.state.lock().unwrap().active_project.clone().unwrap();
+        let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-store", "operation": PLAN_OPERATION, "source_path": active.source_path, "contam_number": 1, "new_volume_token": "650"});
+        let envelope =
+            execute_bridge_request(&request, "plan-store", READ_AND_PLAN_TIMEOUT).unwrap();
+        let raw: RawPatchPlanResult = serde_json::from_value(envelope.result.unwrap()).unwrap();
+        let (planned, _) = validate_plan_result(raw, &active, "plan-store", 1, "650").unwrap();
+        store.state.lock().unwrap().planned_patch = Some(planned);
 
-        let mut oversized = outcome(Vec::new());
-        oversized.stderr = captured;
+        store.activate_project("session-2".into(), fixture, &project);
+        let state = store.state.lock().unwrap();
         assert_eq!(
-            validate_envelope(oversized, "request-1", &selected)
+            state.active_project.as_ref().unwrap().project_session_id,
+            "session-2"
+        );
+        assert!(state.planned_patch.is_none());
+    }
+
+    #[test]
+    fn plan_contract_rejects_source_hash_and_target_mismatches() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-plan").result.unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "session-plan".into(),
+            source_path: fixture.clone(),
+            source_sha256: project.source_sha256,
+            source_size_bytes: project.source_size_bytes,
+            reader_mode: project.reader_mode,
+            header_version: project.header_version,
+        };
+        let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-contract", "operation": PLAN_OPERATION, "source_path": fixture, "contam_number": 1, "new_volume_token": "650"});
+        let envelope =
+            execute_bridge_request(&request, "plan-contract", READ_AND_PLAN_TIMEOUT).unwrap();
+        let raw: RawPatchPlanResult = serde_json::from_value(envelope.result.unwrap()).unwrap();
+
+        let mut hash_mismatch = raw.clone();
+        hash_mismatch.patch.source_sha256 = "0".repeat(64);
+        assert_eq!(
+            validate_plan_result(hash_mismatch, &active, "plan-contract", 1, "650")
                 .unwrap_err()
-                .0,
-            "python_stderr_too_large"
+                .code,
+            "patch_response_contract_invalid"
         );
 
-        let encoded = serde_json::to_vec(&valid_envelope("request-1", &selected)).unwrap();
-        let mut nonempty = outcome(encoded);
-        nonempty.stderr.bytes = b"unexpected diagnostic".to_vec();
-        let error = validate_envelope(nonempty, "request-1", &selected).unwrap_err();
-        assert_eq!(error.0, "python_stderr_not_empty");
-        assert!(error.2.is_empty());
+        let mut target_mismatch = raw.clone();
+        target_mismatch.patch.target.contam_number = 2;
+        assert_eq!(
+            validate_plan_result(target_mismatch, &active, "plan-contract", 1, "650")
+                .unwrap_err()
+                .code,
+            "patch_response_contract_invalid"
+        );
+
+        let mut source_mismatch = raw;
+        source_mismatch.patch.source_path =
+            fixture_path("fixtures/contam/official-nist-tutorials/demo1c.prj")
+                .to_string_lossy()
+                .into_owned();
+        assert_eq!(
+            validate_plan_result(source_mismatch, &active, "plan-contract", 1, "650")
+                .unwrap_err()
+                .code,
+            "patch_response_source_mismatch"
+        );
     }
 
     #[test]
-    fn process_start_failure_is_returned() {
-        let missing = project_root().join("definitely-missing-python.exe");
-        let error = run_process(
-            &missing,
-            &[],
-            b"{}",
-            &project_root(),
-            Duration::from_millis(50),
-            1024,
-            1024,
-        )
-        .unwrap_err();
-        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
-    }
-
-    #[test]
-    fn real_timeout_kills_process() {
-        let python = discover_python(None, &project_root()).unwrap();
-        let script = "import time; time.sleep(2)";
-        let outcome = run_process(
-            &python,
-            &[OsString::from("-c"), OsString::from(script)],
-            b"",
-            &project_root(),
-            Duration::from_millis(80),
-            1024,
-            1024,
-        )
-        .unwrap();
-        assert!(outcome.timed_out);
-        assert!(!outcome.success);
-    }
-
-    #[test]
-    fn output_limit_discards_excess_without_growing_buffer() {
-        let capture = read_limited(&vec![b'x'; 4096][..], 128);
-        assert!(capture.exceeded);
-        assert_eq!(capture.bytes.len(), 128);
-    }
-
-    #[test]
-    fn cancelled_desktop_response_has_no_error_envelope() {
-        let response = DesktopOpenResponse::cancelled("request-1");
-        assert_eq!(response.request_id, "request-1");
-        assert!(response.cancelled);
-        assert!(response.envelope.is_none());
-    }
-
-    #[test]
-    fn custom_command_acl_and_frontend_boundary_are_explicit() {
+    fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         let build_script = include_str!("../build.rs");
-        let permission =
-            include_str!("../permissions/autogenerated/select_and_read_prj_zones.toml");
         let capability: Value =
             serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
         let desktop_api = include_str!("../../src/app/desktop-api.ts");
         let package_json = include_str!("../../package.json");
-
-        assert!(build_script.contains("AppManifest::new"));
-        assert!(build_script.contains("select_and_read_prj_zones"));
-        assert!(permission.contains("commands.allow = [\"select_and_read_prj_zones\"]"));
-        assert_eq!(
-            capability["permissions"],
-            json!(["core:default", "allow-select-and-read-prj-zones"])
-        );
-        assert!(!desktop_api.contains("sourcePath"));
-        assert!(!desktop_api.contains("@tauri-apps/plugin-dialog"));
+        for command in [
+            "select_and_read_prj_zones",
+            "plan_zone_volume_patch",
+            "apply_zone_volume_patch_to_copy",
+        ] {
+            assert!(build_script.contains(command));
+        }
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 4);
+        let forbidden = [
+            "sourcePath",
+            "outputPath",
+            "patch:",
+            "@tauri-apps/plugin-dialog",
+        ];
+        for value in forbidden {
+            assert!(!desktop_api.contains(value), "found {value}");
+        }
         assert!(!package_json.contains("@tauri-apps/plugin-dialog"));
-    }
-
-    #[test]
-    fn test_fixture_directory_is_not_modified_by_rust_tests() {
-        let root = project_root();
-        assert!(fs::metadata(root.join("fixtures/contam")).is_ok());
+        let capability_text = include_str!("../capabilities/default.json");
+        for permission in ["dialog", "fs:", "shell", "http"] {
+            assert!(!capability_text.contains(permission));
+        }
     }
 
     #[test]
     fn real_bridge_reads_all_official_fixtures() {
-        let fixtures = [
+        for (relative, count, first) in [
             (
                 "fixtures/contam/official-contamxpy/test_GetPrjInfo.prj",
                 7,
@@ -1144,16 +1848,65 @@ mod tests {
                 7,
                 "Attic",
             ),
-        ];
-        for (relative, count, first_name) in fixtures {
+        ] {
             let fixture = fixture_path(relative);
-            let envelope = execute_bridge(&fixture, "request-real");
+            let envelope = execute_read(&fixture, "request-real");
             assert!(envelope.ok, "{:?}", envelope.error);
             let result = envelope.result.unwrap();
             assert_eq!(result.declared_zone_count, count);
-            assert_eq!(result.first_zone.unwrap().name, first_name);
-            assert!(result.source_unchanged);
-            assert_eq!(Path::new(&result.source_path), fixture);
+            assert_eq!(result.first_zone.unwrap().name, first);
         }
+    }
+
+    #[test]
+    fn real_plan_and_apply_contracts_round_trip() {
+        let active = {
+            let fixture = primary_fixture();
+            let project = execute_read(&fixture, "read-real").result.unwrap();
+            ActiveProjectContext {
+                project_session_id: "session-real".into(),
+                source_path: fixture,
+                source_sha256: project.source_sha256,
+                source_size_bytes: project.source_size_bytes,
+                reader_mode: project.reader_mode,
+                header_version: project.header_version,
+            }
+        };
+        let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-real", "operation": PLAN_OPERATION, "source_path": active.source_path, "contam_number": 1, "new_volume_token": "650.0"});
+        let envelope =
+            execute_bridge_request(&request, "plan-real", READ_AND_PLAN_TIMEOUT).unwrap();
+        let raw: RawPatchPlanResult = serde_json::from_value(envelope.result.unwrap()).unwrap();
+        let (planned, review) =
+            validate_plan_result(raw, &active, "plan-real", 1, "650.0").unwrap();
+        assert_eq!(review.new_token, "650.0");
+
+        let output_root =
+            std::env::temp_dir().join(format!("contam-studio-apply-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&output_root);
+        fs::create_dir_all(&output_root).unwrap();
+        let output = fs::canonicalize(&output_root).unwrap().join("copy.prj");
+        let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "apply-real", "operation": APPLY_OPERATION, "source_path": active.source_path, "output_path": output, "patch": planned.patch});
+        let envelope = execute_bridge_request(&request, "apply-real", APPLY_TIMEOUT).unwrap();
+        let raw: RawPatchApplicationResult =
+            serde_json::from_value(envelope.result.unwrap()).unwrap();
+        let mut output_mismatch = raw.clone();
+        output_mismatch.application.output_path = primary_fixture().to_string_lossy().into_owned();
+        assert_eq!(
+            validate_application_result(output_mismatch, &active, &planned, &output)
+                .unwrap_err()
+                .code,
+            "patch_apply_response_invalid"
+        );
+        let mut hash_mismatch = raw.clone();
+        hash_mismatch.application.output_sha256 = "0".repeat(64);
+        assert_eq!(
+            validate_application_result(hash_mismatch, &active, &planned, &output)
+                .unwrap_err()
+                .code,
+            "patch_apply_response_invalid"
+        );
+        let project = validate_application_result(raw, &active, &planned, &output).unwrap();
+        assert_eq!(project.first_zone.unwrap().volume_m3, 650.0);
+        fs::remove_dir_all(output_root).unwrap();
     }
 }

@@ -1,5 +1,6 @@
-import { Bot, Info, PanelRightClose, SlidersHorizontal } from "lucide-react";
+import { Bot, Eye, Info, PanelRightClose, Pencil, SlidersHorizontal, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { PatchState } from "../../app/patch-state";
 import type { ContextTab } from "../../app/workbench-state";
 import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
 
@@ -8,6 +9,11 @@ interface ContextSidebarProps {
   project: ProjectInspection | null;
   selectedZone: ZoneRecord | null;
   selectedObject: string;
+  patchState: PatchState;
+  onStartVolumeEdit: () => void;
+  onVolumeTokenChange: (token: string) => void;
+  onPlanVolumePatch: () => void;
+  onCancelVolumeEdit: () => void;
   onTabChange: (tab: ContextTab) => void;
   onCollapse: () => void;
 }
@@ -17,6 +23,11 @@ export function ContextSidebar({
   project,
   selectedZone,
   selectedObject,
+  patchState,
+  onStartVolumeEdit,
+  onVolumeTokenChange,
+  onPlanVolumePatch,
+  onCancelVolumeEdit,
   onTabChange,
   onCollapse,
 }: ContextSidebarProps) {
@@ -70,17 +81,66 @@ export function ContextSidebar({
               <div><dt>{t("inspector.flags")}</dt><dd>{selectedZone.flags}</dd></div>
               <div><dt>{t("inspector.level")}</dt><dd>{selectedZone.level_number}</dd></div>
               <div><dt>{t("inspector.relativeHeight")}</dt><dd>{selectedZone.relative_height}</dd></div>
-              <div><dt>{t("inspector.volume")}</dt><dd>{t("inspector.volumeUnit", { value: selectedZone.volume_m3 })}</dd></div>
+              <div className="volume-property">
+                <dt>{t("inspector.volume")}</dt>
+                <dd>
+                  <span>{t("inspector.volumeUnit", { value: selectedZone.volume_m3 })}</span>
+                  {patchState.status === "idle" || patchState.status === "success" ? (
+                    <button type="button" className="property-action" onClick={onStartVolumeEdit}>
+                      <Pencil size={13} />{t("patch.editVolume")}
+                    </button>
+                  ) : null}
+                </dd>
+              </div>
               <div><dt>{t("inspector.sourceLine")}</dt><dd>{selectedZone.source_line_number}</dd></div>
               <div><dt>{t("inspector.readerMode")}</dt><dd>{project.reader_mode}</dd></div>
               <div><dt>{t("inspector.status")}</dt><dd>{t("inspector.readOnlyValue")}</dd></div>
             </dl>
-          ) : project ? (
+          ) : null}
+          {project && selectedZone && ["editing", "planning", "error"].includes(patchState.status) ? (
+            <div className="volume-edit-panel">
+              <label htmlFor="zone-volume-token">{t("patch.newVolumeToken")}</label>
+              <div className="volume-edit-row">
+                <input
+                  id="zone-volume-token"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  maxLength={80}
+                  value={patchState.newVolumeToken}
+                  disabled={patchState.status === "planning"}
+                  onChange={(event) => onVolumeTokenChange(event.target.value)}
+                />
+                <span>m³</span>
+              </div>
+              <p>{t("patch.numericHelp")}</p>
+              {patchState.issue ? (
+                <p className="patch-inline-error" role="alert">
+                  {t(`errors.codes.${patchState.issue.code}`, { defaultValue: t("errors.codes.unknown") })}
+                </p>
+              ) : null}
+              <div className="volume-edit-actions">
+                <button type="button" className="secondary-action" onClick={onCancelVolumeEdit} disabled={patchState.status === "planning"}>
+                  <X size={15} />{t("patch.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={onPlanVolumePatch}
+                  disabled={patchState.status === "planning" || !patchState.newVolumeToken.trim()}
+                >
+                  {patchState.status === "planning" ? <span className="loading-indicator" /> : <Eye size={15} />}
+                  {t(patchState.status === "planning" ? "patch.planning" : "patch.generatePreview")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {project && !selectedZone ? (
             <div className="context-empty">
               <Info size={22} aria-hidden="true" />
               <p>{t("inspector.noZone")}</p>
             </div>
-          ) : (
+          ) : !project ? (
             <dl className="property-list">
             <div>
               <dt>{t("inspector.name")}</dt>
@@ -103,7 +163,7 @@ export function ContextSidebar({
               <dd>{t("inspector.statusValue")}</dd>
             </div>
             </dl>
-          )}
+          ) : null}
           <div className="context-note">
             <Info size={16} aria-hidden="true" />
             <p>{t(project ? "inspector.realReadOnly" : "inspector.readOnly")}</p>

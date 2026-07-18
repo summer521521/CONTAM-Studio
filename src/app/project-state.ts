@@ -1,4 +1,4 @@
-export const BRIDGE_PROTOCOL_VERSION = "1.0";
+export const BRIDGE_PROTOCOL_VERSION = "1.1";
 
 export type ProjectStatus =
   | "idle"
@@ -52,6 +52,7 @@ export interface BridgeEnvelope {
 export interface DesktopOpenResponse {
   request_id: string;
   cancelled: boolean;
+  project_session_id: string | null;
   envelope: BridgeEnvelope | null;
 }
 
@@ -60,6 +61,7 @@ export interface ProjectState {
   activeSequence: number | null;
   activeRequestId: string | null;
   project: ProjectInspection | null;
+  projectSessionId: string | null;
   selectedZoneKey: string | null;
   issue: ReaderDiagnostic | null;
 }
@@ -74,6 +76,7 @@ export type ProjectAction =
       sequence: number;
       requestId: string;
       project: ProjectInspection;
+      projectSessionId: string;
     }
   | {
       type: "loading_failed";
@@ -81,6 +84,14 @@ export type ProjectAction =
       requestId: string;
       issue: ReaderDiagnostic;
     }
+  | {
+      type: "project_replaced";
+      project: ProjectInspection;
+      projectSessionId: string;
+      targetZoneNumber: number;
+    }
+  | { type: "issue_reported"; issue: ReaderDiagnostic }
+  | { type: "issue_cleared" }
   | { type: "zone_selected"; zoneKey: string };
 
 export const INITIAL_PROJECT_STATE: ProjectState = {
@@ -88,6 +99,7 @@ export const INITIAL_PROJECT_STATE: ProjectState = {
   activeSequence: null,
   activeRequestId: null,
   project: null,
+  projectSessionId: null,
   selectedZoneKey: null,
   issue: null,
 };
@@ -217,6 +229,7 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
         activeSequence: null,
         activeRequestId: null,
         project: action.project,
+        projectSessionId: action.projectSessionId,
         selectedZoneKey: action.project.zones[0]
           ? zoneSelectionKey(action.project, action.project.zones[0])
           : null,
@@ -231,6 +244,24 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
         activeRequestId: null,
         issue: sanitizeDiagnostic(action.issue),
       };
+    case "project_replaced": {
+      const target = action.project.zones.find(
+        (zone) => zone.contam_number === action.targetZoneNumber,
+      );
+      return {
+        status: "loaded",
+        activeSequence: null,
+        activeRequestId: null,
+        project: action.project,
+        projectSessionId: action.projectSessionId,
+        selectedZoneKey: target ? zoneSelectionKey(action.project, target) : null,
+        issue: null,
+      };
+    }
+    case "issue_reported":
+      return { ...state, issue: sanitizeDiagnostic(action.issue) };
+    case "issue_cleared":
+      return { ...state, issue: null };
     case "zone_selected":
       if (
         !state.project ||
@@ -294,7 +325,11 @@ export function desktopOpenIssue(
       context: {},
     };
   }
-  if (response.cancelled !== (response.envelope === null)) {
+  if (
+    response.cancelled !== (response.envelope === null) ||
+    (response.cancelled && response.project_session_id !== null) ||
+    (!response.cancelled && response.envelope?.ok === true && !response.project_session_id)
+  ) {
     return {
       code: "desktop_response_contract_invalid",
       message: "Desktop open response contract invalid",
