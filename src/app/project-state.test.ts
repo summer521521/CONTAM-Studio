@@ -62,6 +62,7 @@ describe("projectReducer", () => {
       sequence: 1,
       requestId: "request-1",
       project: project(),
+      projectSessionId: "request-1",
     });
     expect(loaded.status).toBe("loaded");
     expect(loaded.project?.zones).toHaveLength(2);
@@ -130,6 +131,7 @@ describe("projectReducer", () => {
       sequence: 3,
       requestId: "request-3",
       project: project(),
+      projectSessionId: "request-3",
     });
     expect(stale).toBe(current);
   });
@@ -149,6 +151,7 @@ describe("projectReducer", () => {
       sequence: 1,
       requestId: "request-1",
       project: project(0),
+      projectSessionId: "request-1",
     });
     expect(loaded.status).toBe("loaded");
     expect(loaded.selectedZoneKey).toBeNull();
@@ -175,7 +178,7 @@ describe("desktop open response", () => {
   it("treats cancellation without an envelope as a normal response", () => {
     expect(
       desktopOpenIssue(
-        { request_id: "request-1", cancelled: true, envelope: null },
+        { request_id: "request-1", cancelled: true, project_session_id: null, envelope: null },
         "request-1",
       ),
     ).toBeNull();
@@ -186,6 +189,7 @@ describe("desktop open response", () => {
       {
         request_id: "request-1",
         cancelled: true,
+        project_session_id: null,
         envelope: {
           protocol_version: "1.0",
           request_id: "request-1",
@@ -201,7 +205,7 @@ describe("desktop open response", () => {
 
   it("rejects a response for another request", () => {
     const invalid = desktopOpenIssue(
-      { request_id: "request-2", cancelled: true, envelope: null },
+      { request_id: "request-2", cancelled: true, project_session_id: null, envelope: null },
       "request-1",
     );
     expect(invalid?.code).toBe("desktop_response_request_mismatch");

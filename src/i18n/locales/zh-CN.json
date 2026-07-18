@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 2C 只读"
+    "phase": "Phase 3B 副本修改"
   },
   "toolbar": {
     "newProject": "新建项目",
@@ -48,8 +48,8 @@
     "recent": "最近项目",
     "recentEmpty": "暂无最近项目",
     "recentHint": "当前不保存或自动扫描最近项目。",
-    "phaseTitle": "当前阶段：Phase 2C只读Zone预览",
-    "phaseBody": "仅通过严格格式子集读取Zone；不解析完整PRJ，不保存、不回写，也不运行ContamX。",
+    "phaseTitle": "当前阶段：Phase 3B受控副本修改",
+    "phaseBody": "可审阅一个Zone体积记号的修改并另存为新副本；不覆盖原始PRJ，也不解析完整PRJ。",
     "offlineTitle": "离线优先",
     "offlineBody": "本阶段不发送网络请求，核心桌面界面完全在本地运行。",
     "protectionTitle": "原始文件保护",
@@ -77,7 +77,7 @@
     "volumeUnit": "{{value}} m³",
     "readOnlyValue": "只读预览",
     "readOnly": "属性仅用于布局验证，不对应真实CONTAM模型。",
-    "realReadOnly": "当前为严格子集的只读预览，尚不支持编辑或保存。",
+    "realReadOnly": "当前按严格子集读取；仅体积支持审阅后另存为新副本，原始PRJ保持不变。",
     "collapse": "折叠上下文面板",
     "expand": "展开上下文面板"
   },
@@ -140,6 +140,32 @@
   "diagnostics": {
     "strict_subset_read": "未解析Zone以外的PRJ区块，当前结果不能用于保存或回写。"
   },
+  "patch": {
+    "editVolume": "修改体积",
+    "newVolumeToken": "新体积数字面量",
+    "numericHelp": "使用普通十进制或科学计数法。最终格式由Python严格读取器验证。",
+    "generatePreview": "生成修改预览",
+    "planning": "正在生成预览",
+    "reviewEyebrow": "单字段结构化Patch",
+    "reviewTitle": "审阅修改",
+    "project": "项目",
+    "zone": "Zone",
+    "field": "字段",
+    "volumeField": "体积（volume_m3）",
+    "sourceLine": "源行号",
+    "oldValue": "旧值",
+    "newValue": "新值",
+    "diffLabel": "Zone体积单行Diff",
+    "originalUnchanged": "原始PRJ不会被覆盖",
+    "copyOnlyBoundary": "确认后只会创建新的PRJ副本，当前仅修改一个Vol记号。",
+    "bytePreservation": "未知区块依靠原始字节保留，不进行完整PRJ重建。",
+    "backToEdit": "返回修改",
+    "cancel": "取消修改",
+    "saveAsCopy": "另存为新副本",
+    "creatingCopy": "正在创建副本",
+    "saveDialogCancelled": "已取消另存为；审阅内容仍保留。",
+    "copyCreatedSuccess": "已创建并打开新副本，原始PRJ未修改。"
+  },
   "errors": {
     "sourceLine": "源文件第 {{line}} 行",
     "retryHint": "源项目未被修改。可以修正文件或选择其他受支持的PRJ。",
@@ -189,6 +215,24 @@
       "unsupported_zone_name": "Zone名称格式不受支持",
       "unsupported_zone_conditional_fields": "Zone条件字段不受支持",
       "source_changed_during_read": "读取期间源文件发生变化",
+      "project_session_missing": "当前没有可用的项目会话",
+      "project_session_mismatch": "项目会话已变化，请重新打开项目",
+      "project_operation_busy": "另一项项目文件操作正在进行",
+      "patch_plan_missing": "修改预览已失效，请重新生成",
+      "patch_session_mismatch": "修改预览不属于当前项目",
+      "patch_response_contract_invalid": "Patch预览响应不符合契约",
+      "patch_response_source_mismatch": "Patch预览与当前项目不一致",
+      "patch_response_result_invalid": "Patch预览结果无效",
+      "patch_apply_response_invalid": "副本应用响应不符合契约",
+      "desktop_save_dialog_failed": "无法打开系统另存为对话框",
+      "selected_output_path_invalid": "所选副本路径无效或指向原始文件",
+      "patch_output_invalid": "副本输出路径无效",
+      "patch_output_exists": "同名文件已存在，当前操作不会覆盖",
+      "patch_new_value_invalid": "新体积数字面量不受支持",
+      "patch_no_change": "新体积与当前值相同",
+      "patch_precondition_failed": "源文件或Patch前置条件已变化，请重新生成预览",
+      "patch_application_failed": "无法安全创建新的PRJ副本",
+      "patch_verification_failed": "新副本未通过确定性验证，未保留输出",
       "bridge_internal_error": "Python读取桥内部错误",
       "unknown": "未知项目读取错误"
     }

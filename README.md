@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目已完成**Phase 3A-0：哈希绑定、仅写副本的Zone体积Patch**。Python核心可为严格读取子集中的一个Zone生成`volume_m3`结构化Patch，并在重新验证源SHA-256、大小、读取模式、文件头、Zone编号、行号、旧记号和字节范围后，只向尚不存在的新PRJ副本替换一个ASCII数字记号。三个官方样例已证明目标记号之外的原始字节完全不变。该能力尚未接入桌面GUI，不覆盖源PRJ，也不代表完整PRJ保存、回写、编辑、撤销或并发Patch已经实现；ContamX运行和AI仍未接入。
+项目已建立**Phase 3B：Zone体积Diff审阅与另存副本桌面闭环**。用户可为已加载Zone输入新的`volume_m3`数字记号，审阅单行Diff，明确确认后由Rust原生保存对话框选择一个尚不存在的新PRJ路径。完整Patch和源路径只保存在Rust内存会话，前端不能提交路径或Patch；Python重新验证全部前置条件后仅创建副本，成功时桌面切换到新副本。该能力不覆盖源PRJ，也不代表完整PRJ保存、回写、撤销或多Patch已经实现；ContamX运行和AI仍未接入。
 
 ## 架构方向
 
@@ -37,7 +37,7 @@ Python CONTAM领域核心
 官方ContamX
 ```
 
-Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2A建立了Python隔离执行检查核心；Phase 2B-1增加了独立的严格Zone纯文档读取器；Phase 2C用结构化协议将该读取器接入桌面工作台。Rust在结果跨IPC前清理诊断、拒绝非空stderr，并确认响应路径与用户选择的规范化路径一致。Phase 3A-0的副本Patch仍只位于Python核心，未接入桌面桥；contamxpy隔离稳态初始化入口也没有接入GUI。
+Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2建立了严格Zone纯文档读取器和桌面只读闭环；Phase 3A-0建立哈希绑定、仅写副本的Python Patch。Phase 3B将计划、Diff审阅、原生另存为和副本重读接入同一一次性Python桥。Rust持有活动项目快照与完整Patch，React只取得审阅视图；contamxpy隔离稳态初始化入口没有接入GUI。
 
 ## 开发启动
 
@@ -53,6 +53,8 @@ pnpm tauri dev
 仅构建前端可运行`pnpm build`，前端单元测试运行`pnpm test`。开发环境可通过`CONTAM_STUDIO_PYTHON`显式指定一个绝对Python解释器路径；未配置时只检查仓库内`python\.venv\Scripts\python.exe`，不会回退到系统PATH。
 
 ![Phase 2C真实PRJ只读Zone工作台](docs/ui/phase-2c-real-zone-project.png)
+
+Phase 3B的桌面审阅流程和验证状态见[开发与验证记录](docs/development/phase-3b-zone-volume-gui-verification.md)。
 
 ## Python严格Zone文档读取
 
@@ -113,6 +115,7 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [Zone体积副本Patch](docs/architecture/zone-volume-patch.md)
 - [Phase 2C开发与验证](docs/development/phase-2c-verification.md)
 - [Phase 3A-0开发与验证](docs/development/phase-3a-zone-volume-patch-verification.md)
+- [Phase 3B开发与验证](docs/development/phase-3b-zone-volume-gui-verification.md)
 - [阶段路线图](docs/roadmap/phases.md)
 - [风险登记表](docs/risks/risk-register.md)
 - [架构决策记录](docs/adr/README.md)

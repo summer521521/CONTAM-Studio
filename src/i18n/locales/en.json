@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 2C Read-only"
+    "phase": "Phase 3B Copy workflow"
   },
   "toolbar": {
     "newProject": "New project",
@@ -48,8 +48,8 @@
     "recent": "Recent projects",
     "recentEmpty": "No recent projects",
     "recentHint": "Recent projects are not stored or scanned automatically.",
-    "phaseTitle": "Current phase: Phase 2C read-only Zone preview",
-    "phaseBody": "Only the strict Zone subset is read. The full PRJ is not parsed, saved, rewritten, or run with ContamX.",
+    "phaseTitle": "Current phase: Phase 3B reviewed copy workflow",
+    "phaseBody": "A single Zone volume token can be reviewed and written to a new copy. The original PRJ is never overwritten.",
     "offlineTitle": "Offline first",
     "offlineBody": "This phase sends no network requests; the core desktop UI runs locally.",
     "protectionTitle": "Original file protection",
@@ -77,7 +77,7 @@
     "volumeUnit": "{{value}} m³",
     "readOnlyValue": "Read-only preview",
     "readOnly": "These properties only validate the layout and do not represent a real CONTAM model.",
-    "realReadOnly": "This is a strict-subset read-only preview. Editing and saving are not supported.",
+    "realReadOnly": "The strict subset is read-only; only volume can be reviewed and written to a new copy. The original stays unchanged.",
     "collapse": "Collapse context panel",
     "expand": "Expand context panel"
   },
@@ -140,6 +140,32 @@
   "diagnostics": {
     "strict_subset_read": "PRJ sections other than Zones were not parsed. This result cannot be saved or written back."
   },
+  "patch": {
+    "editVolume": "Modify volume",
+    "newVolumeToken": "New volume literal",
+    "numericHelp": "Use plain decimal or scientific notation. Python remains the strict format authority.",
+    "generatePreview": "Generate change preview",
+    "planning": "Generating preview",
+    "reviewEyebrow": "Single-field structured Patch",
+    "reviewTitle": "Review change",
+    "project": "Project",
+    "zone": "Zone",
+    "field": "Field",
+    "volumeField": "Volume (volume_m3)",
+    "sourceLine": "Source line",
+    "oldValue": "Old value",
+    "newValue": "New value",
+    "diffLabel": "Single-line Zone volume Diff",
+    "originalUnchanged": "The original PRJ will not be overwritten",
+    "copyOnlyBoundary": "Confirmation creates a new PRJ copy and changes only one Vol token.",
+    "bytePreservation": "Unknown sections are preserved as original bytes; the full PRJ is not rebuilt.",
+    "backToEdit": "Back to edit",
+    "cancel": "Cancel change",
+    "saveAsCopy": "Save as new copy",
+    "creatingCopy": "Creating copy",
+    "saveDialogCancelled": "Save As was cancelled; the review remains open.",
+    "copyCreatedSuccess": "A new copy was created and opened. The original PRJ was not modified."
+  },
   "errors": {
     "sourceLine": "Source line {{line}}",
     "retryHint": "The source project was not modified. Fix the file or select another supported PRJ.",
@@ -189,6 +215,24 @@
       "unsupported_zone_name": "Zone name format is unsupported",
       "unsupported_zone_conditional_fields": "Zone conditional fields are unsupported",
       "source_changed_during_read": "Source file changed during reading",
+      "project_session_missing": "No active project session is available",
+      "project_session_mismatch": "The project session changed; reopen the project",
+      "project_operation_busy": "Another project file operation is in progress",
+      "patch_plan_missing": "The change preview expired; generate it again",
+      "patch_session_mismatch": "The change preview does not belong to this project",
+      "patch_response_contract_invalid": "The Patch preview response violated its contract",
+      "patch_response_source_mismatch": "The Patch preview did not match the active project",
+      "patch_response_result_invalid": "The Patch preview result was invalid",
+      "patch_apply_response_invalid": "The copy application response violated its contract",
+      "desktop_save_dialog_failed": "The system Save As dialog could not be opened",
+      "selected_output_path_invalid": "The selected copy path is invalid or points to the original",
+      "patch_output_invalid": "The copy output path is invalid",
+      "patch_output_exists": "A file already exists there and will not be overwritten",
+      "patch_new_value_invalid": "The new volume literal is not supported",
+      "patch_no_change": "The new volume is equal to the current value",
+      "patch_precondition_failed": "The source or Patch preconditions changed; generate a new preview",
+      "patch_application_failed": "A new PRJ copy could not be created safely",
+      "patch_verification_failed": "The new copy failed deterministic verification and was removed",
       "bridge_internal_error": "Python reader bridge internal error",
       "unknown": "Unknown project read error"
     }

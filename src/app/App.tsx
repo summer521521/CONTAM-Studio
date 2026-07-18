@@ -9,8 +9,19 @@ import { ProjectSidebar } from "../components/workbench/ProjectSidebar";
 import { StatusBar } from "../components/workbench/StatusBar";
 import { TopBar } from "../components/workbench/TopBar";
 import { WelcomePage } from "../components/workbench/WelcomePage";
+import { ZoneVolumePatchDialog } from "../components/workbench/ZoneVolumePatchDialog";
 import i18n from "../i18n";
-import { selectAndReadPrjZones } from "./desktop-api";
+import {
+  applyZoneVolumePatchToCopy,
+  planZoneVolumePatch,
+  selectAndReadPrjZones,
+} from "./desktop-api";
+import {
+  applyResponseIssue,
+  INITIAL_PATCH_STATE,
+  patchReducer,
+  patchResponseIssue,
+} from "./patch-state";
 import {
   desktopOpenIssue,
   envelopeIssue,
@@ -33,6 +44,7 @@ function App() {
   const [workbench, setWorkbench] = useState(loadWorkbenchState);
   const [selectedObject, setSelectedObject] = useState("navigation.classroom");
   const [projectState, dispatchProject] = useReducer(projectReducer, INITIAL_PROJECT_STATE);
+  const [patchState, dispatchPatch] = useReducer(patchReducer, INITIAL_PATCH_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const mounted = useRef(true);
@@ -75,10 +87,10 @@ function App() {
   }, [placeholderNotice]);
 
   useEffect(() => {
-    if (!projectState.issue) return;
+    if (!projectState.issue && !patchState.issue) return;
     bottomPanelRef.current?.expand();
     updateWorkbench({ bottomCollapsed: false, bottomTab: "problems" });
-  }, [projectState.issue, updateWorkbench]);
+  }, [patchState.issue, projectState.issue, updateWorkbench]);
 
   const showPlaceholder = useCallback(
     (action: string) => setPlaceholderNotice(t("mock.placeholder", { action })),
@@ -129,7 +141,9 @@ function App() {
         sequence,
         requestId,
         project: envelope.result,
+        projectSessionId: response.project_session_id as string,
       });
+      dispatchPatch({ type: "project_or_zone_changed" });
     } catch {
       if (!mounted.current || sequence !== requestSequence.current) return;
       dispatchProject({
@@ -147,7 +161,131 @@ function App() {
   }, []);
 
   const currentZone = selectedZone(projectState);
-  const openDisabled = projectState.status === "selecting" || projectState.status === "loading";
+
+  const startVolumeEdit = useCallback(() => {
+    if (!currentZone || !projectState.projectSessionId) return;
+    dispatchPatch({
+      type: "start_editing",
+      projectSessionId: projectState.projectSessionId,
+      zoneNumber: currentZone.contam_number,
+      token: String(currentZone.volume_m3),
+    });
+  }, [currentZone, projectState.projectSessionId]);
+
+  const planVolumePatch = useCallback(async () => {
+    if (!patchState.projectSessionId || patchState.zoneNumber === null) return;
+    const requestId = crypto.randomUUID();
+    dispatchProject({ type: "issue_cleared" });
+    dispatchPatch({ type: "plan_started", requestId });
+    try {
+      const response = await planZoneVolumePatch(
+        requestId,
+        patchState.projectSessionId,
+        patchState.zoneNumber,
+        patchState.newVolumeToken,
+      );
+      if (!mounted.current) return;
+      const issue = patchResponseIssue(response, requestId);
+      if (issue || !response.review) {
+        const safeIssue = issue ?? {
+          code: "patch_response_contract_invalid",
+          message: "Patch response contract invalid",
+          source_line_number: null,
+          context: {},
+        };
+        dispatchPatch({ type: "plan_failed", requestId, issue: safeIssue });
+        dispatchProject({ type: "issue_reported", issue: safeIssue });
+        return;
+      }
+      if (
+        response.review.project_session_id !== patchState.projectSessionId ||
+        response.review.zone_number !== patchState.zoneNumber ||
+        response.review.new_token !== patchState.newVolumeToken
+      ) {
+        const issue = {
+          code: "patch_response_contract_invalid",
+          message: "Patch review did not match current input",
+          source_line_number: null,
+          context: {},
+        };
+        dispatchPatch({ type: "plan_failed", requestId, issue });
+        dispatchProject({ type: "issue_reported", issue });
+        return;
+      }
+      dispatchPatch({ type: "plan_succeeded", requestId, review: response.review });
+    } catch {
+      if (!mounted.current) return;
+      const issue = {
+        code: "desktop_bridge_invoke_failed",
+        message: "Desktop bridge invocation failed",
+        source_line_number: null,
+        context: {},
+      };
+      dispatchPatch({ type: "plan_failed", requestId, issue });
+      dispatchProject({ type: "issue_reported", issue });
+    }
+  }, [patchState.newVolumeToken, patchState.projectSessionId, patchState.zoneNumber]);
+
+  const applyVolumePatch = useCallback(async () => {
+    if (!patchState.projectSessionId || !patchState.patchId) return;
+    const requestId = crypto.randomUUID();
+    dispatchProject({ type: "issue_cleared" });
+    dispatchPatch({ type: "apply_started", requestId });
+    try {
+      const response = await applyZoneVolumePatchToCopy(
+        requestId,
+        patchState.projectSessionId,
+        patchState.patchId,
+      );
+      if (!mounted.current) return;
+      const issue = applyResponseIssue(response, requestId);
+      if (response.cancelled && !issue) {
+        dispatchPatch({ type: "apply_cancelled", requestId });
+        setPlaceholderNotice(t("patch.saveDialogCancelled"));
+        return;
+      }
+      if (issue || !response.project || !response.project_session_id || response.target_zone_number === null) {
+        const safeIssue = issue ?? {
+          code: "patch_apply_response_invalid",
+          message: "Patch apply response invalid",
+          source_line_number: null,
+          context: {},
+        };
+        const invalidate = [
+          "patch_precondition_failed",
+          "patch_verification_failed",
+          "patch_session_mismatch",
+          "project_session_mismatch",
+        ].includes(safeIssue.code);
+        dispatchPatch({ type: "apply_failed", requestId, issue: safeIssue, invalidate });
+        dispatchProject({ type: "issue_reported", issue: safeIssue });
+        return;
+      }
+      dispatchProject({
+        type: "project_replaced",
+        project: response.project,
+        projectSessionId: response.project_session_id,
+        targetZoneNumber: response.target_zone_number,
+      });
+      dispatchPatch({ type: "apply_succeeded", requestId });
+      setPlaceholderNotice(t("patch.copyCreatedSuccess"));
+    } catch {
+      if (!mounted.current) return;
+      const issue = {
+        code: "desktop_bridge_invoke_failed",
+        message: "Desktop bridge invocation failed",
+        source_line_number: null,
+        context: {},
+      };
+      dispatchPatch({ type: "apply_failed", requestId, issue, invalidate: false });
+      dispatchProject({ type: "issue_reported", issue });
+    }
+  }, [patchState.patchId, patchState.projectSessionId, t]);
+  const openDisabled =
+    projectState.status === "selecting" ||
+    projectState.status === "loading" ||
+    patchState.status === "planning" ||
+    patchState.status === "applying";
 
   const toggleProject = () => {
     if (workbench.projectCollapsed) projectPanelRef.current?.expand();
@@ -236,11 +374,13 @@ function App() {
               selectedZoneKey={projectState.selectedZoneKey}
               onSelectObject={setSelectedObject}
               onSelectZone={(zone) =>
-                projectState.project &&
-                dispatchProject({
-                  type: "zone_selected",
-                  zoneKey: zoneSelectionKey(projectState.project, zone),
-                })
+                projectState.project && (() => {
+                  dispatchProject({
+                    type: "zone_selected",
+                    zoneKey: zoneSelectionKey(projectState.project, zone),
+                  });
+                  dispatchPatch({ type: "project_or_zone_changed" });
+                })()
               }
               onCollapse={toggleProject}
             />
@@ -299,6 +439,11 @@ function App() {
               project={projectState.project}
               selectedZone={currentZone}
               selectedObject={selectedObject}
+              patchState={patchState}
+              onStartVolumeEdit={startVolumeEdit}
+              onVolumeTokenChange={(token) => dispatchPatch({ type: "input_changed", token })}
+              onPlanVolumePatch={planVolumePatch}
+              onCancelVolumeEdit={() => dispatchPatch({ type: "cancel" })}
               onTabChange={(contextTab) => updateWorkbench({ contextTab })}
               onCollapse={toggleContext}
             />
@@ -321,6 +466,18 @@ function App() {
             <X size={15} />
           </button>
         </div>
+      ) : null}
+
+      {patchState.review && ["review", "applying"].includes(patchState.status) && projectState.project ? (
+        <ZoneVolumePatchDialog
+          projectFileName={projectState.project.source_path.split(/[\\/]/).at(-1) ?? projectState.project.source_path}
+          review={patchState.review}
+          applying={patchState.status === "applying"}
+          issueCode={patchState.issue?.code ?? null}
+          onBack={() => dispatchPatch({ type: "return_to_edit" })}
+          onCancel={() => dispatchPatch({ type: "cancel" })}
+          onApply={applyVolumePatch}
+        />
       ) : null}
     </div>
   );
