@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyZoneVolumePatchToCopy,
   extractActiveRunZoneAirState,
+  exportActiveZoneAirStateCsv,
   planZoneVolumePatch,
   selectAndExtractZoneAirState,
   selectAndReadPrjZones,
@@ -35,6 +36,15 @@ describe("desktop API boundary", () => {
       expect(source).not.toContain(forbidden);
     }
     expect(source).toContain("extract_active_run_zone_air_state");
+  });
+
+  it("exports only the Rust-held result identity without paths, samples, or CSV", () => {
+    expect(exportActiveZoneAirStateCsv).toHaveLength(5);
+    const source = exportActiveZoneAirStateCsv.toString();
+    for (const forbidden of ["outputPath", "sourcePath", "manifestPath", "samples", "csvBody", "resultRoot"]) {
+      expect(source).not.toContain(forbidden);
+    }
+    expect(source).toContain("export_active_zone_air_state_csv");
   });
 
   it("sends only request and project session identity for ContamX runs", () => {

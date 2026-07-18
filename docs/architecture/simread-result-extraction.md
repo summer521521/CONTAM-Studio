@@ -6,7 +6,7 @@ SimRead使用NIST官方`simread.exe` 3.4.0.3。调用采用参数数组、`shell
 
 首个结果类型为`zone_air_state`，严格表头为`Date`, `Time`, `Node`, `T (C)`, `P (Pa)`, `D (kg/m3)`。温度按确定性公式`K=C+273.15`转换，压力和密度直接读取；日期和时间转换为年内日和从首个样本起算的累计秒数。官方`.nfr`不提供CONTAM真实日类型，因此`day_type`固定为`null`，并以`day_type_source=not_available_in_simread_nfr_v1`说明，不推断工作日、周末或schedule day type。NaN、Infinity、非ASCII、缺列、重复时间和错误Zone均整体拒绝。
 
-每次提取创建新的`extraction_id`、workspace和evidence。工作区创建后，无论SimRead进程失败还是严格解析失败，都通过同一result-manifest结构保留命令、进程状态、stdout/stderr和已生成物证据；工作区创建前的manifest、路径和配置拒绝不会伪造提取清单。原始SIM、PRJ和Phase 4 manifest保持不变。当前不提供GUI、曲线、导出、其他结果类型或直接SIM二进制解析。
+每次提取创建新的`extraction_id`、workspace和evidence。工作区创建后，无论SimRead进程失败还是严格解析失败，都通过同一result-manifest结构保留命令、进程状态、stdout/stderr和已生成物证据；工作区创建前的manifest、路径和配置拒绝不会伪造提取清单。原始SIM、PRJ和Phase 4 manifest保持不变。该Python提取层自身不实现GUI、曲线或导出；Phase 5B/5C只消费其严格结果。其他结果类型和直接SIM二进制解析仍未实现。
 # Phase 5A加固边界
 
 Phase 4运行清单由同一份完整bytes读取、UTF-8解码、JSON解析并计算SHA-256。提取开始、复制后、SimRead启动前、SimRead完成后和写入结果清单前都会复核manifest、PRJ和SIM证据；任何变化整体失败。

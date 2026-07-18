@@ -6,10 +6,12 @@ import { zoneSelectionKey } from "../../app/project-state";
 import { BottomPanel } from "./BottomPanel";
 import { ContextSidebar } from "./ContextSidebar";
 import { ProjectSidebar } from "./ProjectSidebar";
+import { StatusBar } from "./StatusBar";
 import { ZoneVolumePatchDialog } from "./ZoneVolumePatchDialog";
-import { ZoneAirStateResults } from "./ZoneAirStateResults";
+import { ZoneAirStateDataTable, ZoneAirStateResults } from "./ZoneAirStateResults";
 import { TopBar } from "./TopBar";
 import { INITIAL_RESULT_STATE } from "../../app/result-state";
+import { INITIAL_RESULT_EXPORT_STATE } from "../../app/result-export-state";
 import { INITIAL_RUN_STATE } from "../../app/run-state";
 
 const project: ProjectInspection = {
@@ -256,29 +258,135 @@ describe("real project components", () => {
     await i18n.changeLanguage("zh-CN");
   });
 
-  it("renders a real Zone air-state table and null day type", () => {
+  it("defaults a real Zone air-state result to the chart analysis view", () => {
     const markup = renderToStaticMarkup(
       <ZoneAirStateResults
         state={{ ...INITIAL_RESULT_STATE, status: "loaded", result: zoneResult, resultSource: "selected_manifest" }}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
         activeRunId={null}
+        theme="light"
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
+        onExport={() => undefined}
         disabled={false}
       />,
     );
-    expect(markup).toContain("真实Zone空气状态摘要");
+    expect(markup).toContain("Zone空气状态分析");
     expect(markup).toContain("293.15");
-    expect(markup).toContain("—");
+    expect(markup).toContain("极值时间: 0天 00:00:00");
+    expect(markup).toContain("zone-air-state-chart");
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).not.toContain("<table");
+  });
+
+  it("reports ContamX status from verified run evidence instead of a permanent placeholder", () => {
+    const pending = renderToStaticMarkup(
+      <StatusBar theme="light" projectState={state} runState={INITIAL_RUN_STATE} />,
+    );
+    expect(pending).toContain("ContamX状态待验证");
+    expect(pending).not.toContain("ContamX未配置");
+
+    const verified = renderToStaticMarkup(
+      <StatusBar
+        theme="light"
+        projectState={state}
+        runState={{
+          ...INITIAL_RUN_STATE,
+          status: "succeeded",
+          projectSessionId: "request-1",
+          summary: {
+            status: "succeeded",
+            run_id: "run-1",
+            solver_name: "contamx3.exe",
+            solver_version: "3.4.0.3",
+            started_at_utc: "2026-07-18T23:00:00Z",
+            duration_ms: 71,
+            exit_code: 0,
+            timed_out: false,
+            sim_artifact_count: 1,
+            source_unchanged: true,
+          },
+        }}
+      />,
+    );
+    expect(verified).toContain("contamx3.exe 3.4.0.3");
+
+    const notConfigured = renderToStaticMarkup(
+      <StatusBar
+        theme="light"
+        projectState={state}
+        runState={{
+          ...INITIAL_RUN_STATE,
+          status: "error",
+          issue: {
+            code: "contamx_solver_not_configured",
+            message: "internal detail",
+            source_line_number: null,
+            context: {},
+          },
+        }}
+      />,
+    );
+    expect(notConfigured).toContain("ContamX未配置");
+    expect(notConfigured).not.toContain("internal detail");
+  });
+
+  it("keeps all 577 raw samples in the equivalent semantic table", () => {
+    const samples = Array.from({ length: 577 }, (_, index) => ({
+      ...zoneResult.samples[0],
+      index,
+      sim_time_seconds: index * 300,
+    }));
+    const markup = renderToStaticMarkup(
+      <ZoneAirStateDataTable result={{ ...zoneResult, sample_count: samples.length, samples }} />,
+    );
     expect(markup).toContain("<table");
+    expect(markup.match(/<tr>/g)).toHaveLength(578);
+    expect(markup).toContain("172800");
+    expect(markup).toContain("—");
+  });
+
+  it("renders only a safe CSV export summary and preserves the loaded analysis", () => {
+    const markup = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{ ...INITIAL_RESULT_STATE, status: "loaded", result: zoneResult, resultSource: "active_run" }}
+        exportState={{
+          ...INITIAL_RESULT_EXPORT_STATE,
+          status: "succeeded",
+          summary: {
+            file_name: "zone-1-air-state-run-1.csv",
+            row_count: 1,
+            byte_count: 256,
+            run_id: "run-1",
+            extraction_id: "extract-1",
+            zone_number: 1,
+          },
+        }}
+        activeRunId="run-1"
+        theme="dark"
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
+        onExport={() => undefined}
+        disabled={false}
+      />,
+    );
+    expect(markup).toContain("zone-1-air-state-run-1.csv");
+    expect(markup).toContain("1行");
+    expect(markup).toContain("256字节");
+    expect(markup).toContain("zone-air-state-chart");
+    expect(markup).not.toContain("F:\\");
   });
 
   it("shows first-load cancellation without a result table", () => {
     const markup = renderToStaticMarkup(
       <ZoneAirStateResults
         state={{ ...INITIAL_RESULT_STATE, status: "cancelled" }}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
         activeRunId={null}
+        theme="light"
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
+        onExport={() => undefined}
         disabled={false}
       />,
     );
@@ -286,19 +394,22 @@ describe("real project components", () => {
     expect(markup).not.toContain("<table");
   });
 
-  it("retains the result table and shows a safe cancellation or error notice", () => {
+  it("retains the result analysis and shows a safe cancellation or error notice", () => {
     const cancelled = renderToStaticMarkup(
       <ZoneAirStateResults
         state={{ ...INITIAL_RESULT_STATE, status: "cancelled", result: zoneResult }}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
         activeRunId={null}
+        theme="light"
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
+        onExport={() => undefined}
         disabled={false}
       />,
     );
     expect(cancelled).toContain("本次加载已取消");
     expect(cancelled).toContain("293.15");
-    expect(cancelled).toContain("<table");
+    expect(cancelled).toContain("zone-air-state-chart");
 
     const failed = renderToStaticMarkup(
       <ZoneAirStateResults
@@ -313,9 +424,12 @@ describe("real project components", () => {
             context: {},
           },
         }}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
         activeRunId={null}
+        theme="light"
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
+        onExport={() => undefined}
         disabled={false}
       />,
     );
@@ -338,9 +452,12 @@ describe("real project components", () => {
     const empty = renderToStaticMarkup(
       <ZoneAirStateResults
         state={INITIAL_RESULT_STATE}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
         activeRunId="run-2"
+        theme="light"
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
+        onExport={() => undefined}
         disabled={false}
       />,
     );
@@ -350,9 +467,12 @@ describe("real project components", () => {
     const stale = renderToStaticMarkup(
       <ZoneAirStateResults
         state={{ ...INITIAL_RESULT_STATE, status: "loaded", result: zoneResult, resultSource: "selected_manifest" }}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
         activeRunId="run-2"
+        theme="light"
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
+        onExport={() => undefined}
         disabled={false}
       />,
     );

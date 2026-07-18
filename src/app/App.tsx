@@ -14,6 +14,7 @@ import { ZoneVolumePatchDialog } from "../components/workbench/ZoneVolumePatchDi
 import i18n from "../i18n";
 import {
   applyZoneVolumePatchToCopy,
+  exportActiveZoneAirStateCsv,
   extractActiveRunZoneAirState,
   planZoneVolumePatch,
   selectAndReadPrjZones,
@@ -42,6 +43,13 @@ import {
   type ZoneResultStageEvent,
   type ResultLoadSource,
 } from "./result-state";
+import {
+  INITIAL_RESULT_EXPORT_STATE,
+  RESULT_EXPORT_STAGE_EVENT,
+  resultExportReducer,
+  resultExportResponseIssue,
+  type ResultExportStageEvent,
+} from "./result-export-state";
 import { INITIAL_RUN_STATE, runReducer, runResponseIssue } from "./run-state";
 import {
   getCenterLayout,
@@ -59,10 +67,12 @@ function App() {
   const [projectState, dispatchProject] = useReducer(projectReducer, INITIAL_PROJECT_STATE);
   const [patchState, dispatchPatch] = useReducer(patchReducer, INITIAL_PATCH_STATE);
   const [resultState, dispatchResult] = useReducer(resultReducer, INITIAL_RESULT_STATE);
+  const [resultExportState, dispatchResultExport] = useReducer(resultExportReducer, INITIAL_RESULT_EXPORT_STATE);
   const [runState, dispatchRun] = useReducer(runReducer, INITIAL_RUN_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const resultSequence = useRef(0);
+  const resultExportSequence = useRef(0);
   const runSequence = useRef(0);
   const mounted = useRef(true);
   const initialMainLayout = useRef(getMainLayout(workbench)).current;
@@ -81,7 +91,26 @@ function App() {
       mounted.current = false;
       requestSequence.current += 1;
       resultSequence.current += 1;
+      resultExportSequence.current += 1;
       runSequence.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listen<ResultExportStageEvent>(RESULT_EXPORT_STAGE_EVENT, ({ payload }) => {
+      if (payload?.stage !== "exporting" || typeof payload.request_id !== "string") return;
+      dispatchResultExport({ type: "host_exporting_started", requestId: payload.request_id });
+    })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else unlisten = cleanup;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 
@@ -182,6 +211,7 @@ function App() {
       });
       dispatchPatch({ type: "project_or_zone_changed" });
       dispatchResult({ type: "project_or_zone_changed" });
+      dispatchResultExport({ type: "result_changed" });
       dispatchRun({ type: "project_changed" });
     } catch {
       if (!mounted.current || sequence !== requestSequence.current) return;
@@ -256,6 +286,7 @@ function App() {
         projectSessionId: projectState.projectSessionId,
         result: response.result,
       });
+      dispatchResultExport({ type: "result_changed" });
     } catch {
       if (!mounted.current || sequence !== resultSequence.current) return;
       dispatchResult({
@@ -280,6 +311,83 @@ function App() {
     () => loadZoneResults("selected_manifest"),
     [loadZoneResults],
   );
+
+  const exportZoneResults = useCallback(async () => {
+    const result = resultState.result;
+    if (!projectState.projectSessionId || !currentZone || !result) return;
+    const sequence = ++resultExportSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchResultExport({
+      type: "selection_started",
+      sequence,
+      requestId,
+      projectSessionId: projectState.projectSessionId,
+      zoneNumber: currentZone.contam_number,
+      runId: result.run_id,
+      extractionId: result.extraction_id,
+    });
+    try {
+      const response = await exportActiveZoneAirStateCsv(
+        requestId,
+        projectState.projectSessionId,
+        currentZone.contam_number,
+        result.run_id,
+        result.extraction_id,
+      );
+      if (!mounted.current || sequence !== resultExportSequence.current) return;
+      if (response.cancelled) {
+        dispatchResultExport({ type: "export_cancelled", sequence, requestId });
+        return;
+      }
+      const issue = resultExportResponseIssue(response, requestId);
+      const summary = response.export;
+      if (
+        issue
+        || !summary
+        || response.project_session_id !== projectState.projectSessionId
+        || summary.zone_number !== currentZone.contam_number
+        || summary.run_id !== result.run_id
+        || summary.extraction_id !== result.extraction_id
+        || summary.row_count !== result.sample_count
+        || summary.byte_count <= 0
+        || summary.file_name.includes("/")
+        || summary.file_name.includes("\\")
+      ) {
+        dispatchResultExport({
+          type: "export_failed",
+          sequence,
+          requestId,
+          issue: issue ?? {
+            code: "export_response_contract_invalid",
+            message: "CSV export response did not match the active result.",
+            source_line_number: null,
+            context: {},
+          },
+        });
+        return;
+      }
+      dispatchResultExport({
+        type: "export_succeeded",
+        sequence,
+        requestId,
+        projectSessionId: projectState.projectSessionId,
+        summary,
+      });
+    } catch {
+      if (!mounted.current || sequence !== resultExportSequence.current) return;
+      dispatchResultExport({
+        type: "export_failed",
+        sequence,
+        requestId,
+        issue: {
+          code: "desktop_bridge_invoke_failed",
+          message: "Desktop CSV export invocation failed",
+          source_line_number: null,
+          context: {},
+        },
+      });
+    }
+  }, [currentZone, projectState.projectSessionId, resultState.result]);
 
   const startVolumeEdit = useCallback(() => {
     if (!currentZone || !projectState.projectSessionId) return;
@@ -444,6 +552,7 @@ function App() {
         targetZoneNumber: response.target_zone_number,
       });
       dispatchResult({ type: "project_or_zone_changed" });
+      dispatchResultExport({ type: "result_changed" });
       dispatchRun({ type: "project_changed" });
       dispatchPatch({ type: "apply_succeeded", requestId });
       setPlaceholderNotice(t("patch.copyCreatedSuccess"));
@@ -466,6 +575,8 @@ function App() {
     patchState.status === "applying" ||
     resultState.status === "selecting" ||
     resultState.status === "loading" ||
+    resultExportState.status === "selecting_destination" ||
+    resultExportState.status === "exporting" ||
     runState.status === "running";
   const runDisabled = openDisabled || projectState.status !== "loaded" || !projectState.project;
   const activeRunId =
@@ -570,6 +681,7 @@ function App() {
                   });
                   dispatchPatch({ type: "project_or_zone_changed" });
                   dispatchResult({ type: "project_or_zone_changed" });
+                  dispatchResultExport({ type: "result_changed" });
                 })()
               }
               onCollapse={toggleProject}
@@ -594,9 +706,12 @@ function App() {
                   openDisabled={openDisabled}
                   onPlaceholder={showPlaceholder}
                   resultState={resultState}
+                  resultExportState={resultExportState}
                   activeRunId={activeRunId}
+                  theme={workbench.theme}
                   onLoadLatestResults={loadLatestRunResults}
                   onSelectManifestResults={selectRunManifestResults}
+                  onExportResults={exportZoneResults}
                 />
               </Panel>
               <Separator className="resize-handle resize-handle-vertical" />
@@ -648,7 +763,7 @@ function App() {
         </Group>
       </div>
 
-      <StatusBar theme={workbench.theme} projectState={projectState} />
+      <StatusBar theme={workbench.theme} projectState={projectState} runState={runState} />
 
       {placeholderNotice ? (
         <div className="placeholder-toast" role="status" aria-live="polite">

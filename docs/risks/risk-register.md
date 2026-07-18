@@ -35,3 +35,6 @@
 | SimRead失败证据不完整 | 失败被误判成功或无法审计 | 高 | 统一结果清单模型；保留stdin、退出/终止请求与退出确认、父管道关闭、流冻结和已生成NFR/XRF证据；未确认退出时生成物不写最终哈希；写入前统一复核Phase 4、工作区和SimRead身份 | Phase 5A |
 | R-5B-1 | 结果清单可能属于其他项目 | 高 | Rust持有manifest路径并绑定活动项目SHA-256，Python在SimRead启动前复核项目与Zone | 当前仅支持Phase 4成功清单和当前Zone |
 | R-5B-2 | 内存中的活动运行失效或旧结果被误认为最新 | 高 | 绑定项目session/SHA-256、受控manifest规范化路径和`run_id`；Python返回后再次复核；旧结果显式标记过期且不自动替换 | Phase 5B-2 |
+| R-5C-1 | 图表或统计改变、丢弃或误解释结果样本 | 高 | 纯TypeScript一次遍历契约；拒绝非有限值、重复索引和时间倒退；曲线禁用平滑、采样、插值和缺失值连接；保留完整数据表 | Phase 5C |
+| R-5C-2 | WebView伪造CSV内容或导出路径 | 极高 | Rust内存`ActiveResultContext`绑定项目/Zone/运行/提取；React只提交身份；原生保存对话框持有路径；不开放前端文件系统权限 | Phase 5C |
+| R-5C-3 | CSV覆盖既有证据或触发表格公式 | 高 | 只写不存在的新`.csv`；同目录独占临时文件、flush、fsync和原子提交；RFC转义及危险文本前缀防护 | Phase 5C |

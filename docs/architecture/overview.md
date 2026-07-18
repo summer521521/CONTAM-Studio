@@ -124,3 +124,14 @@ zone_air_state
 ```
 
 该路径不修改Phase 4运行目录，也不接受任意SIM作为可信入口。详见[SimRead结果提取架构](simread-result-extraction.md)。
+
+### 当前Zone结果分析与CSV
+
+```text
+严格ZoneAirStateResult
+↓ Rust契约验证并保存ActiveResultContext
+├─ WebView安全视图 → 纯TypeScript统计 → ECharts/语义化表格
+└─ Rust原生另存为 → 确定性CSV → 不存在的新文件
+```
+
+Phase 5C只分析已验证的当前Zone `zone_air_state`。图表不插值、不平滑、不采样，统计不改变样本或单位；React不能提交路径、样本或CSV。CSV由Rust内存活动结果生成并以不可覆盖的原子写入提交。详见[Phase 5C分析架构](phase-5c-zone-analysis-workspace.md)和[CSV契约](zone-air-state-csv-export.md)。

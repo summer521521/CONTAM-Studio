@@ -22,6 +22,9 @@
   --warning-soft: #fff4dd;
   --error: #c53d45;
   --success: #1d7a4d;
+  --chart-temperature: #1769c2;
+  --chart-pressure: #008b83;
+  --chart-density: #b96700;
   --focus: #2684ff;
   --toolbar-height: 48px;
   --activity-width: 48px;
@@ -50,6 +53,9 @@
   --warning-soft: #4a3823;
   --error: #ff7c85;
   --success: #63c391;
+  --chart-temperature: #62aafa;
+  --chart-pressure: #4bc6ba;
+  --chart-density: #f0b25b;
   --focus: #75b6ff;
   --shadow-overlay: 0 10px 26px rgb(0 0 0 / 36%);
 }

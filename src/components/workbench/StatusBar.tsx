@@ -3,14 +3,23 @@ import { useTranslation } from "react-i18next";
 import type { AppTheme } from "../../app/workbench-state";
 import type { ProjectState } from "../../app/project-state";
 import { projectFileName } from "../../app/project-state";
+import type { RunState } from "../../app/run-state";
 
 interface StatusBarProps {
   theme: AppTheme;
   projectState: ProjectState;
+  runState: RunState;
 }
 
-export function StatusBar({ theme, projectState }: StatusBarProps) {
+export function StatusBar({ theme, projectState, runState }: StatusBarProps) {
   const { t } = useTranslation();
+  const contamXStatus = runState.summary
+    ? `${runState.summary.solver_name} ${runState.summary.solver_version}`
+    : runState.status === "running"
+      ? t("status.contamxRunning")
+      : runState.issue?.code === "contamx_solver_not_configured"
+        ? t("status.contamxNotConfigured")
+        : t("status.contamx");
 
   return (
     <footer className="status-bar">
@@ -31,7 +40,7 @@ export function StatusBar({ theme, projectState }: StatusBarProps) {
       <span className="status-spacer" />
       <span className="status-item">
         <MonitorCog size={13} aria-hidden="true" />
-        {t("status.contamx")}
+        {contamXStatus}
       </span>
       <span className="status-item">
         <BotOff size={13} aria-hidden="true" />
