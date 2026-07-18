@@ -1,4 +1,4 @@
-import { Activity, LoaderCircle, RefreshCw } from "lucide-react";
+import { Activity, AlertCircle, LoaderCircle, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ResultState } from "../../app/result-state";
 
@@ -11,21 +11,27 @@ interface ZoneAirStateResultsProps {
 export function ZoneAirStateResults({ state, onLoad, disabled }: ZoneAirStateResultsProps) {
   const { t } = useTranslation();
   const result = state.result;
-  if (state.status === "loading") {
-    return <section className="results-surface" role="status"><LoaderCircle className="spin" size={20} />{t("results.loading")}</section>;
-  }
-  if (state.status === "error") {
-    return (
-      <section className="results-surface results-error" role="alert">
-        <strong>{t("results.errorTitle")}</strong>
-        <p>{t(`errors.codes.${state.issue?.code}`, { defaultValue: t("errors.codes.unknown") })}</p>
-        <button className="secondary-action" type="button" onClick={onLoad} disabled={disabled}>
-          <RefreshCw size={15} />{t("results.retry")}
-        </button>
-      </section>
-    );
-  }
+
   if (!result) {
+    if (state.status === "selecting" || state.status === "loading") {
+      return (
+        <section className="results-surface" role="status">
+          <LoaderCircle className="spin" size={20} />
+          {t(state.status === "selecting" ? "results.selecting" : "results.loading")}
+        </section>
+      );
+    }
+    if (state.status === "error") {
+      return (
+        <section className="results-surface results-error" role="alert">
+          <strong>{t("results.errorTitle")}</strong>
+          <p>{t(`errors.codes.${state.issue?.code}`, { defaultValue: t("errors.codes.unknown") })}</p>
+          <button className="secondary-action" type="button" onClick={onLoad} disabled={disabled}>
+            <RefreshCw size={15} />{t("results.retry")}
+          </button>
+        </section>
+      );
+    }
     return (
       <section className="results-surface results-empty">
         <Activity size={24} aria-hidden="true" />
@@ -36,6 +42,18 @@ export function ZoneAirStateResults({ state, onLoad, disabled }: ZoneAirStateRes
       </section>
     );
   }
+
+  const retainedStatus = (() => {
+    if (state.status === "selecting") return { role: "status" as const, text: t("results.selectingRetained"), error: false };
+    if (state.status === "loading") return { role: "status" as const, text: t("results.loadingRetained"), error: false };
+    if (state.status === "cancelled") return { role: "status" as const, text: t("results.cancelledRetained"), error: false };
+    if (state.status === "error") {
+      const safeError = t(`errors.codes.${state.issue?.code}`, { defaultValue: t("errors.codes.unknown") });
+      return { role: "alert" as const, text: t("results.failedRetained", { error: safeError }), error: true };
+    }
+    return null;
+  })();
+
   return (
     <section className="results-surface" aria-labelledby="zone-results-title">
       <div className="results-header">
@@ -47,6 +65,16 @@ export function ZoneAirStateResults({ state, onLoad, disabled }: ZoneAirStateRes
           <RefreshCw size={15} />{t("results.load")}
         </button>
       </div>
+      {retainedStatus ? (
+        <div
+          className={`results-inline-status${retainedStatus.error ? " is-error" : ""}`}
+          role={retainedStatus.role}
+          aria-live="polite"
+        >
+          {retainedStatus.error ? <AlertCircle size={16} aria-hidden="true" /> : <Activity size={16} aria-hidden="true" />}
+          <span>{retainedStatus.text}</span>
+        </div>
+      ) : null}
       <div className="results-summary-grid">
         <div><span>{t("results.zone")}</span><strong>{result.zone_name} · {result.zone_number}</strong></div>
         <div><span>{t("results.runId")}</span><strong><code>{result.run_id}</code></strong></div>
@@ -61,11 +89,23 @@ export function ZoneAirStateResults({ state, onLoad, disabled }: ZoneAirStateRes
       <p className="results-note">{t("results.strictNote")}</p>
       <div className="results-table-wrap">
         <table className="results-table">
-          <thead><tr><th>{t("results.time")}</th><th>{t("results.temperature")}</th><th>{t("results.pressure")}</th><th>{t("results.density")}</th><th>{t("results.dayTypeColumn")}</th></tr></thead>
+          <thead>
+            <tr>
+              <th>{t("results.time")}</th>
+              <th>{t("results.temperature")}</th>
+              <th>{t("results.pressure")}</th>
+              <th>{t("results.density")}</th>
+              <th>{t("results.dayTypeColumn")}</th>
+            </tr>
+          </thead>
           <tbody>
             {result.samples.map((sample) => (
               <tr key={sample.index}>
-                <td>{sample.sim_time_seconds}</td><td>{sample.temperature_k}</td><td>{sample.reference_pressure_pa}</td><td>{sample.air_density_kg_m3}</td><td>{sample.day_type ?? "—"}</td>
+                <td>{sample.sim_time_seconds}</td>
+                <td>{sample.temperature_k}</td>
+                <td>{sample.reference_pressure_pa}</td>
+                <td>{sample.air_density_kg_m3}</td>
+                <td>{sample.day_type ?? "—"}</td>
               </tr>
             ))}
           </tbody>

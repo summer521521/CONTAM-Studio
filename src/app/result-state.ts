@@ -35,6 +35,13 @@ export interface DesktopZoneAirStateResponse {
   error: ReaderDiagnostic | null;
 }
 
+export const ZONE_RESULT_STAGE_EVENT = "zone-result-stage";
+
+export interface ZoneResultStageEvent {
+  request_id: string;
+  stage: "loading";
+}
+
 export interface ResultState {
   status: ZoneResultStatus;
   activeSequence: number | null;
@@ -46,7 +53,8 @@ export interface ResultState {
 }
 
 export type ResultAction =
-  | { type: "load_started"; sequence: number; requestId: string; projectSessionId: string; zoneNumber: number }
+  | { type: "selection_started"; sequence: number; requestId: string; projectSessionId: string; zoneNumber: number }
+  | { type: "host_loading_started"; requestId: string }
   | { type: "load_cancelled"; sequence: number; requestId: string }
   | { type: "load_succeeded"; sequence: number; requestId: string; projectSessionId: string; result: ZoneAirStateResult }
   | { type: "load_failed"; sequence: number; requestId: string; issue: ReaderDiagnostic }
@@ -69,16 +77,20 @@ function current(state: ResultState, sequence: number, requestId: string): boole
 
 export function resultReducer(state: ResultState, action: ResultAction): ResultState {
   switch (action.type) {
-    case "load_started":
+    case "selection_started":
       return {
         ...state,
-        status: "loading",
+        status: "selecting",
         activeSequence: action.sequence,
         activeRequestId: action.requestId,
         projectSessionId: action.projectSessionId,
         zoneNumber: action.zoneNumber,
         issue: null,
       };
+    case "host_loading_started":
+      return state.activeRequestId === action.requestId
+        ? { ...state, status: "loading" }
+        : state;
     case "load_cancelled":
       return current(state, action.sequence, action.requestId)
         ? { ...state, status: "cancelled", activeSequence: null, activeRequestId: null, issue: null }

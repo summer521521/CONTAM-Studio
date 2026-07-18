@@ -22,5 +22,7 @@ describe("desktop API boundary", () => {
     expect(selectAndExtractZoneAirState).toHaveLength(3);
     expect(selectAndExtractZoneAirState.toString()).not.toContain("manifestPath");
     expect(selectAndExtractZoneAirState.toString()).not.toContain("resultRoot");
+    expect(selectAndExtractZoneAirState.toString()).not.toContain("sourcePath");
+    expect(selectAndExtractZoneAirState.toString()).not.toContain("simreadPath");
   });
 });

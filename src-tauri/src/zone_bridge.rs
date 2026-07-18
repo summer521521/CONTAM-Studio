@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 const PROTOCOL_VERSION: &str = "1.2";
@@ -24,6 +24,7 @@ const READ_OPERATION: &str = "read_simple_zones";
 const PLAN_OPERATION: &str = "plan_zone_volume_patch";
 const APPLY_OPERATION: &str = "apply_zone_volume_patch_to_copy";
 const EXTRACT_ZONE_AIR_STATE_OPERATION: &str = "extract_zone_air_state";
+const ZONE_RESULT_STAGE_EVENT: &str = "zone-result-stage";
 const READ_AND_PLAN_TIMEOUT: Duration = Duration::from_secs(10);
 const APPLY_TIMEOUT: Duration = Duration::from_secs(15);
 const EXTRACT_TIMEOUT: Duration = Duration::from_secs(45);
@@ -331,6 +332,12 @@ pub struct DesktopZoneAirStateResponse {
     project_session_id: Option<String>,
     result: Option<ZoneAirStateResultView>,
     error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct ZoneResultStageEvent {
+    request_id: String,
+    stage: &'static str,
 }
 
 #[derive(Clone, Debug)]
@@ -1493,6 +1500,25 @@ pub async fn select_and_extract_zone_air_state(
             )
         }
     };
+    if app
+        .emit(
+            ZONE_RESULT_STAGE_EVENT,
+            ZoneResultStageEvent {
+                request_id: request_id.clone(),
+                stage: "loading",
+            },
+        )
+        .is_err()
+    {
+        return result_failure(
+            &request_id,
+            host_diagnostic(
+                "desktop_stage_notification_failed",
+                "The result extraction stage could not be reported.",
+                BTreeMap::new(),
+            ),
+        );
+    }
     let result_root = match app.path().app_local_data_dir() {
         Ok(path) => path.join("result-extractions"),
         Err(_) => {
@@ -2002,6 +2028,7 @@ mod tests {
         );
         assert_eq!(READ_AND_PLAN_TIMEOUT, Duration::from_secs(10));
         assert_eq!(APPLY_TIMEOUT, Duration::from_secs(15));
+        assert_eq!(EXTRACT_TIMEOUT, Duration::from_secs(45));
         assert_eq!(MAX_REQUEST_BYTES, 128 * 1024);
     }
 
@@ -2254,6 +2281,65 @@ mod tests {
         assert!(!serialized.contains("result_root"));
         assert!(!serialized.contains("manifest"));
 
+        for invalid in [
+            {
+                let mut value = raw_air_state_result();
+                value.zone_number = 2;
+                value
+            },
+            {
+                let mut value = raw_air_state_result();
+                value.zone_name = "Wrong".into();
+                value
+            },
+            {
+                let mut value = raw_air_state_result();
+                value.parsed_result.source_line_number = 999;
+                value
+            },
+            {
+                let mut value = raw_air_state_result();
+                value.parsed_result.schema_version = "2.0".into();
+                value
+            },
+            {
+                let mut value = raw_air_state_result();
+                value.run_id = "outer-run".into();
+                value
+            },
+            {
+                let mut value = raw_air_state_result();
+                value.extraction_id = "outer-extraction".into();
+                value
+            },
+            {
+                let mut value = raw_air_state_result();
+                value.parsed_result.samples[0].day_type = Some("calendar".into());
+                value
+            },
+        ] {
+            assert_eq!(
+                validate_zone_air_state_result(invalid, &active, 1)
+                    .unwrap_err()
+                    .code,
+                "python_response_result_invalid"
+            );
+        }
+
+        let mut decreasing_time = raw_air_state_result();
+        let mut second = decreasing_time.parsed_result.samples[0].clone();
+        second.index = 1;
+        second.sim_time_seconds = -1.0;
+        decreasing_time.sample_count = 2;
+        decreasing_time.parsed_result.sample_count = 2;
+        decreasing_time.parsed_result.samples.push(second);
+        assert_eq!(
+            validate_zone_air_state_result(decreasing_time, &active, 1)
+                .unwrap_err()
+                .code,
+            "python_response_result_invalid"
+        );
+
         let mut non_finite = raw_air_state_result();
         non_finite.parsed_result.samples[0].temperature_k = f64::INFINITY;
         assert_eq!(
@@ -2271,6 +2357,15 @@ mod tests {
                 .code,
             "python_response_result_invalid"
         );
+
+        let stage = serde_json::to_value(ZoneResultStageEvent {
+            request_id: "stage-1".into(),
+            stage: "loading",
+        })
+        .unwrap();
+        assert_eq!(stage["request_id"], "stage-1");
+        assert_eq!(stage["stage"], "loading");
+        assert_eq!(stage.as_object().unwrap().len(), 2);
     }
 
     #[test]

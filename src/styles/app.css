@@ -1355,6 +1355,34 @@ input:focus-visible,
   font-size: 18px;
 }
 
+.results-inline-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 9px 10px;
+  color: var(--text-secondary);
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.results-inline-status svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.results-inline-status.is-error {
+  background: color-mix(in srgb, var(--error) 9%, var(--bg-app));
+  border-left-color: var(--error);
+}
+
+.results-inline-status.is-error svg {
+  color: var(--error);
+}
+
 .results-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

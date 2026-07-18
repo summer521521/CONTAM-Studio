@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Group, Panel, Separator, usePanelRef, type Layout } from "react-resizable-panels";
@@ -31,7 +32,13 @@ import {
   selectedZone,
   zoneSelectionKey,
 } from "./project-state";
-import { INITIAL_RESULT_STATE, resultReducer, resultResponseIssue } from "./result-state";
+import {
+  INITIAL_RESULT_STATE,
+  resultReducer,
+  resultResponseIssue,
+  ZONE_RESULT_STAGE_EVENT,
+  type ZoneResultStageEvent,
+} from "./result-state";
 import {
   getCenterLayout,
   getMainLayout,
@@ -67,6 +74,25 @@ function App() {
     return () => {
       mounted.current = false;
       requestSequence.current += 1;
+      resultSequence.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listen<ZoneResultStageEvent>(ZONE_RESULT_STAGE_EVENT, ({ payload }) => {
+      if (payload?.stage !== "loading" || typeof payload.request_id !== "string") return;
+      dispatchResult({ type: "host_loading_started", requestId: payload.request_id });
+    })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else unlisten = cleanup;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 
@@ -172,7 +198,7 @@ function App() {
     const sequence = ++resultSequence.current;
     const requestId = crypto.randomUUID();
     dispatchResult({
-      type: "load_started",
+      type: "selection_started",
       sequence,
       requestId,
       projectSessionId: projectState.projectSessionId,
@@ -352,6 +378,7 @@ function App() {
     projectState.status === "loading" ||
     patchState.status === "planning" ||
     patchState.status === "applying" ||
+    resultState.status === "selecting" ||
     resultState.status === "loading";
 
   const toggleProject = () => {
