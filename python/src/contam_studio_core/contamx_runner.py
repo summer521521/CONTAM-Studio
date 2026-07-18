@@ -640,6 +640,9 @@ def run_contamx(
     if input_baselines[source] != (source_hash, source_size):
         _fail("run_snapshot_mismatch", "主PRJ在初始证据采集后发生变化。")
     solver_info = probe_solver(solver)
+    root = root.resolve(strict=False)
+    if root == source_directory or root.is_relative_to(source_directory):
+        _fail("run_root_conflicts_with_source", "运行根目录在创建前规范化后位于源PRJ目录树中。")
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError:
