@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import secrets
@@ -10,37 +11,48 @@ import sys
 import tempfile
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .contamx_runner import (
+    EXPECTED_SOLVER_ARCHITECTURE,
+    EXPECTED_SOLVER_NAME,
+    EXPECTED_SOLVER_SHA256,
+    EXPECTED_SOLVER_SIZE_BYTES,
+    EXPECTED_SOLVER_VERSION,
     _controlled_environment,
     _pe_architecture,
     _sha256_file,
     _windows_file_version,
 )
-from .prj_zone_reader import read_simple_zones
+from .prj_zone_reader import PrjZoneReaderError, read_simple_zones
+from .simread_models import ResultDiagnostic, SimReadToolInfo, ZoneAirStateSeries
 from .zone_air_state_results import ZoneResultError, parse_zone_air_state
-from .simread_models import (
-    ResultDiagnostic,
-    SimReadToolInfo,
-    ZoneAirStateSeries,
-)
 
 SCHEMA_VERSION = "1.0"
 EXECUTION_MODE = "isolated_simread_conversion"
-EXPECTED_NAME = "simread.exe"
-EXPECTED_VERSION = "3.4.0.3"
-EXPECTED_SIZE = 34816
-EXPECTED_SHA256 = "85af9b559debb6ecf9ba2f73705cef60f14d32c5f8ed9b524823fa3ac85a6958"
+PHASE4_EXECUTION_MODE = "isolated_contamx_process"
+EXPECTED_SIMREAD_NAME = "simread.exe"
+EXPECTED_SIMREAD_VERSION = "3.4.0.3"
+EXPECTED_SIMREAD_SIZE_BYTES = 34816
+EXPECTED_SIMREAD_SHA256 = "85af9b559debb6ecf9ba2f73705cef60f14d32c5f8ed9b524823fa3ac85a6958"
+SIMREAD_INVOCATION_CONTRACT = "stdin_v1: blank dates; n; y; selected node; n"
+# Compatibility aliases for the Phase 5A probe constants; the explicit names above
+# are used by the hardened implementation.
+EXPECTED_NAME = EXPECTED_SIMREAD_NAME
+EXPECTED_VERSION = EXPECTED_SIMREAD_VERSION
+EXPECTED_SIZE = EXPECTED_SIMREAD_SIZE_BYTES
+EXPECTED_SHA256 = EXPECTED_SIMREAD_SHA256
 SIMREAD_ENVIRONMENT = "CONTAM_STUDIO_SIMREAD"
 PROBE_TIMEOUT_SECONDS = 5
 EXTRACT_TIMEOUT_SECONDS = 30
+MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_STREAM_BYTES = 4 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 ERROR_EXIT_CODES = {
-    name: 2 + index
+    name: index + 2
     for index, name in enumerate(
         (
             "result_manifest_not_found",
@@ -69,6 +81,7 @@ ERROR_EXIT_CODES = {
             "simread_process_failed",
             "simread_stream_capture_failed",
             "simread_process_termination_failed",
+            "simread_stdin_failed",
             "simread_output_missing",
             "simread_output_ambiguous",
             "simread_output_too_large",
@@ -87,6 +100,7 @@ class SimReadError(Exception):
     def __init__(self, diagnostic: ResultDiagnostic):
         super().__init__(diagnostic.message)
         self.diagnostic = diagnostic
+        self.code = diagnostic.code
         self.exit_code = ERROR_EXIT_CODES[diagnostic.code]
 
 
@@ -94,18 +108,46 @@ def _fail(code: str, message: str, context: dict[str, str | int] | None = None) 
     raise SimReadError(ResultDiagnostic(code, message, context))
 
 
-def _hash_size(path: Path) -> tuple[str, int]:
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _hash_size(path: Path, missing_code: str = "result_artifact_missing") -> tuple[str, int]:
     try:
-        return _sha256_file(path), path.stat().st_size
+        stat = path.stat()
+        if not path.is_file() or stat.st_size < 0:
+            _fail(missing_code, "证据文件不是普通文件。")
+        return _sha256_file(path), stat.st_size
+    except SimReadError:
+        raise
     except OSError:
-        _fail("result_artifact_missing", "结果证据文件不存在。")
+        _fail(missing_code, "证据文件不存在。")
     raise AssertionError
 
 
+def _require_string(
+    value: Any, field: str, *, nonempty: bool = True, max_length: int = 4096
+) -> str:
+    if not isinstance(value, str) or (nonempty and not value) or len(value) > max_length:
+        _fail("result_manifest_invalid", f"Phase 4清单字段{field}类型无效。")
+    return value
+
+
+def _require_bool(value: Any, field: str) -> bool:
+    if not isinstance(value, bool):
+        _fail("result_manifest_invalid", f"Phase 4清单字段{field}类型无效。")
+    return value
+
+
+def _require_int(value: Any, field: str, *, nonnegative: bool = False) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or (nonnegative and value < 0):
+        _fail("result_manifest_invalid", f"Phase 4清单字段{field}类型无效。")
+    return value
+
+
 def _resolve_tool(explicit: Path | None) -> Path:
-    candidate = explicit or (
-        Path(os.environ[SIMREAD_ENVIRONMENT]) if os.environ.get(SIMREAD_ENVIRONMENT) else None
-    )
+    configured = os.environ.get(SIMREAD_ENVIRONMENT)
+    candidate = explicit if explicit is not None else (Path(configured) if configured else None)
     if candidate is None:
         _fail("simread_not_configured", "未配置SimRead工具。")
     if not candidate.is_absolute():
@@ -116,27 +158,108 @@ def _resolve_tool(explicit: Path | None) -> Path:
         _fail("simread_not_found", "SimRead工具不存在。")
     if not path.is_file():
         _fail("simread_path_invalid", "SimRead路径不是普通文件。")
-    if path.name.casefold() != EXPECTED_NAME:
+    if path.name.casefold() != EXPECTED_SIMREAD_NAME:
         _fail("simread_unsupported", "SimRead文件名不是已验证名称。")
     return path
 
 
+class _BoundedCapture:
+    def __init__(self, stream, target: Path | None):
+        self.stream = stream
+        self.target = target
+        self.data = bytearray()
+        self.truncated = False
+        self.error: BaseException | None = None
+
+    def drain(self) -> None:
+        try:
+            output = self.target.open("wb") if self.target else None
+            try:
+                while True:
+                    chunk = self.stream.read(65536)
+                    if not chunk:
+                        break
+                    remaining = MAX_STREAM_BYTES - len(self.data)
+                    if remaining > 0:
+                        kept = chunk[:remaining]
+                        self.data.extend(kept)
+                        if output:
+                            output.write(kept)
+                    if len(chunk) > remaining:
+                        self.truncated = True
+            finally:
+                if output:
+                    output.flush()
+                    os.fsync(output.fileno())
+                    output.close()
+        except BaseException as error:  # noqa: BLE001 - propagated as structured evidence error.
+            self.error = error
+
+
+def _capture_process(
+    process: subprocess.Popen, *, timeout: int, evidence: Path | None
+) -> tuple[int | None, bool, _BoundedCapture, _BoundedCapture]:
+    stdout = _BoundedCapture(process.stdout, evidence / "stdout.bin" if evidence else None)
+    stderr = _BoundedCapture(process.stderr, evidence / "stderr.bin" if evidence else None)
+    threads = [threading.Thread(target=stdout.drain), threading.Thread(target=stderr.drain)]
+    for thread in threads:
+        thread.start()
+    timed_out = False
+    exit_code: int | None = None
+    try:
+        exit_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            process.terminate()
+        except OSError:
+            _fail("simread_process_termination_failed", "SimRead进程终止失败。")
+        try:
+            exit_code = process.wait(timeout=3)
+        except OSError:
+            _fail("simread_process_termination_failed", "SimRead进程终止状态无法确认。")
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except OSError:
+                _fail("simread_process_termination_failed", "SimRead进程强制终止失败。")
+            try:
+                exit_code = process.wait(timeout=3)
+            except OSError:
+                _fail("simread_process_termination_failed", "SimRead进程强制终止状态无法确认。")
+            except subprocess.TimeoutExpired:
+                _fail("simread_process_termination_failed", "无法确认SimRead进程已退出。")
+    except OSError:
+        _fail("simread_process_failed", "SimRead进程状态读取失败。")
+    for thread in threads:
+        thread.join(timeout=3)
+    if any(thread.is_alive() for thread in threads) or stdout.error or stderr.error:
+        _fail("simread_stream_capture_failed", "SimRead输出证据捕获失败。")
+    return exit_code, timed_out, stdout, stderr
+
+
 def _probe_output(path: Path) -> None:
     try:
-        process = subprocess.run(
+        process = subprocess.Popen(
             [str(path)],
             cwd=path.parent,
             env=_controlled_environment(),
             shell=False,
-            capture_output=True,
-            timeout=PROBE_TIMEOUT_SECONDS,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        _fail("simread_contract_unavailable", "无法验证SimRead调用契约。")
-    if process.returncode != 1 or process.stdout:
+        exit_code, timed_out, stdout, stderr = _capture_process(
+            process, timeout=PROBE_TIMEOUT_SECONDS, evidence=None
+        )
+    except SimReadError:
+        raise
+    except OSError:
+        _fail("simread_contract_unavailable", "无法启动SimRead契约探测。")
+    if timed_out or exit_code != 1 or stdout.data or stdout.truncated or stderr.truncated:
         _fail("simread_contract_unavailable", "SimRead无参数契约不匹配。")
     try:
-        text = process.stderr.decode("ascii")
+        text = bytes(stderr.data).decode("ascii")
     except UnicodeDecodeError:
         _fail("simread_contract_unavailable", "SimRead帮助输出不是ASCII。")
     required = (
@@ -144,217 +267,410 @@ def _probe_output(path: Path) -> None:
         "Usage: simread <input-file>",
         "Automated processing",
     )
-    if not all(item in text for item in required):
+    if not all(fragment in text for fragment in required):
         _fail("simread_contract_unavailable", "SimRead帮助输出不完整。")
 
 
 def probe_simread(explicit: Path | None = None) -> SimReadToolInfo:
     path = _resolve_tool(explicit)
+    before_sha, before_size = _hash_size(path, "simread_unsupported")
     try:
-        size = path.stat().st_size
-        sha = _sha256_file(path)
         architecture = _pe_architecture(path)
         version = _windows_file_version(path)
-    except SimReadError as exc:
-        if exc.code == "contamx_solver_version_unavailable":
+    except Exception as error:  # noqa: BLE001 - translate native evidence failures.
+        if getattr(error, "code", "") == "contamx_solver_version_unavailable":
             _fail("simread_contract_unavailable", "无法读取SimRead版本资源。")
-        raise
+        _fail("simread_unsupported", "无法读取SimRead二进制身份。")
     if (
-        size != EXPECTED_SIZE
-        or sha.casefold() != EXPECTED_SHA256
+        before_size != EXPECTED_SIMREAD_SIZE_BYTES
+        or before_sha.casefold() != EXPECTED_SIMREAD_SHA256
         or architecture != "windows-x64"
-        or version != EXPECTED_VERSION
+        or version != EXPECTED_SIMREAD_VERSION
     ):
         _fail("simread_unsupported", "SimRead身份与已验证官方版本不匹配。")
     _probe_output(path)
+    after_sha, after_size = _hash_size(path, "simread_unsupported")
+    if (before_sha, before_size) != (after_sha, after_size):
+        _fail("simread_unsupported", "SimRead探测期间文件发生变化。")
     return SimReadToolInfo(
         str(path),
-        EXPECTED_NAME,
-        EXPECTED_VERSION,
-        sha,
-        size,
-        architecture,
+        EXPECTED_SIMREAD_NAME,
+        EXPECTED_SIMREAD_VERSION,
+        before_sha,
+        before_size,
+        "windows-x64",
         "NIST contam-x-3.4.0.3-win64.zip (SHA-256 verified)",
-        "stdin_v1: blank dates; n; y; selected node; n",
+        SIMREAD_INVOCATION_CONTRACT,
     )
 
 
-class _Capture:
-    def __init__(self, stream, target: Path):
-        self.stream, self.target = stream, target
-        self.data = bytearray()
-        self.truncated = False
-        self.error: BaseException | None = None
-
-    def drain(self) -> None:
-        try:
-            with self.target.open("wb") as output:
-                while True:
-                    chunk = self.stream.read(65536)
-                    if not chunk:
-                        break
-                    remaining = MAX_STREAM_BYTES - len(self.data)
-                    if remaining > 0:
-                        self.data.extend(chunk[:remaining])
-                    if len(chunk) > remaining:
-                        self.truncated = True
-                    output.write(chunk[: max(0, remaining)])
-        except BaseException as exc:  # noqa: BLE001
-            self.error = exc
+@dataclass(frozen=True, slots=True)
+class ValidatedPhase4RunEvidence:
+    manifest_path: Path
+    manifest_bytes: bytes
+    manifest_sha256: str
+    run_directory: Path
+    payload: dict[str, Any]
+    run_id: str
+    source: dict[str, Any]
+    solver: dict[str, Any]
+    prj_entry: dict[str, Any]
+    sim_entry: dict[str, Any]
+    prj_path: Path
+    sim_path: Path
+    prj_sha256: str
+    prj_size_bytes: int
+    sim_sha256: str
+    sim_size_bytes: int
 
 
-def _run_process(
-    tool: SimReadToolInfo, workspace: Path, sim_name: str, zone: int, evidence: Path
-) -> tuple[int | None, bool, dict[str, Any], dict[str, Any]]:
-    stdout_path, stderr_path = evidence / "stdout.bin", evidence / "stderr.bin"
-    stdin = b"\n\nn\ny\n" + str(zone).encode("ascii") + b"\nn\n"
-    try:
-        process = subprocess.Popen(
-            [tool.path, sim_name],
-            cwd=workspace,
-            env=_controlled_environment(),
-            shell=False,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        out, err = _Capture(process.stdout, stdout_path), _Capture(process.stderr, stderr_path)
-        threads = [threading.Thread(target=out.drain), threading.Thread(target=err.drain)]
-        for thread in threads:
-            thread.start()
-        try:
-            process.stdin.write(stdin)
-            process.stdin.close()
-        except OSError:
-            pass
-        try:
-            exit_code = process.wait(timeout=EXTRACT_TIMEOUT_SECONDS)
-            timed_out = False
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            process.terminate()
-            try:
-                exit_code = process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                try:
-                    exit_code = process.wait(timeout=3)
-                except subprocess.TimeoutExpired:
-                    _fail("simread_process_termination_failed", "无法确认SimRead进程已退出。")
-        for thread in threads:
-            thread.join(timeout=3)
-        if any(thread.is_alive() for thread in threads) or out.error or err.error:
-            _fail("simread_stream_capture_failed", "SimRead输出证据捕获失败。")
-    except SimReadError:
-        raise
-    except (OSError, ValueError):
-        _fail("simread_process_start_failed", "SimRead进程启动失败。")
-    return (
-        exit_code,
-        timed_out,
-        {
-            "relative_path": "evidence/stdout.bin",
-            "size_bytes": stdout_path.stat().st_size,
-            "sha256": _sha256_file(stdout_path),
-            "truncated": out.truncated,
-        },
-        {
-            "relative_path": "evidence/stderr.bin",
-            "size_bytes": stderr_path.stat().st_size,
-            "sha256": _sha256_file(stderr_path),
-            "truncated": err.truncated,
-        },
-    )
-
-
-def _safe_relative(path_text: str, root: Path) -> Path:
+def _safe_relative(
+    path_text: str, root: Path, invalid_code: str = "result_artifact_path_invalid"
+) -> Path:
+    if not isinstance(path_text, str) or not path_text or len(path_text) > 512:
+        _fail(invalid_code, "证据相对路径无效。")
     relative = Path(path_text)
     if relative.is_absolute() or ".." in relative.parts:
-        _fail("result_artifact_path_invalid", "运行证据路径不安全。")
+        _fail(invalid_code, "证据路径不是安全相对路径。")
     resolved = (root / relative).resolve()
     try:
         resolved.relative_to(root.resolve())
     except ValueError:
-        _fail("result_artifact_path_invalid", "运行证据路径越界。")
+        _fail(invalid_code, "证据路径越界。")
     return resolved
 
 
-def _load_run_manifest(path: Path) -> tuple[dict[str, Any], Path, dict[str, Any], dict[str, Any]]:
+def _validate_evidence_entry(entry: Any, *, snapshot: bool) -> dict[str, Any]:
+    if not isinstance(entry, dict):
+        _fail("result_manifest_invalid", "Phase 4文件证据项必须为对象。")
+    relative_path = entry.get("relative_path")
+    if not isinstance(relative_path, str) or not relative_path:
+        _fail("result_manifest_invalid", "Phase 4文件证据路径无效。")
+    sha_key = "snapshot_sha256" if snapshot else "sha256"
+    size_key = "snapshot_size_bytes" if snapshot else "size_bytes"
+    digest = entry.get(sha_key)
+    size = entry.get(size_key)
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in digest)
+        or isinstance(size, bool)
+        or not isinstance(size, int)
+        or size < 0
+    ):
+        _fail("result_manifest_invalid", "Phase 4文件哈希或大小字段无效。")
+    return entry
+
+
+def _read_manifest_bytes(path: Path) -> tuple[bytes, dict[str, Any]]:
+    if not path.exists():
+        _fail("result_manifest_not_found", "Phase 4运行清单不存在。")
+    if not path.is_file():
+        _fail("result_manifest_invalid", "Phase 4运行清单不是普通文件。")
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = path.read_bytes()
+    except SimReadError:
+        raise
+    except OSError:
         _fail("result_manifest_invalid", "Phase 4运行清单无法读取。")
+    if len(data) > MAX_MANIFEST_BYTES:
+        _fail("result_manifest_invalid", "Phase 4运行清单过大。")
+    try:
+        text = data.decode("utf-8")
+        payload = json.loads(
+            text, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value))
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError):
+        _fail("result_manifest_invalid", "Phase 4运行清单不是有效UTF-8 JSON。")
+    if not isinstance(payload, dict):
+        _fail("result_manifest_invalid", "Phase 4运行清单根必须是对象。")
+    return data, payload
+
+
+def _validate_phase4_manifest(path: Path) -> ValidatedPhase4RunEvidence:
+    manifest_path = path.resolve()
+    data, payload = _read_manifest_bytes(manifest_path)
     if (
         payload.get("schema_version") != "1.0"
-        or payload.get("execution_mode") != "isolated_contamx_process"
+        or payload.get("execution_mode") != PHASE4_EXECUTION_MODE
     ):
         _fail("result_manifest_unsupported", "Phase 4运行清单版本或执行模式不受支持。")
     if (
         payload.get("status") != "succeeded"
-        or payload.get("timed_out")
+        or payload.get("timed_out") is not False
         or payload.get("exit_code") != 0
     ):
         _fail("result_run_not_succeeded", "Phase 4运行未成功完成。")
-    if not payload.get("source", {}).get("unchanged") or any(
-        not item.get("source_unchanged") for item in payload.get("input_snapshots", [])
+    run_id = _require_string(payload.get("run_id"), "run_id", max_length=128)
+    source = payload.get("source")
+    snapshots = payload.get("input_snapshots")
+    artifacts = payload.get("artifacts")
+    if (
+        not isinstance(source, dict)
+        or not isinstance(snapshots, list)
+        or not snapshots
+        or not isinstance(artifacts, list)
+        or not artifacts
     ):
-        _fail("result_run_evidence_invalid", "Phase 4输入完整性证据无效。")
-    solver = payload.get("solver", {})
-    if solver.get("version") != EXPECTED_VERSION or solver.get("architecture") != "windows-x64":
-        _fail("result_run_evidence_invalid", "Phase 4求解器身份证据无效。")
-    run_root = path.resolve().parent.parent
+        _fail("result_manifest_invalid", "Phase 4运行清单基础字段类型无效。")
+    source_sha = source.get("sha256")
+    source_size = source.get("size_bytes")
+    if (
+        not isinstance(source_sha, str)
+        or len(source_sha) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in source_sha)
+        or not isinstance(source_size, int)
+        or isinstance(source_size, bool)
+        or source_size < 0
+    ):
+        _fail("result_manifest_invalid", "Phase 4 source evidence is invalid.")
+    if not _require_bool(source.get("unchanged"), "source.unchanged"):
+        _fail("result_run_evidence_invalid", "Phase 4源项目未保持不变。")
+    for item in snapshots:
+        if not isinstance(item, dict):
+            _fail("result_manifest_invalid", "Phase 4输入快照项必须为对象。")
+        if item.get("source_unchanged") is not True:
+            _fail("result_run_evidence_invalid", "Phase 4输入快照证据无效。")
+    if "diagnostics" in payload and not isinstance(payload["diagnostics"], list):
+        _fail("result_manifest_invalid", "Phase 4诊断字段类型无效。")
+    solver = payload.get("solver")
+    if not isinstance(solver, dict):
+        _fail("result_run_evidence_invalid", "Phase 4求解器身份缺失。")
+    if (
+        solver.get("name"),
+        solver.get("version"),
+        solver.get("architecture"),
+        solver.get("size_bytes"),
+        str(solver.get("sha256", "")).casefold(),
+    ) != (
+        EXPECTED_SOLVER_NAME,
+        EXPECTED_SOLVER_VERSION,
+        EXPECTED_SOLVER_ARCHITECTURE,
+        EXPECTED_SOLVER_SIZE_BYTES,
+        EXPECTED_SOLVER_SHA256,
+    ):
+        _fail("result_run_evidence_invalid", "Phase 4官方ContamX身份不匹配。")
+    if not isinstance(solver.get("provenance"), str) or "NIST" not in solver["provenance"]:
+        _fail("result_run_evidence_invalid", "Phase 4官方来源证据缺失。")
+    run_directory = manifest_path.parent.parent
     sims = [
         item
-        for item in payload.get("artifacts", [])
-        if item.get("classification") == "simulation_result"
-        and str(item.get("relative_path", "")).casefold().endswith(".sim")
+        for item in artifacts
+        if isinstance(item, dict)
+        and item.get("classification") == "simulation_result"
+        and isinstance(item.get("relative_path"), str)
+        and item["relative_path"].casefold().endswith(".sim")
+    ]
+    prjs = [
+        item
+        for item in snapshots
+        if isinstance(item, dict)
+        and item.get("classification") == "input_snapshot"
+        and isinstance(item.get("relative_path"), str)
+        and item["relative_path"].casefold().endswith(".prj")
     ]
     if len(sims) != 1:
         _fail(
             "result_artifact_ambiguous" if len(sims) > 1 else "result_artifact_missing",
-            "Phase 4主要SIM证据不明确。",
+            "Phase 4主SIM证据不明确。",
         )
-    inputs = [
-        item
-        for item in payload.get("input_snapshots", [])
-        if item.get("classification") == "input_snapshot"
-        and str(item.get("relative_path", "")).casefold().endswith(".prj")
-    ]
-    if len(inputs) != 1:
-        _fail("result_prj_snapshot_missing", "Phase 4 PRJ快照不明确。")
-    sim, prj = sims[0], inputs[0]
-    for item in (sim, prj):
-        actual = _safe_relative(item["relative_path"], run_root)
-        sha, size = _hash_size(actual)
-        if sha.casefold() != str(
-            item.get("sha256", item.get("snapshot_sha256", ""))
-        ).casefold() or size != item.get("size_bytes", item.get("snapshot_size_bytes")):
-            _fail("result_artifact_hash_mismatch", "Phase 4输入或SIM哈希不匹配。")
-    if Path(sim["relative_path"]).stem.casefold() != Path(prj["relative_path"]).stem.casefold():
-        _fail("result_run_evidence_invalid", "PRJ与SIM基名不匹配。")
-    return payload, run_root, prj, sim
+    if len(prjs) != 1:
+        _fail(
+            "result_artifact_ambiguous" if len(prjs) > 1 else "result_prj_snapshot_missing",
+            "Phase 4主PRJ快照不明确。",
+        )
+    sim_entry = _validate_evidence_entry(sims[0], snapshot=False)
+    prj_entry = _validate_evidence_entry(prjs[0], snapshot=True)
+    if sim_entry.get("classification") != "simulation_result":
+        _fail("result_manifest_invalid", "Phase 4 SIM证据分类无效。")
+    if prj_entry.get("classification") != "input_snapshot":
+        _fail("result_manifest_invalid", "Phase 4 PRJ证据分类无效。")
+    sim_path = _safe_relative(sim_entry["relative_path"], run_directory)
+    prj_path = _safe_relative(prj_entry["relative_path"], run_directory)
+    for entry, actual, sha_field, size_field, code in (
+        (sim_entry, sim_path, "sha256", "size_bytes", "result_artifact_hash_mismatch"),
+        (
+            prj_entry,
+            prj_path,
+            "snapshot_sha256",
+            "snapshot_size_bytes",
+            "result_prj_snapshot_mismatch",
+        ),
+    ):
+        sha, size = _hash_size(actual, code)
+        expected_sha = entry.get(sha_field)
+        expected_size = entry.get(size_field)
+        if (
+            not isinstance(expected_sha, str)
+            or len(expected_sha) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in expected_sha)
+            or not isinstance(expected_size, int)
+            or isinstance(expected_size, bool)
+            or expected_size < 0
+        ):
+            _fail("result_manifest_invalid", "Phase 4文件证据字段无效。")
+        if sha.casefold() != expected_sha.casefold() or size != expected_size:
+            _fail(code, "Phase 4文件哈希或大小不匹配。")
+    source_path_text = _require_string(source.get("path"), "source.path")
+    if not Path(source_path_text).is_absolute():
+        _fail("result_manifest_invalid", "Phase 4 source.path必须是绝对路径。")
+    source_path = Path(source_path_text).resolve()
+    source_actual_sha, source_actual_size = _hash_size(source_path, "result_run_evidence_invalid")
+    if source_actual_sha.casefold() != source_sha.casefold() or source_actual_size != source_size:
+        _fail("result_run_evidence_invalid", "Phase 4源文件哈希或大小不匹配。")
+    prj_source_path = prj_entry.get("source_path")
+    if not isinstance(prj_source_path, str) or not prj_source_path:
+        _fail("result_manifest_invalid", "Phase 4 PRJ source_path字段无效。")
+    if not Path(prj_source_path).is_absolute():
+        _fail("result_manifest_invalid", "Phase 4 PRJ source_path必须是绝对路径。")
+    if Path(prj_source_path).resolve() != source_path:
+        _fail("result_prj_snapshot_mismatch", "Phase 4源PRJ路径不匹配。")
+    if sim_path.stem.casefold() != prj_path.stem.casefold():
+        _fail("result_run_evidence_invalid", "Phase 4 PRJ与SIM基名不匹配。")
+    return ValidatedPhase4RunEvidence(
+        manifest_path,
+        data,
+        _sha256_bytes(data),
+        run_directory,
+        payload,
+        run_id,
+        source,
+        solver,
+        prj_entry,
+        sim_entry,
+        prj_path,
+        sim_path,
+        prj_entry["snapshot_sha256"].lower(),
+        prj_entry["snapshot_size_bytes"],
+        sim_entry["sha256"].lower(),
+        sim_entry["size_bytes"],
+    )
+
+
+def _recheck(evidence: ValidatedPhase4RunEvidence) -> None:
+    current_bytes, _ = _read_manifest_bytes(evidence.manifest_path)
+    if (
+        _sha256_bytes(current_bytes) != evidence.manifest_sha256
+        or current_bytes != evidence.manifest_bytes
+    ):
+        _fail("result_run_evidence_invalid", "Phase 4运行清单在提取期间发生变化。")
+    for path, expected_sha, expected_size in (
+        (evidence.prj_path, evidence.prj_sha256, evidence.prj_size_bytes),
+        (evidence.sim_path, evidence.sim_sha256, evidence.sim_size_bytes),
+    ):
+        sha, size = _hash_size(path, "result_artifact_hash_mismatch")
+        if sha.casefold() != expected_sha.casefold() or size != expected_size:
+            _fail("result_run_evidence_invalid", "Phase 4 PRJ或SIM在提取期间发生变化。")
+
+
+def _artifact_records(workspace: Path, excluded_names: set[str] | None = None) -> list[dict[str, Any]]:
+    excluded = {name.casefold() for name in (excluded_names or set())}
+    records = []
+    for path in sorted(workspace.iterdir(), key=lambda value: value.name.casefold()):
+        if not path.is_file() or path.name.casefold() in excluded:
+            continue
+        records.append(
+            {
+                "relative_path": f"workspace/{path.name}",
+                "size_bytes": path.stat().st_size,
+                "sha256": _sha256_file(path),
+                "suffix": path.suffix,
+                "classification": "simulation_result"
+                if path.suffix.casefold() == ".nfr"
+                else "other_generated_file",
+            }
+        )
+    return records
+
+
+def _stream_evidence(capture: _BoundedCapture, evidence_path: Path) -> dict[str, Any]:
+    size = evidence_path.stat().st_size if evidence_path.exists() else 0
+    return {
+        "relative_path": f"evidence/{evidence_path.name}",
+        "size_bytes": size,
+        "sha256": _sha256_file(evidence_path) if evidence_path.exists() else _sha256_bytes(b""),
+        "truncated": capture.truncated,
+        "capture_complete": capture.error is None,
+    }
 
 
 def _write_manifest(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", dir=path.parent, delete=False, newline="\n"
+            "w", encoding="utf-8", newline="\n", dir=path.parent, delete=False
         ) as handle:
-            temp = Path(handle.name)
+            temporary = Path(handle.name)
             json.dump(payload, handle, ensure_ascii=False, allow_nan=False, indent=2)
             handle.flush()
             os.fsync(handle.fileno())
         try:
-            os.link(temp, path)
+            os.link(temporary, path)
         except FileExistsError:
             _fail("result_manifest_write_failed", "结果清单已存在。")
         finally:
-            temp.unlink(missing_ok=True)
+            temporary.unlink(missing_ok=True)
     except SimReadError:
         raise
     except (OSError, TypeError, ValueError):
         _fail("result_manifest_write_failed", "结果清单写入失败。")
+
+
+def _failure_manifest(
+    evidence: ValidatedPhase4RunEvidence,
+    tool: SimReadToolInfo | None,
+    extraction_id: str,
+    started_at: str,
+    extraction: Path,
+    zone_number: int,
+    diagnostic: ResultDiagnostic,
+    *,
+    command: dict[str, Any],
+    process_started: bool,
+    exit_code: int | None,
+    timed_out: bool,
+    input_artifacts: list[dict[str, Any]],
+    stdout: dict[str, Any],
+    stderr: dict[str, Any],
+    duration_ms: int = 0,
+) -> dict[str, Any]:
+    workspace = extraction / "workspace"
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "extraction_id": extraction_id,
+        "status": "failed",
+        "execution_mode": EXECUTION_MODE,
+        "started_at_utc": started_at,
+        "ended_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "duration_ms": duration_ms,
+        "source_run": {
+            "run_id": evidence.run_id,
+            "run_status": evidence.payload["status"],
+            "contamx_solver_name": evidence.solver["name"],
+            "contamx_solver_version": evidence.solver["version"],
+            "contamx_solver_sha256": evidence.solver["sha256"],
+            "source_prj_sha256": evidence.source["sha256"],
+            "run_manifest_sha256": evidence.manifest_sha256,
+            "run_manifest_unchanged": diagnostic.code != "result_run_evidence_invalid",
+        },
+        "run_manifest": str(evidence.manifest_path),
+        "input_artifacts": input_artifacts,
+        "simread": tool.to_dict() if tool is not None else None,
+        "command": {**command, "process_started": process_started},
+        "working_directory": "workspace",
+        "exit_code": exit_code,
+        "timed_out": timed_out,
+        "stdout": stdout,
+        "stderr": stderr,
+        "generated_outputs": (
+            _artifact_records(workspace, {evidence.prj_path.name, evidence.sim_path.name})
+            if workspace.exists()
+            else []
+        ),
+        "result_type": "zone_air_state",
+        "zone_number": zone_number,
+        "parsed_result": None,
+        "diagnostics": [diagnostic.to_dict()],
+    }
 
 
 def extract_zone_air_state(
@@ -362,70 +678,201 @@ def extract_zone_air_state(
 ) -> dict[str, Any]:
     started = time.time()
     started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    payload, run_root, prj_entry, sim_entry = _load_run_manifest(run_manifest_path)
-    source_prj = Path(payload["source"]["path"]).resolve()
-    result_root = result_root.resolve()
-    for forbidden in (source_prj.parent, run_root):
+    evidence = _validate_phase4_manifest(run_manifest_path)
+    if isinstance(zone_number, bool) or not isinstance(zone_number, int) or zone_number <= 0:
+        _fail("zone_result_not_found", "Zone编号必须为正整数。")
+    source_directory = Path(evidence.source["path"]).resolve().parent
+    run_directory = evidence.run_directory.resolve()
+    root = result_root.resolve()
+    for forbidden in (source_directory, run_directory):
         try:
-            result_root.relative_to(forbidden)
+            root.relative_to(forbidden)
         except ValueError:
             continue
-        _fail("result_root_conflicts_with_source", "结果工作区不能位于源项目或Phase 4运行目录内。")
-    tool = probe_simread(simread_path)
-    result_root.mkdir(parents=True, exist_ok=True)
+        _fail(
+            "result_root_conflicts_with_source", "结果工作区不能位于源项目或Phase 4运行目录树内。"
+        )
+    try:
+        result_root.mkdir(parents=True, exist_ok=True)
+        root = result_root.resolve(strict=True)
+        for forbidden in (source_directory, run_directory):
+            try:
+                root.relative_to(forbidden)
+            except ValueError:
+                continue
+            _fail("result_root_conflicts_with_source", "结果工作区规范化后与受保护目录冲突。")
+    except SimReadError:
+        raise
+    except OSError:
+        _fail("result_root_invalid", "结果工作区无法创建。")
+    _recheck(evidence)
     extraction_id = (
         datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + secrets.token_hex(4)
     )
-    extraction = result_root / extraction_id
+    extraction = root / extraction_id
     try:
         extraction.mkdir()
+        workspace, evidence_dir = extraction / "workspace", extraction / "evidence"
+        workspace.mkdir()
+        evidence_dir.mkdir()
     except FileExistsError:
         _fail("result_workspace_exists", "结果提取目录已存在。")
-    workspace, evidence = extraction / "workspace", extraction / "evidence"
-    workspace.mkdir()
-    evidence.mkdir()
-    nfr = workspace / (Path(sim_entry["relative_path"]).stem + ".nfr")
-    prj_src, sim_src = (
-        _safe_relative(prj_entry["relative_path"], run_root),
-        _safe_relative(sim_entry["relative_path"], run_root),
-    )
+    except OSError:
+        _fail("result_root_invalid", "结果提取目录无法创建。")
+    stdout_meta = {
+        "relative_path": "evidence/stdout.bin",
+        "size_bytes": 0,
+        "sha256": _sha256_bytes(b""),
+        "truncated": False,
+        "capture_complete": True,
+    }
+    stderr_meta = {
+        "relative_path": "evidence/stderr.bin",
+        "size_bytes": 0,
+        "sha256": _sha256_bytes(b""),
+        "truncated": False,
+        "capture_complete": True,
+    }
+    (evidence_dir / "stdout.bin").write_bytes(b"")
+    (evidence_dir / "stderr.bin").write_bytes(b"")
+    tool: SimReadToolInfo | None = None
+    command = {
+        "executable": EXPECTED_SIMREAD_NAME,
+        "arguments": [EXPECTED_SIMREAD_NAME, evidence.sim_path.name],
+        "stdin_contract": SIMREAD_INVOCATION_CONTRACT,
+    }
+    input_artifacts: list[dict[str, Any]] = []
+    process_started = False
+    exit_code: int | None = None
+    timed_out = False
     try:
-        shutil.copy2(prj_src, workspace / prj_src.name)
-        shutil.copy2(sim_src, workspace / sim_src.name)
-        for src, entry in ((prj_src, prj_entry), (sim_src, sim_entry)):
-            before = _hash_size(src)
-            copied = _hash_size(workspace / src.name)
-            after = _hash_size(src)
-            expected = (
-                entry.get("snapshot_sha256", entry.get("sha256")),
-                entry.get("snapshot_size_bytes", entry.get("size_bytes")),
+        _recheck(evidence)
+        for source, entry, name, expected_sha, expected_size in (
+            (
+                evidence.prj_path,
+                evidence.prj_entry,
+                evidence.prj_path.name,
+                evidence.prj_sha256,
+                evidence.prj_size_bytes,
+            ),
+            (
+                evidence.sim_path,
+                evidence.sim_entry,
+                evidence.sim_path.name,
+                evidence.sim_sha256,
+                evidence.sim_size_bytes,
+            ),
+        ):
+            destination = workspace / name
+            before = _hash_size(source, "result_snapshot_mismatch")
+            shutil.copy2(source, destination)
+            copied = _hash_size(destination, "result_snapshot_mismatch")
+            after = _hash_size(source, "result_snapshot_mismatch")
+            if before != after or copied != (expected_sha, expected_size):
+                _fail("result_snapshot_mismatch", "结果输入快照三方校验失败。")
+            input_artifacts.append(
+                {
+                    "relative_path": entry["relative_path"],
+                    "classification": "input_snapshot",
+                    "source_sha256": expected_sha,
+                    "source_size_bytes": expected_size,
+                    "workspace_relative_path": f"workspace/{name}",
+                    "snapshot_sha256": copied[0],
+                    "snapshot_size_bytes": copied[1],
+                    "source_unchanged": True,
+                }
             )
-            if before != after or before != expected or copied != expected:
-                _fail("result_snapshot_mismatch", "结果输入快照校验失败。")
-        exit_code, timed_out, stdout, stderr = _run_process(
-            tool, workspace, sim_src.name, zone_number, evidence
+        _recheck(evidence)
+        zones = read_simple_zones(workspace / evidence.prj_path.name)
+        selected = [zone for zone in zones.zones if zone.contam_number == zone_number]
+        if len(selected) != 1:
+            diagnostic = ResultDiagnostic("zone_result_not_found", "目标Zone不存在。")
+            failure = _failure_manifest(
+                evidence,
+                tool,
+                extraction_id,
+                started_at,
+                extraction,
+                zone_number,
+                diagnostic,
+                command=command,
+                process_started=False,
+                exit_code=None,
+                timed_out=False,
+                input_artifacts=input_artifacts,
+                stdout=stdout_meta,
+                stderr=stderr_meta,
+                duration_ms=int((time.time() - started) * 1000),
+            )
+            _write_manifest(evidence_dir / "result-manifest.json", failure)
+            raise SimReadError(diagnostic)
+        _recheck(evidence)
+        tool = probe_simread(simread_path)
+        command = {
+            "executable": tool.name,
+            "arguments": [tool.name, evidence.sim_path.name],
+            "stdin_contract": SIMREAD_INVOCATION_CONTRACT,
+        }
+        try:
+            process = subprocess.Popen(
+                [tool.path, evidence.sim_path.name],
+                cwd=workspace,
+                env=_controlled_environment(),
+                shell=False,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError:
+            _fail("simread_process_start_failed", "SimRead进程启动失败。")
+        process_started = True
+        stdin = b"\n\nn\ny\n" + str(zone_number).encode("ascii") + b"\nn\n"
+        try:
+            process.stdin.write(stdin)
+            process.stdin.flush()
+        except OSError:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+            try:
+                process.terminate()
+            except OSError:
+                _fail("simread_process_termination_failed", "SimRead process termination failed.")
+            try:
+                _capture_process(process, timeout=3, evidence=evidence_dir)
+            except SimReadError:
+                pass
+            _fail("simread_stdin_failed", "SimRead固定输入写入失败。")
+        finally:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+        exit_code, timed_out, stdout_capture, stderr_capture = _capture_process(
+            process, timeout=EXTRACT_TIMEOUT_SECONDS, evidence=evidence_dir
         )
+        stdout_meta = _stream_evidence(stdout_capture, evidence_dir / "stdout.bin")
+        stderr_meta = _stream_evidence(stderr_capture, evidence_dir / "stderr.bin")
+        if stdout_capture.truncated or stderr_capture.truncated:
+            _fail("simread_output_too_large", "SimRead标准流超过证据上限。")
         if timed_out:
             _fail("simread_process_timeout", "SimRead进程超时。")
         if exit_code != 0:
             _fail("simread_process_failed", "SimRead进程失败。")
-        nfr_candidates = list(workspace.glob("*.nfr"))
-        if not nfr_candidates:
+        _recheck(evidence)
+        nfrs = sorted(workspace.glob("*.nfr"), key=lambda value: value.name.casefold())
+        if not nfrs:
             _fail("simread_output_missing", "SimRead未生成节点结果文件。")
-        if len(nfr_candidates) != 1:
+        if len(nfrs) != 1:
             _fail("simread_output_ambiguous", "SimRead生成了多个节点结果文件。")
-        nfr = nfr_candidates[0]
-        if nfr.stat().st_size > MAX_OUTPUT_BYTES:
+        if nfrs[0].stat().st_size > MAX_OUTPUT_BYTES:
             _fail("simread_output_too_large", "SimRead结果文件过大。")
-        zones = read_simple_zones(workspace / prj_src.name)
-        selected = [z for z in zones.zones if z.contam_number == zone_number]
-        if len(selected) != 1:
-            _fail("zone_result_not_found", "目标Zone不存在。")
-        samples = parse_zone_air_state(nfr, zone_number)
+        samples = parse_zone_air_state(nfrs[0], zone_number)
         series = ZoneAirStateSeries(
             SCHEMA_VERSION,
             "zone_air_state",
-            payload["run_id"],
+            evidence.run_id,
             extraction_id,
             zone_number,
             selected[0].name,
@@ -434,26 +881,20 @@ def extract_zone_air_state(
             len(samples),
             samples,
             {
-                "relative_path": f"workspace/{nfr.name}",
-                "sha256": _sha256_file(nfr),
-                "size_bytes": nfr.stat().st_size,
+                "relative_path": f"workspace/{nfrs[0].name}",
+                "sha256": _sha256_file(nfrs[0]),
+                "size_bytes": nfrs[0].stat().st_size,
             },
+            day_type_source="not_available_in_simread_nfr_v1",
+            time_contract="elapsed_seconds_from_first_sample",
+            diagnostics=(
+                ResultDiagnostic(
+                    "day_type_not_available", "官方NFR未提供CONTAM日类型，未进行推断。"
+                ),
+            ),
         )
-        outputs = []
-        for file in workspace.iterdir():
-            if file.is_file():
-                outputs.append(
-                    {
-                        "relative_path": f"workspace/{file.name}",
-                        "size_bytes": file.stat().st_size,
-                        "sha256": _sha256_file(file),
-                        "suffix": file.suffix,
-                        "classification": "simulation_result"
-                        if file.suffix == ".nfr"
-                        else "other_generated_file",
-                    }
-                )
-        manifest = {
+        _recheck(evidence)
+        result_manifest = {
             "schema_version": SCHEMA_VERSION,
             "extraction_id": extraction_id,
             "status": "succeeded",
@@ -462,35 +903,27 @@ def extract_zone_air_state(
             "ended_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "duration_ms": int((time.time() - started) * 1000),
             "source_run": {
-                "run_id": payload["run_id"],
-                "run_status": payload["status"],
-                "solver_version": tool.version,
-                "source_prj_sha256": payload["source"]["sha256"],
-                "run_manifest_sha256": _sha256_file(run_manifest_path),
+                "run_id": evidence.run_id,
+                "run_status": evidence.payload["status"],
+                "contamx_solver_name": evidence.solver["name"],
+                "contamx_solver_version": evidence.solver["version"],
+                "contamx_solver_sha256": evidence.solver["sha256"],
+                "source_prj_sha256": evidence.source["sha256"],
+                "run_manifest_sha256": evidence.manifest_sha256,
+                "run_manifest_unchanged": True,
             },
-            "run_manifest": str(run_manifest_path),
-            "input_artifacts": [
-                {
-                    "relative_path": prj_entry["relative_path"],
-                    "sha256": prj_entry.get("snapshot_sha256", prj_entry.get("sha256")),
-                    "size_bytes": prj_entry.get("snapshot_size_bytes", prj_entry.get("size_bytes")),
-                },
-                {
-                    "relative_path": sim_entry["relative_path"],
-                    "sha256": sim_entry.get("sha256"),
-                    "size_bytes": sim_entry.get("size_bytes"),
-                },
-            ],
+            "run_manifest": str(evidence.manifest_path),
+            "input_artifacts": input_artifacts,
             "simread": tool.to_dict(),
-            "command": {
-                "executable": tool.name,
-                "arguments": [tool.name, sim_src.name],
-                "stdin_contract": tool.invocation_contract,
-            },
+            "command": {**command, "process_started": True},
             "working_directory": "workspace",
-            "stdout": stdout,
-            "stderr": stderr,
-            "generated_outputs": outputs,
+            "exit_code": exit_code,
+            "timed_out": timed_out,
+            "stdout": stdout_meta,
+            "stderr": stderr_meta,
+            "generated_outputs": _artifact_records(
+                workspace, {evidence.prj_path.name, evidence.sim_path.name}
+            ),
             "result_type": "zone_air_state",
             "zone_number": zone_number,
             "parsed_result": {
@@ -500,51 +933,101 @@ def extract_zone_air_state(
                 "first_timestamp": samples[0].sim_time_seconds,
                 "last_timestamp": samples[-1].sim_time_seconds,
                 "output_contract_version": "1.0",
+                "day_type_source": "not_available_in_simread_nfr_v1",
+                "time_contract": "elapsed_seconds_from_first_sample",
             },
-            "diagnostics": [],
+            "diagnostics": [item.to_dict() for item in series.diagnostics],
         }
-        result_manifest_path = evidence / "result-manifest.json"
-        _write_manifest(result_manifest_path, manifest)
+        result_manifest_path = evidence_dir / "result-manifest.json"
+        _write_manifest(result_manifest_path, result_manifest)
         return {
             "extraction_id": extraction_id,
             "status": "succeeded",
             "result_manifest_path": str(result_manifest_path),
-            "run_id": payload["run_id"],
+            "run_id": evidence.run_id,
             "zone_number": zone_number,
             "zone_name": selected[0].name,
             "sample_count": len(samples),
             "first_sample": samples[0].to_dict(),
             "parsed_result": series.to_dict(),
         }
-    except (SimReadError, ZoneResultError) as exc:
-        diagnostic = exc.diagnostic
-        failure = {
-            "schema_version": SCHEMA_VERSION,
-            "extraction_id": extraction_id,
-            "status": "failed",
-            "execution_mode": EXECUTION_MODE,
-            "started_at_utc": started_at,
-            "ended_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "duration_ms": int((time.time() - started) * 1000),
-            "source_run": {"run_id": payload["run_id"], "run_status": payload["status"]},
-            "run_manifest": str(run_manifest_path),
-            "input_artifacts": [],
-            "simread": tool.to_dict(),
-            "command": {},
-            "working_directory": "workspace",
-            "stdout": {},
-            "stderr": {},
-            "generated_outputs": [],
-            "result_type": "zone_air_state",
-            "zone_number": zone_number,
-            "parsed_result": None,
-            "diagnostics": [diagnostic.to_dict()],
-        }
-        try:
-            _write_manifest(evidence / "result-manifest.json", failure)
-        except SimReadError:
-            pass
+    except (SimReadError, ZoneResultError) as error:
+        diagnostic = error.diagnostic
+        if not (evidence_dir / "result-manifest.json").exists():
+            failure = _failure_manifest(
+                evidence,
+                tool,
+                extraction_id,
+                started_at,
+                extraction,
+                zone_number,
+                diagnostic,
+                command=command,
+                process_started=process_started,
+                exit_code=exit_code,
+                timed_out=timed_out,
+                input_artifacts=input_artifacts,
+                stdout=stdout_meta,
+                stderr=stderr_meta,
+                duration_ms=int((time.time() - started) * 1000),
+            )
+            try:
+                _write_manifest(evidence_dir / "result-manifest.json", failure)
+            except SimReadError:
+                pass
         raise
+    except PrjZoneReaderError:
+        diagnostic = ResultDiagnostic(
+            "result_prj_snapshot_mismatch", "绑定的Phase 4 PRJ快照不符合严格Zone读取契约。"
+        )
+        if not (evidence_dir / "result-manifest.json").exists():
+            failure = _failure_manifest(
+                evidence,
+                tool,
+                extraction_id,
+                started_at,
+                extraction,
+                zone_number,
+                diagnostic,
+                command=command,
+                process_started=process_started,
+                exit_code=exit_code,
+                timed_out=timed_out,
+                input_artifacts=input_artifacts,
+                stdout=stdout_meta,
+                stderr=stderr_meta,
+                duration_ms=int((time.time() - started) * 1000),
+            )
+            try:
+                _write_manifest(evidence_dir / "result-manifest.json", failure)
+            except SimReadError:
+                pass
+        raise SimReadError(diagnostic)
+    except Exception:
+        diagnostic = ResultDiagnostic("result_internal_error", "结果提取失败。")
+        if not (evidence_dir / "result-manifest.json").exists():
+            failure = _failure_manifest(
+                evidence,
+                tool,
+                extraction_id,
+                started_at,
+                extraction,
+                zone_number,
+                diagnostic,
+                command=command,
+                process_started=process_started,
+                exit_code=exit_code,
+                timed_out=timed_out,
+                input_artifacts=input_artifacts,
+                stdout=stdout_meta,
+                stderr=stderr_meta,
+                duration_ms=int((time.time() - started) * 1000),
+            )
+            try:
+                _write_manifest(evidence_dir / "result-manifest.json", failure)
+            except SimReadError:
+                pass
+        raise SimReadError(diagnostic)
 
 
 def _cli() -> int:
@@ -573,9 +1056,9 @@ def _cli() -> int:
         )
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
         return 0
-    except (SimReadError, ZoneResultError) as exc:
-        print(json.dumps(exc.diagnostic.to_dict(), ensure_ascii=False), file=sys.stderr)
-        return exc.exit_code if hasattr(exc, "exit_code") else 2
+    except (SimReadError, ZoneResultError) as error:
+        print(json.dumps(error.diagnostic.to_dict(), ensure_ascii=False), file=sys.stderr)
+        return error.exit_code
     except Exception:
         print(
             json.dumps(

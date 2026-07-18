@@ -154,3 +154,9 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 结果入口绑定成功的Phase 4 manifest，复制PRJ和SIM到全新提取工作区；不接受任意SIM路径，不修改Phase 4运行证据。
 - 首个结果类型为`zone_air_state`，通过官方`.nfr`文本严格读取Zone空气状态，单位为K、Pa和kg/m³。真实Zone 1 `One`得到577个样本，首样本为293.15 K、-1.4222 Pa、1.2041 kg/m³。
 - 当前没有GUI结果页、曲线、导出、路径流量、污染物浓度或直接SIM二进制解析。
+## Phase 5A加固状态
+
+- Phase 4 manifest现在以单次bytes快照严格验证，完整绑定官方ContamX身份、PRJ/SIM哈希和运行目录。
+- 提取阶段在多个时点复核manifest及PRJ/SIM；工作区创建后成功和失败均保留result-manifest、流证据和SimRead生成物。
+- Zone在启动SimRead前预验证；公开CLI不接受直接NFR或SIM。
+- `day_type`返回null并标注不可用来源；累计时间从首个样本起算。当前仍只支持`zone_air_state`，无GUI和其他结果类型。

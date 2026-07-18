@@ -42,7 +42,7 @@ class SimReadToolInfo:
 class ZoneAirStateSample:
     index: int
     day_of_year: int
-    day_type: str
+    day_type: str | None
     sim_time_seconds: float
     temperature_k: float
     reference_pressure_pa: float
@@ -73,6 +73,8 @@ class ZoneAirStateSeries:
     sample_count: int
     samples: tuple[ZoneAirStateSample, ...]
     source_evidence: dict[str, Any]
+    day_type_source: str = "not_available_in_simread_nfr_v1"
+    time_contract: str = "elapsed_seconds_from_first_sample"
     diagnostics: tuple[ResultDiagnostic, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -88,6 +90,8 @@ class ZoneAirStateSeries:
             "sample_count": self.sample_count,
             "samples": [sample.to_dict() for sample in self.samples],
             "source_evidence": self.source_evidence,
+            "day_type_source": self.day_type_source,
+            "time_contract": self.time_contract,
             "diagnostics": [item.to_dict() for item in self.diagnostics],
         }
 

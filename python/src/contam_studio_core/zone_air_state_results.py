@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import argparse
-import json
 import math
 import re
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -14,6 +11,7 @@ _NUMBER = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 _DATE = re.compile(r"^(\d{1,2})/(\d{1,2})$")
 _TIME = re.compile(r"^(\d{2}):(\d{2}):(\d{2})$")
 HEADER = ("Date", "Time", "Node", "T (C)", "P (Pa)", "D (kg/m3)")
+MAX_RESULT_BYTES = 16 * 1024 * 1024
 
 
 class ZoneResultError(Exception):
@@ -53,8 +51,25 @@ def _number(token: str, field: str, line: int) -> float:
     return value
 
 
+def _numeric_field(token: str, field: str, line: int) -> float:
+    stripped = token.strip(" ")
+    if token != stripped and (token != " " + stripped or token.endswith(" ")):
+        raise ZoneResultError(
+            ResultDiagnostic(
+                "zone_result_contract_invalid",
+                "结果数值空格格式不受支持。",
+                {"field": field, "source_line_number": line},
+            )
+        )
+    return _number(stripped, field, line)
+
+
 def parse_zone_air_state(path: Path, zone_number: int) -> tuple[ZoneAirStateSample, ...]:
     try:
+        if path.stat().st_size > MAX_RESULT_BYTES:
+            raise ZoneResultError(
+                ResultDiagnostic("simread_output_too_large", "SimRead结果文件过大。")
+            )
         raw = path.read_bytes()
     except OSError as exc:
         raise ZoneResultError(
@@ -129,9 +144,9 @@ def parse_zone_air_state(path: Path, zone_number: int) -> tuple[ZoneAirStateSamp
                     {"source_line_number": line_number},
                 )
             )
-        temperature_c = _number(fields[3].strip(" "), "temperature_c", line_number)
-        pressure = _number(fields[4].strip(" "), "reference_pressure_pa", line_number)
-        density = _number(fields[5].strip(" "), "air_density_kg_m3", line_number)
+        temperature_c = _numeric_field(fields[3], "temperature_c", line_number)
+        pressure = _numeric_field(fields[4], "reference_pressure_pa", line_number)
+        density = _numeric_field(fields[5], "air_density_kg_m3", line_number)
         sim_time = float(hour * 3600 + minute * 60 + second)
         key = day_of_year * 86400 + int(sim_time)
         if previous_key is not None and key <= previous_key:
@@ -149,7 +164,7 @@ def parse_zone_air_state(path: Path, zone_number: int) -> tuple[ZoneAirStateSamp
             ZoneAirStateSample(
                 len(samples),
                 day_of_year,
-                "calendar",
+                None,
                 float(key - first_key),
                 temperature_c + 273.15,
                 pressure,
@@ -163,36 +178,7 @@ def parse_zone_air_state(path: Path, zone_number: int) -> tuple[ZoneAirStateSamp
     return tuple(samples)
 
 
-def _cli() -> int:
-    if len(sys.argv) > 1 and sys.argv[1] in {"probe-simread", "extract"} and (
-        "--result-root" in sys.argv or sys.argv[1] == "probe-simread"
-    ):
-        from .simread_runner import _cli as runner_cli
-
-        return runner_cli()
-    parser = argparse.ArgumentParser(prog="zone_air_state_results")
-    sub = parser.add_subparsers(dest="command", required=True)
-    extract = sub.add_parser("extract")
-    extract.add_argument("output", type=Path)
-    extract.add_argument("--zone-number", type=int, required=True)
-    extract.add_argument("--json", action="store_true")
-    args = parser.parse_args()
-    if args.command == "extract":
-        try:
-            samples = parse_zone_air_state(args.output, args.zone_number)
-            payload = {
-                "result_type": "zone_air_state",
-                "zone_number": args.zone_number,
-                "sample_count": len(samples),
-                "samples": [item.to_dict() for item in samples],
-            }
-            print(json.dumps(payload, ensure_ascii=False, allow_nan=False))
-            return 0
-        except ZoneResultError as exc:
-            print(json.dumps(exc.diagnostic.to_dict(), ensure_ascii=False), file=sys.stderr)
-            return exc.exit_code
-    return 2
-
-
 if __name__ == "__main__":
+    from .simread_runner import _cli
+
     raise SystemExit(_cli())

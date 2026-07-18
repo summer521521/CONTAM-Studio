@@ -29,3 +29,5 @@
 | ContamX进程树残留或超时 | 资源泄漏、后台进程继续写入或桌面无响应 | 中高 | 固定超时、终止进程、保留失败manifest；后续验证Windows Job Object治理 | Phase 4、Beta |
 | SimRead版本或输出契约漂移 | 结果字段解释错误或无法复现 | 高 | 固定官方工具哈希、版本、PE架构和严格表头；未知契约整体拒绝 | Phase 5A |
 | 结果脱离Phase 4输入快照 | 结果无法追溯或误读其他SIM | 高 | 只接受成功manifest，复制前后校验PRJ/SIM哈希并记录提取manifest | Phase 5A |
+| Phase 4清单或SIM在后处理期间变化 | 结果与实际输入脱钩 | 高 | 单bytes manifest快照、PRJ/SIM多时点哈希复核、失败保留证据 | Phase 5A |
+| NFR缺少CONTAM日类型 | 下游误解day_type | 中 | 返回null并记录day_type_source，不推断日历或schedule类型 | Phase 5A |
