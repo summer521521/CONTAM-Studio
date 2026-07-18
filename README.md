@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目已建立**Phase 2C：真实PRJ只读Zone展示闭环**。用户可从Tauri原生文件选择器主动选择受支持的PRJ，由Rust宿主通过一次性受控Python进程调用严格Zone读取器，随后在桌面工作台查看真实项目摘要、全部Zone和只读属性。文件选择与读取合并为一个显式授权的Rust命令，前端只能提交`request_id`，不能指定源路径。该能力仍只覆盖经验证的CONTAM 3.4简单Zone子集，不代表完整PRJ已加载；未知版本、复杂尾部和未验证布局会整体拒绝。当前没有PRJ保存与回写、ContamX运行或AI能力。
+项目已完成**Phase 3A-0：哈希绑定、仅写副本的Zone体积Patch**。Python核心可为严格读取子集中的一个Zone生成`volume_m3`结构化Patch，并在重新验证源SHA-256、大小、读取模式、文件头、Zone编号、行号、旧记号和字节范围后，只向尚不存在的新PRJ副本替换一个ASCII数字记号。三个官方样例已证明目标记号之外的原始字节完全不变。该能力尚未接入桌面GUI，不覆盖源PRJ，也不代表完整PRJ保存、回写、编辑、撤销或并发Patch已经实现；ContamX运行和AI仍未接入。
 
 ## 架构方向
 
@@ -37,7 +37,7 @@ Python CONTAM领域核心
 官方ContamX
 ```
 
-Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2A建立了Python隔离执行检查核心；Phase 2B-1增加了独立的严格Zone纯文档读取器；Phase 2C用结构化协议将该读取器接入桌面工作台。Rust在结果跨IPC前清理诊断、拒绝非空stderr，并确认响应路径与用户选择的规范化路径一致。contamxpy隔离稳态初始化入口没有接入GUI。
+Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2A建立了Python隔离执行检查核心；Phase 2B-1增加了独立的严格Zone纯文档读取器；Phase 2C用结构化协议将该读取器接入桌面工作台。Rust在结果跨IPC前清理诊断、拒绝非空stderr，并确认响应路径与用户选择的规范化路径一致。Phase 3A-0的副本Patch仍只位于Python核心，未接入桌面桥；contamxpy隔离稳态初始化入口也没有接入GUI。
 
 ## 开发启动
 
@@ -65,6 +65,27 @@ python\.venv\Scripts\python.exe -m contam_studio_core.prj_zone_reader `
 
 该入口固定使用`strict_contam_3_4_simple_zone_v1`，只支持文件头`ContamW 3.4.0.0`和`ContamW 3.4.0.4`下经验证的19字段简单Zone记录。它不调用contamxpy、ContamX或仿真初始化，不创建结果文件；遇到未知版本、复杂条件字段、非ASCII或未验证布局时整体拒绝。Phase 2C桌面桥复用同一个读取入口，不另建Zone字段解释。详见[兼容范围](docs/architecture/prj-zone-reader-support.md)。
 
+## Python Zone体积副本Patch
+
+计划一个尚未应用的Patch：
+
+```powershell
+python\.venv\Scripts\python.exe -m contam_studio_core.zone_volume_patch plan `
+  fixtures\contam\official-contamxpy\test_GetPrjInfo.prj `
+  --zone-number 1 --new-volume 650.0 --json
+```
+
+将同一修改应用到调用者指定、尚不存在的新副本：
+
+```powershell
+python\.venv\Scripts\python.exe -m contam_studio_core.zone_volume_patch apply `
+  fixtures\contam\official-contamxpy\test_GetPrjInfo.prj `
+  --zone-number 1 --new-volume 650.0 `
+  --output F:\Codex_File\CONTAM-Studio\phase-3a-zone-volume-patch\new-copy.prj --json
+```
+
+该入口只支持`volume_m3`，不会覆盖源文件或既有输出。应用时会重新验证Patch前置条件，并在落盘后证明输出严格等于单个Vol记号替换、严格读取器可重读且其他已解析Zone字段不变。`--diff`只显示目标Zone单行预览。详见[Zone体积副本Patch架构](docs/architecture/zone-volume-patch.md)。
+
 ## Python隔离Zone检查
 
 完成`python/`依赖安装后，可对仓库内的官方测试样例执行隔离Zone检查：
@@ -89,7 +110,9 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [架构概览](docs/architecture/overview.md)
 - [PRJ简单Zone只读兼容范围](docs/architecture/prj-zone-reader-support.md)
 - [Tauri-Python Zone桥](docs/architecture/tauri-python-zone-bridge.md)
+- [Zone体积副本Patch](docs/architecture/zone-volume-patch.md)
 - [Phase 2C开发与验证](docs/development/phase-2c-verification.md)
+- [Phase 3A-0开发与验证](docs/development/phase-3a-zone-volume-patch-verification.md)
 - [阶段路线图](docs/roadmap/phases.md)
 - [风险登记表](docs/risks/risk-register.md)
 - [架构决策记录](docs/adr/README.md)

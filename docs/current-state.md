@@ -25,7 +25,7 @@
 ```text
 src/                  React工作台、组件、国际化和样式
 src-tauri/            最小Tauri宿主、配置、能力和Windows图标
-python/               Phase 2A隔离检查、严格Zone读取器、Phase 2C JSON桥和测试
+python/               隔离检查、严格Zone读取、Phase 2C JSON桥、Phase 3A-0副本Patch和测试
 fixtures/contam/      有来源记录的contamxpy与NIST官方PRJ样例
 docs/                 项目决策、状态与界面截图
 package.json          前端脚本和依赖
@@ -100,9 +100,24 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 三份官方fixture在GUI分别显示7、3、7个Zone，首个Zone依次为`One`、`one`、`Attic`；源SHA-256和大小保持不变，fixture目录没有新增SIM、LOG或XLOG。
 - 在`F:/Codex_File/CONTAM-Studio/phase-2c-zone-gui-integration/`验证未知版本、非ASCII、缺失Zone区块、超长整数、NaN、Infinity、十六进制和超大科学计数法；均结构化拒绝且stdout只有一条JSON、stderr为空、无Traceback。
 
+## Phase 3A-0 Zone体积副本Patch
+
+- 新增`zone_volume_patch`和冻结dataclass模型，固定`schema_version=1.0`、`patch_type=replace_zone_volume`、`status=planned`，唯一支持字段为`volume_m3`。
+- 严格读取器与Patch共用`strict_numeric.parse_ascii_finite_float`，只接受有限ASCII十进制或科学计数法；Patch使用`Decimal`判断数值无变化并保留用户合法新记号。
+- Patch绑定源规范化路径、SHA-256、大小、读取模式、文件头、CONTAM编号、Zone名称、源行号、旧记号、旧数值和绝对字节范围；Vol为19字段记录中从0开始计数的`token_index=7`。
+- 计划接口只读源文件并生成结构化Patch与目标Zone单行Diff，不创建输出或临时文件。
+- 应用接口重新验证全部前置条件，不重新定位失效Patch；输出必须是父目录已存在、后缀为`.prj`且尚不存在的新路径，规范化后不得指向源文件。
+- 输出严格使用`source[:byte_start]+new_token+source[byte_end:]`生成；通过同目录临时文件完整写入、flush、`fsync`和不会覆盖既有目标的独占落盘完成，未使用整份PRJ重建或无条件覆盖。
+- 后置验证确认源哈希与大小不变、输出仅目标记号变化、严格读取器可重读、Zone数量与身份不变、目标Zone其他字段及其他Zone不变；失败会删除本次新建副本。
+- 三份官方fixture分别把Zone 1体积从600改为650.0、300改为325、90改为95.5；目标范围前后字节比较均完全相同，源SHA-256与大小不变，输出目录无新增SIM、LOG或XLOG。
+- `test_GetPrjInfo`修改副本经Phase 2A隔离contamxpy 0.0.9交叉验证，官方API返回7个Zone和首个Zone体积650.0；生成物只存在于隔离临时目录并已清理，contamxpy不是Patch运行依赖。
+- 独立CLI支持`plan --json`、`plan --diff`和`apply --output ... --json`；成功stdout不混入诊断，失败stderr为结构化JSON且不显示Traceback，默认不覆盖。
+- Phase 3A-0新增56项Python测试，完整Python测试共133项通过；Ruff、前端及Rust回归检查也在本次提交前通过。
+- 当前实现未接入React或Tauri，不支持源文件覆盖、Zone名称或其他字段、多Patch、并发编辑、稳定UUID、撤销、完整PRJ保存或AI自动应用。
+
 ## 尚未实现
 
-桌面GUI目前只把严格Zone子集作为真实数据，其余欢迎页、结果和运行内容仍为模拟或占位。尚未实现完整PRJ加载、其他区块解析、保存或回写、稳定UUID、完整领域模型、Patch/Diff/快照、ContamX发现与用户可触发运行、结果读取、AI调用、网络服务或Python打包分发；Phase 2C成功不得解释为整个PRJ已经可编辑或可求解。
+桌面GUI目前只把严格Zone子集作为真实数据，其余欢迎页、结果和运行内容仍为模拟或占位。Python核心虽已建立单字段、副本限定的Patch和文本Diff，但GUI尚未接入审批或应用。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、快照、撤销、多Patch、ContamX发现与用户可触发运行、结果读取、AI调用、网络服务或Python打包分发；Phase 3A-0不得解释为整个PRJ已经可编辑或可保存。
 
 ## 待验证问题
 

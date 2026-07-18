@@ -1,6 +1,6 @@
 # CONTAM Studio Python核心
 
-本目录包含Phase 2B-1严格Zone纯文档读取器、Phase 2A隔离contamxpy检查入口和Phase 2C一次性JSON桥。Phase 2C桥由Tauri按请求启动后退出，不是HTTP服务或长期Python sidecar。
+本目录包含Phase 2B-1严格Zone纯文档读取器、Phase 2A隔离contamxpy检查入口、Phase 2C一次性JSON桥和Phase 3A-0 Zone体积副本Patch。Phase 2C桥由Tauri按请求启动后退出，不是HTTP服务或长期Python sidecar；Phase 3A-0 Patch尚未接入桌面桥。
 
 ## 环境
 
@@ -24,6 +24,18 @@ python\.venv\Scripts\python.exe -m contam_studio_core.prj_zone_reader `
 
 `prj_zone_reader`只使用Python标准库，并以`strict_contam_3_4_simple_zone_v1`读取经验证的CONTAM 3.4简单Zone子集。它不导入contamxpy，不启动子进程或仿真，不创建临时文件；任何不支持的记录都会使整个调用以结构化错误失败。精确兼容范围见[兼容范围](../docs/architecture/prj-zone-reader-support.md)。
 
+## Zone体积副本Patch
+
+```powershell
+python\.venv\Scripts\python.exe -m contam_studio_core.zone_volume_patch plan SOURCE.prj `
+  --zone-number 1 --new-volume 650.0 --json
+
+python\.venv\Scripts\python.exe -m contam_studio_core.zone_volume_patch apply SOURCE.prj `
+  --zone-number 1 --new-volume 650.0 --output OUTPUT.prj --json
+```
+
+该入口只支持`volume_m3`。Patch绑定源SHA-256、大小、读取模式、文件头、Zone编号、行号、旧记号和字节范围；应用时全部重验，并只创建不存在的新`.prj`副本。输出通过单个ASCII Vol记号替换生成，写后重新检查字节、源快照和严格Zone语义。源文件与既有输出不会覆盖；完整边界见[Zone体积副本Patch](../docs/architecture/zone-volume-patch.md)。
+
 ## Phase 2C JSON桥
 
 `contam_studio_core.zone_bridge`从stdin读取一条协议`1.0`请求，从stdout输出一条成功/失败共用的JSON Envelope。桌面宿主以`python -I -m contam_studio_core.zone_bridge`启动它；请求只允许`read_simple_zones`操作，并复用上面的严格读取器。
@@ -45,4 +57,4 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 
 - contamxpy 0.0.9没有公开的“仅加载”入口；Zone列表由`setupSimulation(1)`稳态初始化触发的回调填充。
 - 官方文档说明该调用会执行稳态初始化，并且实测会产生SIM、LOG等文件，因此所有调用必须在临时副本上完成。
-- 严格读取器只识别Zone简单子集，不代表完整PRJ解析；Phase 2C桌面只接入该纯文档读取器，没有接入contamxpy检查入口，也没有保存、回写或ContamX时间步运行。
+- 严格读取器只识别Zone简单子集，不代表完整PRJ解析；Phase 2C桌面只接入该纯文档读取器，没有接入contamxpy检查入口。Phase 3A-0只在Python核心中生成并验证新副本，不提供源文件保存、完整回写、GUI编辑或ContamX时间步运行。
