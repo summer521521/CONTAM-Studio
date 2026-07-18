@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Group, Panel, Separator, usePanelRef, type Layout } from "react-resizable-panels";
@@ -15,6 +16,7 @@ import {
   applyZoneVolumePatchToCopy,
   planZoneVolumePatch,
   selectAndReadPrjZones,
+  selectAndExtractZoneAirState,
 } from "./desktop-api";
 import {
   applyResponseIssue,
@@ -31,6 +33,13 @@ import {
   zoneSelectionKey,
 } from "./project-state";
 import {
+  INITIAL_RESULT_STATE,
+  resultReducer,
+  resultResponseIssue,
+  ZONE_RESULT_STAGE_EVENT,
+  type ZoneResultStageEvent,
+} from "./result-state";
+import {
   getCenterLayout,
   getMainLayout,
   loadWorkbenchState,
@@ -45,8 +54,10 @@ function App() {
   const [selectedObject, setSelectedObject] = useState("navigation.classroom");
   const [projectState, dispatchProject] = useReducer(projectReducer, INITIAL_PROJECT_STATE);
   const [patchState, dispatchPatch] = useReducer(patchReducer, INITIAL_PATCH_STATE);
+  const [resultState, dispatchResult] = useReducer(resultReducer, INITIAL_RESULT_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const resultSequence = useRef(0);
   const mounted = useRef(true);
   const initialMainLayout = useRef(getMainLayout(workbench)).current;
   const initialCenterLayout = useRef(getCenterLayout(workbench)).current;
@@ -63,6 +74,25 @@ function App() {
     return () => {
       mounted.current = false;
       requestSequence.current += 1;
+      resultSequence.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listen<ZoneResultStageEvent>(ZONE_RESULT_STAGE_EVENT, ({ payload }) => {
+      if (payload?.stage !== "loading" || typeof payload.request_id !== "string") return;
+      dispatchResult({ type: "host_loading_started", requestId: payload.request_id });
+    })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else unlisten = cleanup;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 
@@ -144,6 +174,7 @@ function App() {
         projectSessionId: response.project_session_id as string,
       });
       dispatchPatch({ type: "project_or_zone_changed" });
+      dispatchResult({ type: "project_or_zone_changed" });
     } catch {
       if (!mounted.current || sequence !== requestSequence.current) return;
       dispatchProject({
@@ -161,6 +192,66 @@ function App() {
   }, []);
 
   const currentZone = selectedZone(projectState);
+
+  const loadZoneResults = useCallback(async () => {
+    if (!projectState.projectSessionId || !currentZone) return;
+    const sequence = ++resultSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchResult({
+      type: "selection_started",
+      sequence,
+      requestId,
+      projectSessionId: projectState.projectSessionId,
+      zoneNumber: currentZone.contam_number,
+    });
+    try {
+      const response = await selectAndExtractZoneAirState(
+        requestId,
+        projectState.projectSessionId,
+        currentZone.contam_number,
+      );
+      if (!mounted.current || sequence !== resultSequence.current) return;
+      if (response.cancelled) {
+        dispatchResult({ type: "load_cancelled", sequence, requestId });
+        return;
+      }
+      const issue = resultResponseIssue(response, requestId);
+      if (issue || !response.result || response.project_session_id !== projectState.projectSessionId) {
+        dispatchResult({
+          type: "load_failed",
+          sequence,
+          requestId,
+          issue: issue ?? {
+            code: "python_response_result_invalid",
+            message: "Result did not match the active project.",
+            source_line_number: null,
+            context: {},
+          },
+        });
+        return;
+      }
+      dispatchResult({
+        type: "load_succeeded",
+        sequence,
+        requestId,
+        projectSessionId: projectState.projectSessionId,
+        result: response.result,
+      });
+    } catch {
+      if (!mounted.current || sequence !== resultSequence.current) return;
+      dispatchResult({
+        type: "load_failed",
+        sequence,
+        requestId,
+        issue: {
+          code: "desktop_bridge_invoke_failed",
+          message: "Desktop result bridge invocation failed",
+          source_line_number: null,
+          context: {},
+        },
+      });
+    }
+  }, [currentZone, projectState.projectSessionId]);
 
   const startVolumeEdit = useCallback(() => {
     if (!currentZone || !projectState.projectSessionId) return;
@@ -267,6 +358,7 @@ function App() {
         projectSessionId: response.project_session_id,
         targetZoneNumber: response.target_zone_number,
       });
+      dispatchResult({ type: "project_or_zone_changed" });
       dispatchPatch({ type: "apply_succeeded", requestId });
       setPlaceholderNotice(t("patch.copyCreatedSuccess"));
     } catch {
@@ -285,7 +377,9 @@ function App() {
     projectState.status === "selecting" ||
     projectState.status === "loading" ||
     patchState.status === "planning" ||
-    patchState.status === "applying";
+    patchState.status === "applying" ||
+    resultState.status === "selecting" ||
+    resultState.status === "loading";
 
   const toggleProject = () => {
     if (workbench.projectCollapsed) projectPanelRef.current?.expand();
@@ -380,6 +474,7 @@ function App() {
                     zoneKey: zoneSelectionKey(projectState.project, zone),
                   });
                   dispatchPatch({ type: "project_or_zone_changed" });
+                  dispatchResult({ type: "project_or_zone_changed" });
                 })()
               }
               onCollapse={toggleProject}
@@ -403,6 +498,8 @@ function App() {
                   onOpenProject={openProject}
                   openDisabled={openDisabled}
                   onPlaceholder={showPlaceholder}
+                  resultState={resultState}
+                  onLoadResults={loadZoneResults}
                 />
               </Panel>
               <Separator className="resize-handle resize-handle-vertical" />

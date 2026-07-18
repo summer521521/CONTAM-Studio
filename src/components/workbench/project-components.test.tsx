@@ -7,6 +7,8 @@ import { BottomPanel } from "./BottomPanel";
 import { ContextSidebar } from "./ContextSidebar";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { ZoneVolumePatchDialog } from "./ZoneVolumePatchDialog";
+import { ZoneAirStateResults } from "./ZoneAirStateResults";
+import { INITIAL_RESULT_STATE } from "../../app/result-state";
 
 const project: ProjectInspection = {
   schema_version: "1.0",
@@ -50,6 +52,21 @@ const state: ProjectState = {
   projectSessionId: "request-1",
   selectedZoneKey: zoneSelectionKey(project, project.zones[0]),
   issue: null,
+};
+
+const zoneResult = {
+  schema_version: "1.0" as const,
+  result_type: "zone_air_state" as const,
+  run_id: "run-1",
+  extraction_id: "extract-1",
+  zone_number: 1,
+  zone_name: "One",
+  source_line_number: 243,
+  unit_system: "SI" as const,
+  sample_count: 1,
+  samples: [{ index: 0, day_of_year: 1, day_type: null, sim_time_seconds: 0, temperature_k: 293.15, reference_pressure_pa: -1.4222, air_density_kg_m3: 1.2041 }],
+  day_type_source: "not_available_in_simread_nfr_v1",
+  time_contract: "elapsed_seconds_from_first_sample",
 };
 
 beforeAll(async () => {
@@ -214,6 +231,75 @@ describe("real project components", () => {
     await i18n.changeLanguage("en");
     expect(i18n.t("project.readOnlyPreview")).toBe("Real data · read-only preview");
     expect(i18n.t("errors.codes.python_process_timeout")).toBe("Python reader timed out");
+    await i18n.changeLanguage("zh-CN");
+  });
+
+  it("renders a real Zone air-state table and null day type", () => {
+    const markup = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{ ...INITIAL_RESULT_STATE, status: "loaded", result: zoneResult }}
+        onLoad={() => undefined}
+        disabled={false}
+      />,
+    );
+    expect(markup).toContain("真实Zone空气状态摘要");
+    expect(markup).toContain("293.15");
+    expect(markup).toContain("—");
+    expect(markup).toContain("<table");
+  });
+
+  it("shows first-load cancellation without a result table", () => {
+    const markup = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{ ...INITIAL_RESULT_STATE, status: "cancelled" }}
+        onLoad={() => undefined}
+        disabled={false}
+      />,
+    );
+    expect(markup).toContain("已取消运行清单选择，未加载结果");
+    expect(markup).not.toContain("<table");
+  });
+
+  it("retains the result table and shows a safe cancellation or error notice", () => {
+    const cancelled = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{ ...INITIAL_RESULT_STATE, status: "cancelled", result: zoneResult }}
+        onLoad={() => undefined}
+        disabled={false}
+      />,
+    );
+    expect(cancelled).toContain("本次加载已取消");
+    expect(cancelled).toContain("293.15");
+    expect(cancelled).toContain("<table");
+
+    const failed = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{
+          ...INITIAL_RESULT_STATE,
+          status: "error",
+          result: zoneResult,
+          issue: {
+            code: "simread_not_configured",
+            message: "F:\\secret\\Traceback.txt",
+            source_line_number: null,
+            context: {},
+          },
+        }}
+        onLoad={() => undefined}
+        disabled={false}
+      />,
+    );
+    expect(failed).toContain("本次加载失败");
+    expect(failed).toContain("293.15");
+    expect(failed).not.toContain("secret");
+    expect(failed).not.toContain("Traceback");
+  });
+
+  it("provides the retained cancellation notice in English", async () => {
+    await i18n.changeLanguage("en");
+    expect(i18n.t("results.cancelledRetained")).toBe(
+      "This load was cancelled; the last successful results remain visible.",
+    );
     await i18n.changeLanguage("zh-CN");
   });
 });

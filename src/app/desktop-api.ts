@@ -4,6 +4,7 @@ import type {
   DesktopPlanResponse,
 } from "./patch-state";
 import type { DesktopOpenResponse } from "./project-state";
+import type { DesktopZoneAirStateResponse } from "./result-state";
 
 export async function selectAndReadPrjZones(
   requestId: string,
@@ -34,5 +35,17 @@ export async function applyZoneVolumePatchToCopy(
     requestId,
     projectSessionId,
     patchId,
+  });
+}
+
+export async function selectAndExtractZoneAirState(
+  requestId: string,
+  projectSessionId: string,
+  zoneNumber: number,
+): Promise<DesktopZoneAirStateResponse> {
+  return invoke<DesktopZoneAirStateResponse>("select_and_extract_zone_air_state", {
+    requestId,
+    projectSessionId,
+    zoneNumber,
   });
 }

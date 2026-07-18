@@ -463,6 +463,88 @@ def _patch_fake_simread(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, calls: 
     return tool_path
 
 
+def _assert_project_mismatch_prevents_simread(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    expected_source_path: Path,
+    expected_source_sha256: str,
+) -> None:
+    manifest, source, _, sim = _orchestration_fixture(tmp_path)
+    protected = {
+        path: (path.stat().st_size, hashlib.sha256(path.read_bytes()).hexdigest())
+        for path in (manifest, source, sim)
+    }
+    calls = {"probe": 0, "popen": 0}
+
+    def unexpected_probe(_path):
+        calls["probe"] += 1
+        raise AssertionError("probe_simread must not run for a project mismatch")
+
+    def unexpected_popen(*_args, **_kwargs):
+        calls["popen"] += 1
+        raise AssertionError("SimRead must not start for a project mismatch")
+
+    monkeypatch.setattr(simread_runner, "probe_simread", unexpected_probe)
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", unexpected_popen)
+    result_root = tmp_path / "results"
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest,
+            simread_path=tmp_path / "simread.exe",
+            result_root=result_root,
+            zone_number=1,
+            expected_source_path=expected_source_path,
+            expected_source_sha256=expected_source_sha256,
+        )
+    assert error.value.diagnostic.code == "result_project_mismatch"
+    assert calls == {"probe": 0, "popen": 0}
+    assert not result_root.exists()
+    for path, before in protected.items():
+        assert (path.stat().st_size, hashlib.sha256(path.read_bytes()).hexdigest()) == before
+
+
+def test_project_path_mismatch_is_rejected_before_simread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    other = tmp_path / "other.prj"
+    shutil.copy2(
+        Path(__file__).parents[2]
+        / "fixtures"
+        / "contam"
+        / "official-nist-tutorials"
+        / "demo1c.prj",
+        other,
+    )
+    source_sha256 = hashlib.sha256(
+        (
+            Path(__file__).parents[2]
+            / "fixtures"
+            / "contam"
+            / "official-contamxpy"
+            / "test_GetPrjInfo.prj"
+        ).read_bytes()
+    ).hexdigest()
+    _assert_project_mismatch_prevents_simread(
+        tmp_path,
+        monkeypatch,
+        expected_source_path=other,
+        expected_source_sha256=source_sha256,
+    )
+
+
+def test_project_sha_mismatch_is_rejected_before_simread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    expected_source = tmp_path / "source" / "model.prj"
+    _assert_project_mismatch_prevents_simread(
+        tmp_path,
+        monkeypatch,
+        expected_source_path=expected_source,
+        expected_source_sha256="0" * 64,
+    )
+
+
 def test_extract_orchestration_success_has_bound_inputs_and_schema(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,4 +1,4 @@
-export const BRIDGE_PROTOCOL_VERSION = "1.1";
+export const BRIDGE_PROTOCOL_VERSION = "1.2";
 
 export type ProjectStatus =
   | "idle"

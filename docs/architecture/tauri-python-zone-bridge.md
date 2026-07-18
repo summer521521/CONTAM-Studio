@@ -2,7 +2,7 @@
 
 ## 目的与范围
 
-Phase 2C用最小纵向切片验证桌面端能够打开受支持的真实PRJ并展示全部Zone。Phase 3B在同一受控边界中加入Zone体积Patch计划与“另存为新副本”。桥只调用严格读取器和Phase 3A-0领域函数，不调用contamxpy、ContamX或仿真初始化，不支持源文件保存、完整回写、结果读取或AI。
+Phase 2C用最小纵向切片验证桌面端能够打开受支持的真实PRJ并展示全部Zone。Phase 3B在同一受控边界中加入Zone体积Patch计划与“另存为新副本”。Phase 5B-1复用同一桥接进程，从Rust原生选择的Phase 4成功运行清单提取当前Zone的空气状态。桥不调用contamxpy，也不在桌面端启动ContamX。
 
 ```text
 React GUI
@@ -11,7 +11,7 @@ Rust桌面宿主
 ↓ 一次性Python进程，stdin/stdout JSON
 contam_studio_core.zone_bridge
 ↓
-read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy
+read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / extract_zone_air_state
 ```
 
 ## 为什么使用一次性进程
@@ -25,11 +25,11 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy
 
 ## JSON协议
 
-协议版本为`1.1`。相对`1.0`新增两个显式白名单操作和带`result_type`的结果联合，因此递增次版本。Python从stdin读取一条不超过128 KiB的UTF-8 JSON请求，stdout只输出一条完整JSON响应并换行。
+协议版本为`1.2`。相对`1.1`新增显式白名单操作`extract_zone_air_state`及其结果类型，原有读取和Patch字段语义不变。Python从stdin读取一条不超过128 KiB的UTF-8 JSON请求，stdout只输出一条完整JSON响应并换行。
 
 ```json
 {
-  "protocol_version":"1.1",
+  "protocol_version":"1.2",
   "request_id":"UUID",
   "operation":"read_simple_zones",
   "source_path":"F:\\path\\model.prj"
@@ -40,7 +40,7 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy
 
 ```json
 {
-  "protocol_version":"1.1",
+  "protocol_version":"1.2",
   "request_id":"UUID",
   "ok":true,
   "result":{"result_type":"read_zones","project":{"schema_version":"1.0"}},
@@ -48,7 +48,7 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy
 }
 ```
 
-失败时`ok=false`、`result=null`，`error`包含稳定`code`、短消息、可空源行号和受限上下文。桥不会返回部分Zone或部分应用结果。`result_type`只允许`read_zones`、`zone_volume_patch_plan`和`zone_volume_patch_application`；Rust分别校验协议、`request_id`、Envelope及每种结果的完整契约。
+失败时`ok=false`、`result=null`，`error`包含稳定`code`、短消息、可空源行号和受限上下文。桥不会返回部分Zone、部分应用结果或部分结果样本。`result_type`只允许`read_zones`、`zone_volume_patch_plan`、`zone_volume_patch_application`和`zone_air_state_extraction`；Rust分别校验协议、`request_id`、Envelope及每种结果的完整契约。
 
 计划请求由Rust加入活动项目路径、Zone编号和最长80字符的ASCII新记号；Python返回完整Patch和单行Diff。Rust验证后只把安全审阅视图发给WebView，完整Patch保存在内存。应用请求由Rust加入活动源路径、原生保存对话框得到的输出路径及内存中的完整Patch；前端不能提供三者中的任何路径或Patch对象。
 
@@ -65,8 +65,9 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy
 9. 打开成功后Rust建立仅存于应用内存的`project_session_id`并清除旧Patch；计划成功后保存完整Patch和`patch_id`。
 10. 用户确认“另存为新副本”后，Rust原生保存对话框取得新路径；取消不启动Python且保留审阅。
 11. 应用成功后Rust验证应用结果和重读文档，替换活动项目并清除Patch；React切换到新副本。React只接受当前`request_id`对应的结果。
+12. 结果命令由Rust原生选择Phase 4 JSON清单，并在应用本地数据目录创建受控结果根；Rust向Python传入活动项目路径、哈希和Zone编号，验证返回的样本契约后只向WebView发送不含路径的结果视图。
 
-读取和计划超时为10秒，应用超时为15秒；stdout上限2 MiB，stderr上限16 KiB。超时后Rust终止Python进程；超过上限的内容继续被排空但不保存在内存中。stderr必须为空且不会返回前端，Python正常用户输入错误通过stdout Envelope表达。
+读取和计划超时为10秒，应用超时为15秒，结果提取超时为45秒；stdout上限2 MiB，stderr上限16 KiB。超时后Rust终止Python进程；超过上限的内容继续被排空但不保存在内存中。stderr必须为空且不会返回前端，Python正常用户输入错误通过stdout Envelope表达。
 
 ## Python发现
 
@@ -92,7 +93,7 @@ Rust只接受不超过80字符的`[a-z0-9_]`诊断code；Python原始message被�
 
 ## 文件与权限边界
 
-- `build.rs`通过`AppManifest`只登记打开、计划和应用三个命令；main窗口capability仅包含`core:default`及这三个命令的显式权限。
+- `build.rs`通过`AppManifest`只登记打开、计划、应用和结果提取四个命令；main窗口capability仅包含`core:default`及这四个命令的显式权限。
 - 前端没有dialog、文件系统、Shell、HTTP或远程URL权限，也没有`@tauri-apps/plugin-dialog`依赖。
 - Rust侧文件选择器只显示`.prj`筛选，不扫描磁盘；取消不是错误。筛选之后仍验证文件、扩展名和规范化路径。
 - Rust只把内部持有的规范化选择路径作为结构化字段传入Python，不把路径拼接成命令。
@@ -109,5 +110,5 @@ Rust只接受不超过80字符的`[a-z0-9_]`诊断code；Python原始message被�
 - 进程主动取消、进程树清理及大量并发请求；当前UI在选择和读取期间禁用重复打开，状态层仍拒绝旧响应。
 - 完整PRJ、Zone条件尾部、其他区块、源文件保存和完整回写；当前未知区块仅通过单记号替换时保留原始字节。
 - 稳定UUID、跨重启session、多个Patch、撤销/重做和其他字段编辑。
-- ContamX、contamxpy、仿真工作区、结果文件和运行追踪。
+- 桌面端ContamX运行、任意SIM/NFR入口、结果曲线、导出和其他结果类型。
 - HTTP服务、常驻sidecar、远程调用、云服务和AI。

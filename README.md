@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目已建立**Phase 4A：独立ContamX运行工作区与可追溯运行清单**。Python核心当前只接受身份完全匹配的NIST官方`contamx3.exe` 3.4.0.3，在源项目目录树之外创建并三方校验输入快照，以受控环境运行求解器，并用结构化manifest记录求解器身份、输入、退出码、流证据和全部生成文件。该能力尚未接入React或Tauri，不读取SIM结果值，也不代表完整运行结果分析已经实现；Phase 3B仍只支持Zone体积副本修改。
+项目当前进入**Phase 5B-1：Zone空气状态桌面摘要**。在已打开PRJ中，用户可选择当前Zone并通过Rust原生对话框选择Phase 4成功运行清单，桌面桥调用Phase 5A官方SimRead提取并展示真实`zone_air_state`摘要与表格。该能力仍只支持当前Zone和已验证Phase 4清单，不提供ContamX运行按钮、任意SIM/NFR、曲线或导出；Phase 3B仍只支持Zone体积副本修改。
 
 ## 架构方向
 
@@ -55,6 +55,8 @@ pnpm tauri dev
 ![Phase 2C真实PRJ只读Zone工作台](docs/ui/phase-2c-real-zone-project.png)
 
 Phase 3B的桌面审阅流程和验证状态见[开发与验证记录](docs/development/phase-3b-zone-volume-gui-verification.md)。
+
+![Phase 5B-1真实Zone空气状态结果](docs/ui/phase-5b-zone-air-state-results.png)
 
 ## Python严格Zone文档读取
 
@@ -138,3 +140,9 @@ python\.venv\Scripts\python.exe -m contam_studio_core.zone_air_state_results ext
 详细边界见[SimRead结果提取架构](docs/architecture/simread-result-extraction.md)和[Phase 5A验证记录](docs/development/phase-5a-zone-air-state-results-verification.md)。
 
 结果提取只接受成功的Phase 4运行清单作为可信入口，不能直接传入NFR或SIM。manifest、PRJ和SIM使用同一份bytes及哈希证据反复复核；`day_type`当前返回null，因为官方NFR不提供CONTAM日类型，`sim_time_seconds`表示从首个样本起算的累计秒数。工作区创建后进程或解析失败会使用与成功相同的清单模型保留真实流和生成物证据，wait异常和超时均进入有界进程收口并关闭父管道，且写清单前记录Phase 4、工作区和SimRead最终证据状态；未确认退出的生成物不写最终哈希；入口配置或路径在工作区创建前拒绝时不会伪造清单。
+
+## Phase 5B-1桌面结果摘要
+
+打开受支持PRJ并选择Zone后，结果区域的“加载运行结果”只打开Phase 4运行清单筛选器；React不会提交任何本地路径。Rust持有活动项目session和原生选择的manifest路径，结果根目录由应用本地数据目录控制，Python在启动SimRead前验证项目SHA-256和Zone身份。成功后桌面显示当前Zone的真实样本表格；`day_type`显示为不可用的`—`。详见[Phase 5B-1架构](docs/architecture/phase-5b-zone-result-summary.md)和[验证记录](docs/development/phase-5b-zone-result-summary-verification.md)。
+
+本阶段仍不支持GUI运行ContamX、任意SIM/NFR、曲线、CSV/Excel导出、多Zone比较、污染物结果或AI解释。

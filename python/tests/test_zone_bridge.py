@@ -186,6 +186,61 @@ def test_plan_operation_returns_domain_patch_and_diff(monkeypatch) -> None:
     assert result["diff_text"].count("\n") == 4
 
 
+def test_zone_air_state_operation_passes_bound_project_and_returns_envelope(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_extract(*args, **kwargs):
+        captured.update(kwargs)
+        return {
+            "extraction_id": "extract-1",
+            "status": "succeeded",
+            "result_manifest_path": str(tmp_path / "result-manifest.json"),
+            "run_id": "run-1",
+            "zone_number": 1,
+            "zone_name": "One",
+            "sample_count": 1,
+            "first_sample": {},
+            "parsed_result": {"result_type": "zone_air_state", "samples": []},
+        }
+
+    monkeypatch.setattr(bridge_module, "extract_zone_air_state", fake_extract)
+    request = _request(
+        OFFICIAL_PRJ,
+        operation="extract_zone_air_state",
+        manifest_path=str(tmp_path / "manifest.json"),
+        source_sha256="a" * 64,
+        result_root=str(tmp_path / "results"),
+        zone_number=1,
+    )
+    envelope = handle_request(request)
+
+    assert envelope["ok"] is True
+    assert captured["expected_source_path"] == OFFICIAL_PRJ
+    assert captured["expected_source_sha256"] == "a" * 64
+    assert envelope["result"]["result_type"] == "zone_air_state_extraction"
+
+
+def test_zone_air_state_operation_maps_phase5_failure(monkeypatch, tmp_path: Path) -> None:
+    def fail(*args, **kwargs):
+        raise bridge_module.SimReadError(
+            bridge_module._diagnostic("result_project_mismatch", "hidden")
+        )
+
+    monkeypatch.setattr(bridge_module, "extract_zone_air_state", fail)
+    envelope = handle_request(
+        _request(
+            OFFICIAL_PRJ,
+            operation="extract_zone_air_state",
+            manifest_path=str(tmp_path / "manifest.json"),
+            source_sha256="a" * 64,
+            result_root=str(tmp_path / "results"),
+            zone_number=1,
+        )
+    )
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "result_project_mismatch"
+
+
 def test_apply_operation_strictly_decodes_patch_and_returns_new_project(tmp_path: Path) -> None:
     patch = bridge_module.plan_zone_volume_patch(OFFICIAL_PRJ, 1, "650.0")
     output = tmp_path / "copy.prj"
