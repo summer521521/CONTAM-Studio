@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import contam_studio_core.zone_bridge as bridge_module
+from contam_studio_core.contamx_run_models import RunDiagnostic
 from contam_studio_core.zone_bridge import (
     MAX_REQUEST_BYTES,
     PROTOCOL_VERSION,
@@ -239,6 +240,54 @@ def test_zone_air_state_operation_maps_phase5_failure(monkeypatch, tmp_path: Pat
     )
     assert envelope["ok"] is False
     assert envelope["error"]["code"] == "result_project_mismatch"
+
+
+def test_run_active_project_operation_binds_source_and_returns_internal_run(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeRun:
+        def to_dict(self):
+            return {"run_id": "run-1", "status": "succeeded", "manifest_path": "internal"}
+
+    def fake_run(source_path, **kwargs):
+        captured["source_path"] = source_path
+        captured.update(kwargs)
+        return FakeRun()
+
+    monkeypatch.setattr(bridge_module, "run_contamx", fake_run)
+    envelope = handle_request(
+        _request(
+            OFFICIAL_PRJ,
+            operation="run_active_project",
+            source_sha256="a" * 64,
+            run_root=str(tmp_path / "runs"),
+        )
+    )
+    assert envelope["ok"] is True
+    assert envelope["result"]["result_type"] == "contamx_run"
+    assert captured == {
+        "source_path": OFFICIAL_PRJ,
+        "run_root": tmp_path / "runs",
+        "expected_source_path": OFFICIAL_PRJ,
+        "expected_source_sha256": "a" * 64,
+    }
+
+
+def test_run_active_project_operation_maps_structured_runner_failure(monkeypatch, tmp_path: Path) -> None:
+    def fail(*args, **kwargs):
+        raise bridge_module.ContamXRunnerError(RunDiagnostic("run_project_mismatch", "hidden"))
+
+    monkeypatch.setattr(bridge_module, "run_contamx", fail)
+    envelope = handle_request(
+        _request(
+            OFFICIAL_PRJ,
+            operation="run_active_project",
+            source_sha256="0" * 64,
+            run_root=str(tmp_path / "runs"),
+        )
+    )
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "run_project_mismatch"
 
 
 def test_apply_operation_strictly_decodes_patch_and_returns_new_project(tmp_path: Path) -> None:

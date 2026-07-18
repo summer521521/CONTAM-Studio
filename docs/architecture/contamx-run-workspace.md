@@ -2,7 +2,7 @@
 
 ## 范围
 
-Phase 4A建立独立的Python运行核心，用NIST官方ContamX在隔离工作区执行一个明确的PRJ快照。它不接入React或Tauri，不读取SIM结果值，也不提供批量运行、运行队列或完整进程树治理。
+Phase 4A建立独立的Python运行核心，用NIST官方ContamX在隔离工作区执行一个明确的PRJ快照。Phase 4B-1复用该核心接入受控桌面命令，并额外绑定Rust活动项目规范化路径和SHA-256；它仍不读取SIM结果值，也不提供批量运行、运行队列或完整进程树治理。
 
 ## 求解器发现与验证
 
@@ -31,7 +31,7 @@ Phase 4A建立独立的Python运行核心，用NIST官方ContamX在隔离工作�
 
 manifest使用`schema_version=1.0`和`execution_mode=isolated_contamx_process`，记录求解器、输入快照、命令数组、工作目录、退出码、耗时、超时、stdout/stderr证据及全部生成文件的相对路径、大小、SHA-256、后缀和分类。stdout/stderr各保留最多4 MiB，超出部分继续排空但标记截断。
 
-成功不只依赖退出码0：当前还要求未超时、源PRJ、显式配套输入和源目录清单均未变化，stdout/stderr证据完整，并存在非空`.sim`主要结果文件。`.log`和`.xlog`记录为求解器日志，其他生成物逐项记录但本阶段不解析其内容。流证据创建、读取、写入或线程收尾失败会产生`run_stream_capture_failed`；超时后无法确认进程退出会产生`run_process_termination_failed`，均不得标记成功。运行目录创建后的快照、启动、捕获或后置验证失败会尽量保留失败manifest与工作区。
+成功不只依赖退出码0：当前还要求未超时、源PRJ、显式配套输入和源目录清单均未变化，stdout/stderr证据完整，并存在非空`.sim`主要结果文件。`.log`和`.xlog`记录为求解器日志，其他生成物逐项记录但本阶段不解析其内容。流证据创建、读取、写入或线程收尾失败会产生`run_stream_capture_failed`。正常、超时和`wait()`异常均进入wait/terminate/kill/父管道关闭与二次有界join；只有退出确认且流冻结后才采集最终哈希。无法确认退出会产生`run_process_termination_failed`，保留不可信残留目录但不写Phase 5A可接受manifest。其他运行目录创建后的快照、启动、捕获或后置验证失败会尽量保留失败manifest与工作区。
 
 manifest先写同目录临时文件、flush并fsync，再使用独占硬链接落盘，拒绝覆盖已存在的运行证据。当前代码不使用Shell字符串、不调用`cmd /c`或PowerShell，也不把原始求解器输出写到CLI标准输出。
 

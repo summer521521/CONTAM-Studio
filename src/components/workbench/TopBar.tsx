@@ -18,6 +18,8 @@ interface TopBarProps {
   onThemeToggle: () => void;
   onOpenProject: () => void;
   openDisabled: boolean;
+  onRunProject: () => void;
+  runDisabled: boolean;
   onPlaceholder: (action: string) => void;
 }
 
@@ -28,6 +30,8 @@ export function TopBar({
   onThemeToggle,
   onOpenProject,
   openDisabled,
+  onRunProject,
+  runDisabled,
   onPlaceholder,
 }: TopBarProps) {
   const { t } = useTranslation();
@@ -35,7 +39,7 @@ export function TopBar({
     { key: "newProject", icon: Plus, onClick: () => onPlaceholder(t("toolbar.newProject")) },
     { key: "openProject", icon: FolderOpen, onClick: onOpenProject },
     { key: "save", icon: Save, onClick: () => onPlaceholder(t("toolbar.save")) },
-    { key: "run", icon: Play, onClick: () => onPlaceholder(t("toolbar.run")) },
+    { key: "run", icon: Play, onClick: onRunProject },
   ] as const;
 
   return (
@@ -53,7 +57,7 @@ export function TopBar({
             className={`tool-button ${key === "run" ? "tool-button-run" : ""}`}
             key={key}
             type="button"
-            disabled={key === "openProject" && openDisabled}
+            disabled={(key === "openProject" && openDisabled) || (key === "run" && runDisabled)}
             onClick={onClick}
           >
             <Icon size={16} aria-hidden="true" />

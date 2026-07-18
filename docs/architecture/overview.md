@@ -60,6 +60,8 @@ ContamX生成物与stdout/stderr证据
 
 该路径只接受CLI绝对路径或`CONTAM_STUDIO_CONTAMX`，不回退PATH，不把求解器放入仓库。`contamxpy`的`inspect_prj`仍是隔离稳态初始化检查和交叉验证入口，不是正式运行管理器；Phase 4A也不解析SIM结果值。详细边界见[ContamX运行工作区](contamx-run-workspace.md)。
 
+Phase 4B-1将同一运行核心接入受控桌面命令：React只提交request和项目session，Rust提供活动项目身份及应用本地运行根，验证成功manifest后只返回安全摘要，并在内存保留最新成功运行上下文。详细边界见[Phase 4B-1受控桌面运行](phase-4b-desktop-contamx-run.md)。
+
 ### 分层职责
 
 | 层 | 主要职责 | 不承担的职责 |

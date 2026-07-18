@@ -2,7 +2,7 @@
 
 ## 目的与范围
 
-Phase 2C用最小纵向切片验证桌面端能够打开受支持的真实PRJ并展示全部Zone。Phase 3B在同一受控边界中加入Zone体积Patch计划与“另存为新副本”。Phase 5B-1复用同一桥接进程，从Rust原生选择的Phase 4成功运行清单提取当前Zone的空气状态。桥不调用contamxpy，也不在桌面端启动ContamX。
+Phase 2C用最小纵向切片验证桌面端能够打开受支持的真实PRJ并展示全部Zone。Phase 3B加入Zone体积Patch，Phase 5B-1加入清单选择与结果提取；Phase 4B-1继续复用同一一次性桥，以活动项目身份调用正式ContamX运行核心。桥不调用contamxpy。
 
 ```text
 React GUI
@@ -11,7 +11,7 @@ Rust桌面宿主
 ↓ 一次性Python进程，stdin/stdout JSON
 contam_studio_core.zone_bridge
 ↓
-read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / extract_zone_air_state
+read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / extract_zone_air_state / run_active_project
 ```
 
 ## 为什么使用一次性进程
@@ -48,7 +48,7 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / e
 }
 ```
 
-失败时`ok=false`、`result=null`，`error`包含稳定`code`、短消息、可空源行号和受限上下文。桥不会返回部分Zone、部分应用结果或部分结果样本。`result_type`只允许`read_zones`、`zone_volume_patch_plan`、`zone_volume_patch_application`和`zone_air_state_extraction`；Rust分别校验协议、`request_id`、Envelope及每种结果的完整契约。
+失败时`ok=false`、`result=null`，`error`包含稳定`code`、短消息、可空源行号和受限上下文。桥不会返回部分Zone、部分应用结果或部分结果样本。`result_type`显式允许读取、Patch、结果提取和`contamx_run`；Rust分别校验协议、`request_id`、Envelope及每种结果的完整契约。
 
 计划请求由Rust加入活动项目路径、Zone编号和最长80字符的ASCII新记号；Python返回完整Patch和单行Diff。Rust验证后只把安全审阅视图发给WebView，完整Patch保存在内存。应用请求由Rust加入活动源路径、原生保存对话框得到的输出路径及内存中的完整Patch；前端不能提供三者中的任何路径或Patch对象。
 
@@ -67,7 +67,7 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / e
 11. 应用成功后Rust验证应用结果和重读文档，替换活动项目并清除Patch；React切换到新副本。React只接受当前`request_id`对应的结果。
 12. 结果命令由Rust原生选择Phase 4 JSON清单，并在应用本地数据目录创建受控结果根；Rust向Python传入活动项目路径、哈希和Zone编号，验证返回的样本契约后只向WebView发送不含路径的结果视图。
 
-读取和计划超时为10秒，应用超时为15秒，结果提取超时为45秒；stdout上限2 MiB，stderr上限16 KiB。超时后Rust终止Python进程；超过上限的内容继续被排空但不保存在内存中。stderr必须为空且不会返回前端，Python正常用户输入错误通过stdout Envelope表达。
+读取和计划超时为10秒，应用超时为15秒，结果提取超时为45秒，桌面ContamX运行桥超时为75秒（大于Python求解器60秒上限）；stdout上限2 MiB，stderr上限16 KiB。超时后Rust终止Python进程；超过上限的内容继续被排空但不保存在内存中。stderr必须为空且不会返回前端，Python正常用户输入错误通过stdout Envelope表达。
 
 ## Python发现
 
@@ -93,7 +93,7 @@ Rust只接受不超过80字符的`[a-z0-9_]`诊断code；Python原始message被�
 
 ## 文件与权限边界
 
-- `build.rs`通过`AppManifest`只登记打开、计划、应用和结果提取四个命令；main窗口capability仅包含`core:default`及这四个命令的显式权限。
+- `build.rs`通过`AppManifest`只登记打开、计划、应用、结果提取和活动项目运行五个命令；main窗口capability仅包含`core:default`及这五个命令的显式权限。
 - 前端没有dialog、文件系统、Shell、HTTP或远程URL权限，也没有`@tauri-apps/plugin-dialog`依赖。
 - Rust侧文件选择器只显示`.prj`筛选，不扫描磁盘；取消不是错误。筛选之后仍验证文件、扩展名和规范化路径。
 - Rust只把内部持有的规范化选择路径作为结构化字段传入Python，不把路径拼接成命令。
@@ -110,5 +110,5 @@ Rust只接受不超过80字符的`[a-z0-9_]`诊断code；Python原始message被�
 - 进程主动取消、进程树清理及大量并发请求；当前UI在选择和读取期间禁用重复打开，状态层仍拒绝旧响应。
 - 完整PRJ、Zone条件尾部、其他区块、源文件保存和完整回写；当前未知区块仅通过单记号替换时保留原始字节。
 - 稳定UUID、跨重启session、多个Patch、撤销/重做和其他字段编辑。
-- 桌面端ContamX运行、任意SIM/NFR入口、结果曲线、导出和其他结果类型。
+- 自动把刚完成的ContamX运行加载到结果页、任意SIM/NFR入口、结果曲线、导出和其他结果类型。
 - HTTP服务、常驻sidecar、远程调用、云服务和AI。

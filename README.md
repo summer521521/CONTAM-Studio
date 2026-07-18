@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目当前进入**Phase 5B-1：Zone空气状态桌面摘要**。在已打开PRJ中，用户可选择当前Zone并通过Rust原生对话框选择Phase 4成功运行清单，桌面桥调用Phase 5A官方SimRead提取并展示真实`zone_air_state`摘要与表格。该能力仍只支持当前Zone和已验证Phase 4清单，不提供ContamX运行按钮、任意SIM/NFR、曲线或导出；Phase 3B仍只支持Zone体积副本修改。
+项目当前进入**Phase 4B-1：受控桌面ContamX运行**。已打开受支持PRJ后，顶部“运行”通过Rust活动session和应用本地运行目录调用Python Phase 4核心，界面只显示不含路径的运行摘要；最新成功manifest只保存在Rust内存。当前不会自动把本次运行加载到结果页，仍不提供历史、批量、取消、曲线或导出。
 
 ## 架构方向
 
@@ -116,6 +116,8 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [Tauri-Python Zone桥](docs/architecture/tauri-python-zone-bridge.md)
 - [Zone体积副本Patch](docs/architecture/zone-volume-patch.md)
 - [ContamX运行工作区](docs/architecture/contamx-run-workspace.md)
+- [Phase 4B-1受控桌面运行](docs/architecture/phase-4b-desktop-contamx-run.md)
+- [Phase 4B-1自动验证](docs/development/phase-4b-desktop-contamx-run-verification.md)
 - [Phase 4A开发与验证](docs/development/phase-4a-contamx-run-core-verification.md)
 - [Phase 2C开发与验证](docs/development/phase-2c-verification.md)
 - [Phase 3A-0开发与验证](docs/development/phase-3a-zone-volume-patch-verification.md)
@@ -145,4 +147,10 @@ python\.venv\Scripts\python.exe -m contam_studio_core.zone_air_state_results ext
 
 打开受支持PRJ并选择Zone后，结果区域的“加载运行结果”只打开Phase 4运行清单筛选器；React不会提交任何本地路径。Rust持有活动项目session和原生选择的manifest路径，结果根目录由应用本地数据目录控制，Python在启动SimRead前验证项目SHA-256和Zone身份。成功后桌面显示当前Zone的真实样本表格；`day_type`显示为不可用的`—`。详见[Phase 5B-1架构](docs/architecture/phase-5b-zone-result-summary.md)和[验证记录](docs/development/phase-5b-zone-result-summary-verification.md)。
 
-本阶段仍不支持GUI运行ContamX、任意SIM/NFR、曲线、CSV/Excel导出、多Zone比较、污染物结果或AI解释。
+Phase 5B-1结果入口仍不接受任意SIM/NFR；Phase 4B-1运行成功后也不会自动提取结果。当前不支持曲线、CSV/Excel导出、多Zone比较、污染物结果或AI解释。
+
+## Phase 4B-1桌面运行
+
+顶部“运行”只向Tauri提交`request_id`和活动`project_session_id`。Rust绑定当前项目路径和SHA-256，把运行根限制到应用本地数据目录，并通过一次性Python桥调用同一`run_contamx()`领域接口。成功摘要包含运行ID、官方ContamX 3.4.0.3、时间、退出码和非空SIM数量，不包含求解器、manifest或工作区绝对路径。ContamX通过`CONTAM_STUDIO_CONTAMX`配置，不回退PATH。
+
+最新成功运行只存在于当前桌面会话，打开其他项目或切换到Patch副本后清除。运行失败保留上一次成功摘要。本切片不自动提取或展示本次运行结果；手动GUI验收状态为`pending_user`。

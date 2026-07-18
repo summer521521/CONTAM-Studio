@@ -2,6 +2,14 @@
 
 记录日期：2026-07-18。
 
+## Phase 4B-1受控桌面ContamX运行
+
+- 新增显式ACL命令`run_active_contam_project`。React只提交request和项目session；Rust从活动项目内存取得规范化路径与SHA-256，并使用`<app-local-data>/runs`。
+- Python桥新增`run_active_project`白名单操作，复用Phase 4A `run_contamx()`；项目SHA不匹配在求解器probe和运行目录创建前以`run_project_mismatch`拒绝。
+- ContamX异常进程经过有界wait/terminate/kill/管道关闭和流线程冻结。无法确认退出时保留不可信残留目录，但不写Phase 5A可接受manifest或最终生成物哈希。
+- Rust验证成功响应与活动项目、官方3.4.0.3身份、受控manifest路径和非空SIM一致，只向WebView发送安全摘要；最新成功manifest路径仅存Rust内存，项目或Patch副本切换时清除。
+- 非GUI官方运行已成功并由Phase 5A验证器接受。自动验证已完成；真实桌面手动验收为`pending_user`。本切片不自动加载刚运行的结果。
+
 ## Phase 5B-1桌面Zone空气状态摘要
 
 - 新增受控`select_and_extract_zone_air_state`桌面命令。React只提交request、项目session和CONTAM Zone编号；Rust通过原生JSON对话框取得Phase 4运行清单，并将结果根目录限制在应用本地数据目录。
@@ -46,7 +54,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 求解器只接受CLI绝对路径或`CONTAM_STUDIO_CONTAMX`，不回退PATH、磁盘扫描、注册表或自动下载；当前还必须同时匹配官方3.4.0.3 EXE的文件名、大小、SHA-256、PE架构、Windows版本资源和受限`--Version`输出。
 - 每次运行只在源项目目录树之外创建新的`run_id/workspace`和`evidence`；PRJ和显式配套文件绑定最初证据，并对复制前源、复制后源和workspace副本进行三方校验，进程启动前与结束后再次复核。ContamX使用参数数组、`shell=False`、固定工作目录和白名单Windows环境运行，manifest记录源目录文件/子目录清单、输入完整性、流证据、退出码、超时和全部生成物哈希。
 - 真实运行已使用官方`test_GetPrjInfo.prj`完成，退出码为0，生成非空`.sim`以及`.log`、`.xlog`等文件；源PRJ哈希、大小和源目录内容保持不变。运行输出仅保留在`F:\Codex_File`任务目录中，未提交二进制或运行产物。
-- 运行核心只把非空`.sim`作为主要结果存在证据，不解析SIM内容；失败、超时和非零退出同样保留失败manifest。当前仍不支持GUI运行、批量运行、结果读取、进程树完整治理、求解器打包和分发。
+- Phase 4A运行核心只把非空`.sim`作为主要结果存在证据，不解析SIM内容；失败、超时和非零退出同样保留失败manifest。桌面运行在Phase 4B-1接入，但仍不支持批量运行、自动结果读取、进程树完整治理、求解器打包和分发。
 - Phase 4A运行核心及边界加固完成后，Python测试合计180项通过；Ruff、前端测试/构建和Rust测试/检查保持通过。
 
 ## Phase 1验证

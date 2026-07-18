@@ -4,6 +4,7 @@ import io
 import json
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -116,6 +117,44 @@ def test_run_success_creates_snapshot_manifest_and_artifact(tmp_path, monkeypatc
     assert Path(result.run_directory, "evidence", "stdout.bin").is_file()
     assert Path(result.run_directory, "evidence", "stderr.bin").is_file()
     assert source.read_bytes() == FIXTURE.read_bytes()
+
+
+def test_active_project_identity_is_bound_before_probe_or_run_directory(tmp_path, monkeypatch):
+    source = copy_fixture(tmp_path)
+    other = source.parent / "other.prj"
+    other.write_bytes(source.read_bytes())
+    root = run_root(tmp_path)
+    probed = False
+
+    def probe(_solver=None):
+        nonlocal probed
+        probed = True
+        return fake_solver()
+
+    monkeypatch.setattr(runner, "probe_solver", probe)
+    with pytest.raises(runner.ContamXRunnerError) as error:
+        runner.run_contamx(
+            source,
+            run_root=root,
+            expected_source_path=other,
+            expected_source_sha256=runner._sha256_file(source),
+        )
+    assert error.value.code == "run_project_mismatch"
+    assert probed is False
+    assert not root.exists()
+
+
+def test_active_project_sha_match_allows_existing_run_contract(tmp_path, monkeypatch):
+    source = copy_fixture(tmp_path)
+    monkeypatch.setattr(runner, "probe_solver", lambda solver=None: fake_solver())
+    monkeypatch.setattr(runner, "_start_process", fake_start())
+    result = runner.run_contamx(
+        source,
+        run_root=run_root(tmp_path),
+        expected_source_path=source,
+        expected_source_sha256=runner._sha256_file(source),
+    )
+    assert result.status == "succeeded"
 
 
 def test_nonzero_exit_generates_failed_manifest(tmp_path, monkeypatch):
@@ -571,6 +610,126 @@ def test_termination_failure_is_structured(monkeypatch, tmp_path):
             runner._StreamCapture(tmp_path / "stderr.bin"),
         )
     assert error.value.code == "run_process_termination_failed"
+
+
+def test_wait_error_still_terminates_and_confirms_exit(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeProcess:
+        returncode = None
+        stdout = io.BytesIO(b"out")
+        stderr = io.BytesIO(b"")
+
+        def wait(self, timeout=None):
+            calls.append(("wait", timeout))
+            if len(calls) == 1:
+                raise OSError("wait failed")
+            self.returncode = 0
+            return 0
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            calls.append(("terminate", None))
+
+        def kill(self):
+            calls.append(("kill", None))
+
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+    with pytest.raises(runner.ContamXRunnerError) as error:
+        runner._start_process(
+            fake_solver(),
+            "model.prj",
+            tmp_path,
+            runner._StreamCapture(tmp_path / "stdout.bin"),
+            runner._StreamCapture(tmp_path / "stderr.bin"),
+        )
+    assert error.value.code == "run_process_failed"
+    assert ("terminate", None) in calls
+    assert ("kill", None) not in calls
+
+
+def test_terminate_failure_falls_back_to_kill(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeProcess:
+        returncode = None
+        stdout = io.BytesIO(b"")
+        stderr = io.BytesIO(b"")
+
+        def wait(self, timeout=None):
+            calls.append(("wait", timeout))
+            if self.returncode is None:
+                raise subprocess.TimeoutExpired("contamx3.exe", timeout)
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            calls.append(("terminate", None))
+            raise OSError("terminate failed")
+
+        def kill(self):
+            calls.append(("kill", None))
+            self.returncode = 9
+
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+    result = runner._start_process(
+        fake_solver(),
+        "model.prj",
+        tmp_path,
+        runner._StreamCapture(tmp_path / "stdout.bin"),
+        runner._StreamCapture(tmp_path / "stderr.bin"),
+    )
+    assert result == (9, True)
+    assert ("terminate", None) in calls
+    assert ("kill", None) in calls
+
+
+def test_unconfirmed_exit_closes_blocked_streams_and_writes_no_manifest(tmp_path, monkeypatch):
+    source = copy_fixture(tmp_path)
+    released = threading.Event()
+
+    class BlockingStream:
+        def read(self, _size):
+            released.wait(timeout=2)
+            return b""
+
+        def close(self):
+            released.set()
+
+    class FakeProcess:
+        returncode = None
+        stdout = BlockingStream()
+        stderr = BlockingStream()
+        stdin = None
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired("contamx3.exe", timeout)
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            raise OSError("terminate failed")
+
+        def kill(self):
+            raise OSError("kill failed")
+
+    monkeypatch.setattr(runner, "probe_solver", lambda solver=None: fake_solver())
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+    with pytest.raises(runner.ContamXRunnerError) as error:
+        runner.run_contamx(source, run_root=run_root(tmp_path))
+    assert error.value.code == "run_process_termination_failed"
+    assert released.is_set()
+    manifests = list(run_root(tmp_path).rglob("manifest.json"))
+    assert manifests == []
+    evidence = next(run_root(tmp_path).rglob("stdout.bin"))
+    before = (evidence.stat().st_size, evidence.stat().st_mtime_ns)
+    threading.Event().wait(0.02)
+    assert (evidence.stat().st_size, evidence.stat().st_mtime_ns) == before
 
 
 def test_manifest_does_not_overwrite_existing_file(tmp_path):

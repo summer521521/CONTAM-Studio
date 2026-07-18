@@ -2,15 +2,18 @@ import { CheckCircle2, FileClock, PanelBottomClose } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { BottomTab } from "../../app/workbench-state";
 import type { ProjectState } from "../../app/project-state";
+import type { RunState } from "../../app/run-state";
+import { ContamXRunSummary } from "./ContamXRunSummary";
 
 interface BottomPanelProps {
   activeTab: BottomTab;
   projectState: ProjectState;
+  runState: RunState;
   onTabChange: (tab: BottomTab) => void;
   onCollapse: () => void;
 }
 
-export function BottomPanel({ activeTab, projectState, onTabChange, onCollapse }: BottomPanelProps) {
+export function BottomPanel({ activeTab, projectState, runState, onTabChange, onCollapse }: BottomPanelProps) {
   const { t } = useTranslation();
   const tabs: BottomTab[] = ["problems", "logs", "results"];
 
@@ -72,13 +75,7 @@ export function BottomPanel({ activeTab, projectState, onTabChange, onCollapse }
             </div>
           </div>
         ) : null}
-        {activeTab === "logs" ? (
-          <ol className="mock-log">
-            <li>{t("panel.log1")}</li>
-            <li>{t("panel.log2")}</li>
-            <li>{t("panel.log3")}</li>
-          </ol>
-        ) : null}
+        {activeTab === "logs" ? <ContamXRunSummary state={runState} /> : null}
         {activeTab === "results" ? (
           <div className="panel-empty-state">
             <FileClock size={27} strokeWidth={1.5} aria-hidden="true" />

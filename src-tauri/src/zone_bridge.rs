@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -24,10 +24,12 @@ const READ_OPERATION: &str = "read_simple_zones";
 const PLAN_OPERATION: &str = "plan_zone_volume_patch";
 const APPLY_OPERATION: &str = "apply_zone_volume_patch_to_copy";
 const EXTRACT_ZONE_AIR_STATE_OPERATION: &str = "extract_zone_air_state";
+const RUN_ACTIVE_PROJECT_OPERATION: &str = "run_active_project";
 const ZONE_RESULT_STAGE_EVENT: &str = "zone-result-stage";
 const READ_AND_PLAN_TIMEOUT: Duration = Duration::from_secs(10);
 const APPLY_TIMEOUT: Duration = Duration::from_secs(15);
 const EXTRACT_TIMEOUT: Duration = Duration::from_secs(45);
+const RUN_TIMEOUT: Duration = Duration::from_secs(75);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MAX_STDOUT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 16 * 1024;
@@ -334,6 +336,84 @@ pub struct DesktopZoneAirStateResponse {
     error: Option<ReaderDiagnostic>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct RawRunSolver {
+    name: String,
+    version: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawRunSource {
+    sha256: String,
+    unchanged: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawRunArtifact {
+    relative_path: String,
+    size_bytes: u64,
+    suffix: String,
+    classification: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawRunManifest {
+    schema_version: String,
+    run_id: String,
+    status: String,
+    execution_mode: String,
+    started_at_utc: String,
+    ended_at_utc: String,
+    duration_ms: u64,
+    source: RawRunSource,
+    solver: RawRunSolver,
+    exit_code: Option<i32>,
+    timed_out: bool,
+    artifacts: Vec<RawRunArtifact>,
+    diagnostics: Vec<RawReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawContamXRun {
+    run_id: String,
+    status: String,
+    run_directory: String,
+    manifest_path: String,
+    solver_version: String,
+    exit_code: Option<i32>,
+    timed_out: bool,
+    primary_artifacts: Vec<RawRunArtifact>,
+    manifest: RawRunManifest,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawContamXRunResult {
+    result_type: String,
+    run: RawContamXRun,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ContamXRunSummaryView {
+    status: String,
+    run_id: String,
+    solver_name: String,
+    solver_version: String,
+    started_at_utc: String,
+    duration_ms: u64,
+    exit_code: i32,
+    timed_out: bool,
+    sim_artifact_count: usize,
+    source_unchanged: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopRunResponse {
+    request_id: String,
+    project_session_id: Option<String>,
+    summary: Option<ContamXRunSummaryView>,
+    error: Option<ReaderDiagnostic>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct ZoneResultStageEvent {
     request_id: String,
@@ -361,10 +441,30 @@ struct PlannedPatchContext {
     source_sha256: String,
 }
 
+#[derive(Clone, Debug)]
+struct ActiveRunContext {
+    project_session_id: String,
+    source_sha256: String,
+    run_id: String,
+    manifest_path: PathBuf,
+    succeeded: bool,
+}
+
+impl ActiveRunContext {
+    fn is_bound_to(&self, project: &ActiveProjectContext) -> bool {
+        self.succeeded
+            && self.project_session_id == project.project_session_id
+            && self.source_sha256 == project.source_sha256
+            && !self.run_id.is_empty()
+            && self.manifest_path.is_file()
+    }
+}
+
 #[derive(Default)]
 struct DesktopSessionState {
     active_project: Option<ActiveProjectContext>,
     planned_patch: Option<PlannedPatchContext>,
+    active_run: Option<ActiveRunContext>,
 }
 
 #[derive(Default)]
@@ -411,6 +511,7 @@ impl DesktopProjectSessionStore {
         let mut state = self.state.lock().expect("desktop session mutex poisoned");
         state.active_project = Some(context);
         state.planned_patch = None;
+        state.active_run = None;
     }
 }
 
@@ -1178,6 +1279,150 @@ fn result_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopZoneAirSt
     }
 }
 
+fn run_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopRunResponse {
+    DesktopRunResponse {
+        request_id: request_id.into(),
+        project_session_id: None,
+        summary: None,
+        error: Some(error),
+    }
+}
+
+fn safe_run_relative_path(value: &str) -> bool {
+    let path = Path::new(value);
+    !value.is_empty()
+        && !path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+}
+
+fn validate_contamx_run_result(
+    raw: RawContamXRunResult,
+    active: &ActiveProjectContext,
+    run_root: &Path,
+) -> Result<(ContamXRunSummaryView, ActiveRunContext), ReaderDiagnostic> {
+    let run = raw.run;
+    let manifest = &run.manifest;
+    let run_id_valid = !run.run_id.is_empty()
+        && run.run_id.len() <= 80
+        && run
+            .run_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-');
+    let primary_valid = !run.primary_artifacts.is_empty()
+        && run.primary_artifacts.len() <= 64
+        && run.primary_artifacts.iter().all(|artifact| {
+            artifact.suffix.eq_ignore_ascii_case(".sim")
+                && artifact.classification == "simulation_result"
+                && artifact.size_bytes > 0
+                && safe_run_relative_path(&artifact.relative_path)
+        });
+    let manifest_sim_count = manifest
+        .artifacts
+        .iter()
+        .filter(|artifact| {
+            artifact.suffix.eq_ignore_ascii_case(".sim")
+                && artifact.classification == "simulation_result"
+                && artifact.size_bytes > 0
+                && safe_run_relative_path(&artifact.relative_path)
+        })
+        .count();
+    let contract_valid = raw.result_type == "contamx_run"
+        && run_id_valid
+        && run.status == "succeeded"
+        && run.run_id == manifest.run_id
+        && run.solver_version == "3.4.0.3"
+        && run.exit_code == Some(0)
+        && !run.timed_out
+        && manifest.schema_version == RESULT_SCHEMA_VERSION
+        && manifest.status == "succeeded"
+        && manifest.execution_mode == "isolated_contamx_process"
+        && manifest
+            .source
+            .sha256
+            .eq_ignore_ascii_case(&active.source_sha256)
+        && manifest.source.unchanged
+        && manifest.solver.name.eq_ignore_ascii_case("contamx3.exe")
+        && manifest.solver.version == "3.4.0.3"
+        && manifest.exit_code == Some(0)
+        && !manifest.timed_out
+        && manifest.diagnostics.is_empty()
+        && manifest.artifacts.len() <= 256
+        && primary_valid
+        && manifest_sim_count == run.primary_artifacts.len()
+        && !manifest.started_at_utc.is_empty()
+        && manifest.started_at_utc.len() <= 64
+        && !manifest.ended_at_utc.is_empty()
+        && manifest.ended_at_utc.len() <= 64
+        && manifest.duration_ms <= 120_000;
+    if !contract_valid {
+        return Err(host_diagnostic(
+            "run_response_contract_invalid",
+            "The ContamX run response was invalid.",
+            BTreeMap::new(),
+        ));
+    }
+    let root = std::fs::canonicalize(run_root).map_err(|_| {
+        host_diagnostic(
+            "run_response_path_invalid",
+            "The run workspace path was invalid.",
+            BTreeMap::new(),
+        )
+    })?;
+    let expected_run = std::fs::canonicalize(root.join(&run.run_id)).map_err(|_| {
+        host_diagnostic(
+            "run_response_path_invalid",
+            "The run workspace path was invalid.",
+            BTreeMap::new(),
+        )
+    })?;
+    let returned_run = std::fs::canonicalize(Path::new(&run.run_directory)).map_err(|_| {
+        host_diagnostic(
+            "run_response_path_invalid",
+            "The run workspace path was invalid.",
+            BTreeMap::new(),
+        )
+    })?;
+    let manifest_path = std::fs::canonicalize(Path::new(&run.manifest_path)).map_err(|_| {
+        host_diagnostic(
+            "run_response_path_invalid",
+            "The run manifest path was invalid.",
+            BTreeMap::new(),
+        )
+    })?;
+    if expected_run != returned_run
+        || manifest_path != expected_run.join("evidence").join("manifest.json")
+        || !manifest_path.is_file()
+    {
+        return Err(host_diagnostic(
+            "run_response_path_invalid",
+            "The run evidence escaped the controlled workspace.",
+            BTreeMap::new(),
+        ));
+    }
+    let summary = ContamXRunSummaryView {
+        status: "succeeded".into(),
+        run_id: run.run_id.clone(),
+        solver_name: manifest.solver.name.clone(),
+        solver_version: manifest.solver.version.clone(),
+        started_at_utc: manifest.started_at_utc.clone(),
+        duration_ms: manifest.duration_ms,
+        exit_code: 0,
+        timed_out: false,
+        sim_artifact_count: run.primary_artifacts.len(),
+        source_unchanged: true,
+    };
+    let context = ActiveRunContext {
+        project_session_id: active.project_session_id.clone(),
+        source_sha256: active.source_sha256.clone(),
+        run_id: run.run_id,
+        manifest_path,
+        succeeded: true,
+    };
+    Ok((summary, context))
+}
+
 fn validate_zone_air_state_result(
     raw: RawZoneAirStateExtraction,
     active: &ActiveProjectContext,
@@ -1594,6 +1839,158 @@ pub async fn select_and_extract_zone_air_state(
 }
 
 #[tauri::command]
+pub async fn run_active_contam_project(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+) -> DesktopRunResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id) || !request_id_is_valid(&project_session_id) {
+        return run_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "ContamX run request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return run_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let active = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        match state.active_project.clone() {
+            None => {
+                return run_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "project_session_missing",
+                        "No active project session exists.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+            Some(active) if active.project_session_id != project_session_id => {
+                return run_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "project_session_mismatch",
+                        "Project session did not match.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+            Some(active) => active,
+        }
+    };
+    let run_root = match app.path().app_local_data_dir() {
+        Ok(path) => path.join("runs"),
+        Err(_) => {
+            return run_failure(
+                &request_id,
+                host_diagnostic(
+                    "run_root_invalid",
+                    "The application run workspace is unavailable.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": RUN_ACTIVE_PROJECT_OPERATION,
+        "source_path": active.source_path,
+        "source_sha256": active.source_sha256,
+        "run_root": run_root,
+    });
+    let bridge_id = request_id.clone();
+    let raw = match tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, RUN_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(envelope)) => envelope,
+        Ok(Err(error)) => return run_failure(&request_id, error),
+        Err(_) => {
+            return run_failure(
+                &request_id,
+                host_diagnostic(
+                    "bridge_task_failed",
+                    "The ContamX run task ended unexpectedly.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if !raw.ok {
+        return run_failure(
+            &request_id,
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let result: RawContamXRunResult =
+        match serde_json::from_value(raw.result.expect("validated result")) {
+            Ok(value) => value,
+            Err(_) => {
+                return run_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "run_response_contract_invalid",
+                        "Python ContamX run result was invalid.",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+        };
+    let (summary, active_run) = match validate_contamx_run_result(result, &active, &run_root) {
+        Ok(value) => value,
+        Err(error) => return run_failure(&request_id, error),
+    };
+    if !active_run.is_bound_to(&active) {
+        return run_failure(
+            &request_id,
+            host_diagnostic(
+                "run_response_contract_invalid",
+                "The active run context was not bound to the project.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    if state
+        .active_project
+        .as_ref()
+        .map(|project| (&project.project_session_id, &project.source_sha256))
+        != Some((&project_session_id, &active.source_sha256))
+    {
+        return run_failure(
+            &request_id,
+            host_diagnostic(
+                "project_session_mismatch",
+                "Project session changed during the run.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    state.active_run = Some(active_run);
+    DesktopRunResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        summary: Some(summary),
+        error: None,
+    }
+}
+
+#[tauri::command]
 pub async fn plan_zone_volume_patch(
     app: AppHandle,
     request_id: String,
@@ -1980,6 +2377,7 @@ pub async fn apply_zone_volume_patch_to_copy(
     }
     state.active_project = Some(new_active);
     state.planned_patch = None;
+    state.active_run = None;
     DesktopApplyResponse {
         request_id,
         cancelled: false,
@@ -2029,6 +2427,7 @@ mod tests {
         assert_eq!(READ_AND_PLAN_TIMEOUT, Duration::from_secs(10));
         assert_eq!(APPLY_TIMEOUT, Duration::from_secs(15));
         assert_eq!(EXTRACT_TIMEOUT, Duration::from_secs(45));
+        assert_eq!(RUN_TIMEOUT, Duration::from_secs(75));
         assert_eq!(MAX_REQUEST_BYTES, 128 * 1024);
     }
 
@@ -2261,6 +2660,173 @@ mod tests {
         }
     }
 
+    fn raw_contamx_run(root: &Path, active: &ActiveProjectContext) -> RawContamXRunResult {
+        let run_id = "20260718T120000Z-abcdef12";
+        let run_directory = root.join(run_id);
+        let evidence = run_directory.join("evidence");
+        fs::create_dir_all(&evidence).unwrap();
+        let manifest_path = evidence.join("manifest.json");
+        fs::write(&manifest_path, b"{}").unwrap();
+        let artifact = RawRunArtifact {
+            relative_path: "workspace/test_GetPrjInfo.sim".into(),
+            size_bytes: 3,
+            suffix: ".sim".into(),
+            classification: "simulation_result".into(),
+        };
+        RawContamXRunResult {
+            result_type: "contamx_run".into(),
+            run: RawContamXRun {
+                run_id: run_id.into(),
+                status: "succeeded".into(),
+                run_directory: run_directory.to_string_lossy().into_owned(),
+                manifest_path: manifest_path.to_string_lossy().into_owned(),
+                solver_version: "3.4.0.3".into(),
+                exit_code: Some(0),
+                timed_out: false,
+                primary_artifacts: vec![artifact.clone()],
+                manifest: RawRunManifest {
+                    schema_version: "1.0".into(),
+                    run_id: run_id.into(),
+                    status: "succeeded".into(),
+                    execution_mode: "isolated_contamx_process".into(),
+                    started_at_utc: "2026-07-18T12:00:00Z".into(),
+                    ended_at_utc: "2026-07-18T12:00:01Z".into(),
+                    duration_ms: 1000,
+                    source: RawRunSource {
+                        sha256: active.source_sha256.clone(),
+                        unchanged: true,
+                    },
+                    solver: RawRunSolver {
+                        name: "contamx3.exe".into(),
+                        version: "3.4.0.3".into(),
+                    },
+                    exit_code: Some(0),
+                    timed_out: false,
+                    artifacts: vec![artifact],
+                    diagnostics: vec![],
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn contamx_run_contract_validates_paths_identity_and_safe_webview_view() {
+        let root = std::env::temp_dir().join(format!("contam-run-contract-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let active = ActiveProjectContext {
+            project_session_id: "session-run".into(),
+            source_path: primary_fixture(),
+            source_sha256: "a".repeat(64),
+            source_size_bytes: 1,
+            reader_mode: READER_MODE.into(),
+            header_version: "3.4.0.4".into(),
+            zones: vec![],
+        };
+        let raw = raw_contamx_run(&root, &active);
+        let (summary, context) = validate_contamx_run_result(raw.clone(), &active, &root).unwrap();
+        assert_eq!(summary.sim_artifact_count, 1);
+        assert!(context.is_bound_to(&active));
+        let serialized = serde_json::to_string(&summary).unwrap();
+        for forbidden in [
+            "manifest",
+            "run_directory",
+            "source_path",
+            root.to_string_lossy().as_ref(),
+        ] {
+            assert!(!serialized.contains(forbidden));
+        }
+
+        let mut mismatch = raw.clone();
+        mismatch.run.manifest.source.sha256 = "b".repeat(64);
+        assert_eq!(
+            validate_contamx_run_result(mismatch, &active, &root)
+                .unwrap_err()
+                .code,
+            "run_response_contract_invalid"
+        );
+
+        let mut solver = raw.clone();
+        solver.run.manifest.solver.version = "3.4.0.2".into();
+        assert_eq!(
+            validate_contamx_run_result(solver, &active, &root)
+                .unwrap_err()
+                .code,
+            "run_response_contract_invalid"
+        );
+
+        let mut no_sim = raw.clone();
+        no_sim.run.primary_artifacts.clear();
+        assert_eq!(
+            validate_contamx_run_result(no_sim, &active, &root)
+                .unwrap_err()
+                .code,
+            "run_response_contract_invalid"
+        );
+
+        let mut diagnostics = raw.clone();
+        diagnostics
+            .run
+            .manifest
+            .diagnostics
+            .push(RawReaderDiagnostic {
+                code: "run_process_failed".into(),
+                message: "hidden".into(),
+                source_line_number: None,
+                context: None,
+            });
+        assert_eq!(
+            validate_contamx_run_result(diagnostics, &active, &root)
+                .unwrap_err()
+                .code,
+            "run_response_contract_invalid"
+        );
+
+        let mut escape = raw;
+        escape.run.manifest_path = primary_fixture().to_string_lossy().into_owned();
+        assert_eq!(
+            validate_contamx_run_result(escape, &active, &root)
+                .unwrap_err()
+                .code,
+            "run_response_path_invalid"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn active_run_is_cleared_by_project_activation_and_failure_does_not_mutate_it() {
+        let store = DesktopProjectSessionStore::default();
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "run-store-read").result.unwrap();
+        store.activate_project("session-1".into(), fixture.clone(), &project);
+        let manifest = fixture.clone();
+        let retained = ActiveRunContext {
+            project_session_id: "session-1".into(),
+            source_sha256: project.source_sha256.clone(),
+            run_id: "run-1".into(),
+            manifest_path: manifest,
+            succeeded: true,
+        };
+        store.state.lock().unwrap().active_run = Some(retained.clone());
+        let _failure = run_failure(
+            "request",
+            host_diagnostic("run_process_failed", "failed", BTreeMap::new()),
+        );
+        assert_eq!(
+            store
+                .state
+                .lock()
+                .unwrap()
+                .active_run
+                .as_ref()
+                .unwrap()
+                .run_id,
+            "run-1"
+        );
+        store.activate_project("session-2".into(), fixture, &project);
+        assert!(store.state.lock().unwrap().active_run.is_none());
+    }
+
     #[test]
     fn zone_air_state_contract_rejects_untrusted_samples_and_paths_are_not_serialized() {
         let fixture = primary_fixture();
@@ -2380,10 +2946,11 @@ mod tests {
             "plan_zone_volume_patch",
             "apply_zone_volume_patch_to_copy",
             "select_and_extract_zone_air_state",
+            "run_active_contam_project",
         ] {
             assert!(build_script.contains(command));
         }
-        assert_eq!(capability["permissions"].as_array().unwrap().len(), 5);
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 6);
         let forbidden = [
             "sourcePath",
             "outputPath",
@@ -2393,6 +2960,9 @@ mod tests {
         for value in forbidden {
             assert!(!desktop_api.contains(value), "found {value}");
         }
+        assert!(desktop_api.contains("runActiveContamProject"));
+        assert!(desktop_api.contains("requestId"));
+        assert!(desktop_api.contains("projectSessionId"));
         assert!(!package_json.contains("@tauri-apps/plugin-dialog"));
         let capability_text = include_str!("../capabilities/default.json");
         for permission in ["dialog", "fs:", "shell", "http"] {
