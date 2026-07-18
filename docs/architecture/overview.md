@@ -107,3 +107,18 @@ GUI和AI不能各自建立文件写入路径。所有变更必须转换为领域
 - 结果文件首选读取路径和跨版本兼容性。
 - ContamX进程树治理、求解器安装包分发和签名升级策略。
 - Windows安装、签名、依赖兼容和许可声明方案。
+Phase 5A在独立运行证据之后增加官方SimRead后处理边界：
+
+```text
+Phase 4成功manifest + PRJ/SIM快照
+↓
+独立提取workspace
+↓ 参数数组、shell=False、固定stdin
+NIST simread.exe
+↓
+严格解析.nfr
+↓
+zone_air_state
+```
+
+该路径不修改Phase 4运行目录，也不接受任意SIM作为可信入口。详见[SimRead结果提取架构](simread-result-extraction.md)。
