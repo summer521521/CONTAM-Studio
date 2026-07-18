@@ -2,7 +2,7 @@
 
 ## 决策状态
 
-Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向，不代表通信协议、依赖、版本或打包方案已经定型。这些实现细节必须通过后续技术Spike验证。
+Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已在开发环境验证一次性Python进程和JSON协议可完成严格Zone读取，但Python冻结、安装包路径、长期进程形式及后续写入协议仍未定型。
 
 ## 概念架构
 
@@ -17,6 +17,18 @@ Python CONTAM领域核心
 ↓
 官方ContamX
 ```
+
+Phase 2C当前实际读取路径为：
+
+```text
+React打开操作
+↓ Tauri官方原生文件对话框
+Rust受控命令
+↓ 一次性Python进程，stdin/stdout JSON
+严格Zone纯文档读取器
+```
+
+该路径不调用contamxpy或ContamX。React只接收结构化结果，不直接读取文件或启动进程；详细边界见[Tauri-Python Zone桥](tauri-python-zone-bridge.md)。
 
 ### 分层职责
 
@@ -58,8 +70,9 @@ GUI和AI不能各自建立文件写入路径。所有变更必须转换为领域
 
 ## 待技术Spike验证
 
-- Tauri与Python之间的通信协议、错误模型、取消机制和进程恢复。
-- Python运行时、ContamX及其他必要组件的发现、捆绑和升级方式。
+- 一次性Python桥的主动取消、安装包定位、运行时冻结、升级和签名方式。
+- 后续阶段是否需要长期受控sidecar；当前不建立HTTP、WebSocket或常驻服务。
+- ContamX及其他必要组件的发现、捆绑和升级方式。
 - PRJ分段、未知内容保留、无损回写、编号重排与复杂引用处理策略。
 - 结果文件首选读取路径和跨版本兼容性。
 - Windows安装、签名、依赖兼容和许可声明方案。

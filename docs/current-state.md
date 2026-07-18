@@ -1,6 +1,6 @@
 # 当前状态
 
-记录日期：2026-07-17。
+记录日期：2026-07-18。
 
 ## Phase 0初始状态
 
@@ -25,7 +25,7 @@
 ```text
 src/                  React工作台、组件、国际化和样式
 src-tauri/            最小Tauri宿主、配置、能力和Windows图标
-python/               Phase 2A隔离检查与Phase 2B-1严格Zone文档读取核心和测试
+python/               Phase 2A隔离检查、严格Zone读取器、Phase 2C JSON桥和测试
 fixtures/contam/      有来源记录的contamxpy与NIST官方PRJ样例
 docs/                 项目决策、状态与界面截图
 package.json          前端脚本和依赖
@@ -74,14 +74,40 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - Python测试共65项通过，覆盖严格ASCII十进制/科学计数法、超长整数结构化错误和CLI无Traceback边界；Ruff、前端构建和Rust检查在本次提交前重新执行。
 - 该读取器尚未接入React或Tauri，不支持其他PRJ区块、保存、回写或编辑。
 
+## Phase 2C真实Zone桌面闭环
+
+- Phase 2B-1在PR #4最终以65项Python测试、Ruff、前端构建和Cargo检查通过的状态合并至`main`；合并提交为`7a33ece`。
+- 文件选择和读取合并为Rust侧唯一的`select_and_read_prj_zones`命令。React只提交`request_id`，无法向命令指定源路径；Rust打开原生对话框，验证本地文件、`.prj`扩展名并规范化路径后才调用Python。
+- `build.rs`通过`AppManifest`登记该命令，main窗口capability只授予`core:default`与`allow-select-and-read-prj-zones`；前端dialog依赖和权限已移除，未开放文件系统、Shell、HTTP、远程URL或自动更新能力。
+- React不读取文件、不启动进程；Rust宿主把内部持有的规范化选择路径作为JSON请求字段，通过参数数组启动一次性Python进程，并将结构化Envelope返回前端。取消选择以独立`cancelled`响应返回，不伪装为读取错误。
+- Python桥使用协议`1.0`、操作`read_simple_zones`和`request_id`，成功与失败共用同一顶层结构；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
+- Python解释器按`CONTAM_STUDIO_PYTHON`绝对路径、仓库内`python/.venv/Scripts/python.exe`顺序发现；缺失时返回`python_runtime_not_found`，不回退到PATH、全局Python或Microsoft Store别名。
+- Rust端超时为10秒，stdout上限2 MiB、stderr上限16 KiB；超时终止进程，并拒绝非UTF-8、无效JSON、协议不匹配、request_id不匹配、非零退出、超大输出及任意非空stderr。
+- Python响应先进入不可序列化到WebView的Raw类型；Rust验证诊断code，以固定消息替换Python原始message，并对白名单context执行类型检查与120字符截断。成功diagnostics和失败error使用同一规则，TypeScript清理保留为第二道防线。
+- Python成功结果的`source_path`必须规范化后与Rust实际选择路径一致；不一致、路径失效或无法规范化时整体返回`python_response_source_mismatch`，不返回两个路径。
+- 前端项目状态使用`idle/selecting/loading/loaded/cancelled/unsupported/error`互斥状态；请求序号与`request_id`共同阻止旧响应覆盖新状态。新项目加载失败时保留上一次成功项目，首次失败保持欢迎页。
+- 成功后项目树显示全部Zone和CONTAM原始编号；选择Zone可查看名称、编号、flags、楼层、相对高度、体积、源行号、读取模式和只读状态。当前选择键是源哈希、CONTAM编号和源行号组成的临时键，不是稳定UUID。
+- 项目摘要明确显示文件头、Zone数、源文件大小、SHA-256缩略值、严格读取模式及未解析其他PRJ区块的边界；不支持文件不会显示部分项目树。
+- Node依赖为`@tauri-apps/api 2.11.1`和测试依赖`vitest 4.1.10`；前端`@tauri-apps/plugin-dialog`已移除。Rust依赖保留`serde 1.0.228`、`serde_json 1.0.150`和`tauri-plugin-dialog 2.7.1`。相关项目均为MIT、Apache-2.0或双许可证，来自持续维护的Tauri、Serde和Vitest官方仓库。
+- 正式界面截图为`docs/ui/phase-2c-real-zone-project.png`，内容来自实际Tauri窗口，PNG为1443×931。
+
+## Phase 2C验证
+
+- Python测试77项通过，覆盖桥接成功/失败Envelope、协议、request_id、非法stdin、未知操作、内部异常、stdout/stderr契约和源文件完整性；Ruff通过。
+- 前端Vitest测试15项通过，覆盖单参数桌面API、取消/响应契约、状态转换、一般错误、旧响应、零Zone、多Zone、Zone选择、属性、只读提示和双语错误文案；前端构建通过。
+- Cargo测试20项通过，覆盖显式ACL、取消、诊断清理、路径一致性、非空stderr、解释器发现、请求/响应契约、进程失败、超时、非UTF-8、无效JSON、输出限制和三个官方fixture；Cargo检查通过。
+- 实际启动`pnpm tauri dev`并在真实Tauri窗口验证文件选择、取消、Zone切换、中英文、浅色/深色主题、错误展示和失败后保留上一次成功项目。
+- 三份官方fixture在GUI分别显示7、3、7个Zone，首个Zone依次为`One`、`one`、`Attic`；源SHA-256和大小保持不变，fixture目录没有新增SIM、LOG或XLOG。
+- 在`F:/Codex_File/CONTAM-Studio/phase-2c-zone-gui-integration/`验证未知版本、非ASCII、缺失Zone区块、超长整数、NaN、Infinity、十六进制和超大科学计数法；均结构化拒绝且stdout只有一条JSON、stderr为空、无Traceback。
+
 ## 尚未实现
 
-当前GUI仍全部使用模拟数据。尚未实现真实文件选择、GUI/Tauri到Python的连接、PRJ保存或回写、完整领域模型、Patch/Diff/快照、ContamX发现与用户可触发运行、结果读取、AI调用或网络服务；Phase 2A和Phase 2B-1的命令行能力不得解释为桌面应用已经能够打开项目。
+桌面GUI目前只把严格Zone子集作为真实数据，其余欢迎页、结果和运行内容仍为模拟或占位。尚未实现完整PRJ加载、其他区块解析、保存或回写、稳定UUID、完整领域模型、Patch/Diff/快照、ContamX发现与用户可触发运行、结果读取、AI调用、网络服务或Python打包分发；Phase 2C成功不得解释为整个PRJ已经可编辑或可求解。
 
 ## 待验证问题
 
 - PRJ完整格式、无损解析、无损回写、未知区块保留、编号重排和复杂引用关系。
-- Tauri、React、TypeScript与Python之间的具体通信和打包方案。
+- 一次性Python进程方案在安装包中的运行时冻结、定位、升级、签名和取消策略；是否需要在后续阶段改为长期受控sidecar仍待证据。
 - ContamX支持版本、发现方式、捆绑方式及对应许可和第三方声明。
 - Windows 10/11 64位安装、签名、sidecar生命周期和依赖兼容性。
 - 中英文CONTAM术语表及其与官方术语的一致性。

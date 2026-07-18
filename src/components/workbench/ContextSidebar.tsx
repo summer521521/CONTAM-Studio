@@ -1,9 +1,12 @@
 import { Bot, Info, PanelRightClose, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ContextTab } from "../../app/workbench-state";
+import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
 
 interface ContextSidebarProps {
   activeTab: ContextTab;
+  project: ProjectInspection | null;
+  selectedZone: ZoneRecord | null;
   selectedObject: string;
   onTabChange: (tab: ContextTab) => void;
   onCollapse: () => void;
@@ -11,6 +14,8 @@ interface ContextSidebarProps {
 
 export function ContextSidebar({
   activeTab,
+  project,
+  selectedZone,
   selectedObject,
   onTabChange,
   onCollapse,
@@ -54,11 +59,29 @@ export function ContextSidebar({
           <div className="context-title">
             <SlidersHorizontal size={18} aria-hidden="true" />
             <div>
-              <span>{t("inspector.selected")}</span>
-              <strong>{t(selectedObject)}</strong>
+              <span>{t(project ? "inspector.selectedZone" : "inspector.selected")}</span>
+              <strong>{selectedZone?.name ?? t(selectedObject)}</strong>
             </div>
           </div>
-          <dl className="property-list">
+          {project && selectedZone ? (
+            <dl className="property-list">
+              <div><dt>{t("inspector.name")}</dt><dd>{selectedZone.name}</dd></div>
+              <div><dt>{t("inspector.contamNumber")}</dt><dd>{selectedZone.contam_number}</dd></div>
+              <div><dt>{t("inspector.flags")}</dt><dd>{selectedZone.flags}</dd></div>
+              <div><dt>{t("inspector.level")}</dt><dd>{selectedZone.level_number}</dd></div>
+              <div><dt>{t("inspector.relativeHeight")}</dt><dd>{selectedZone.relative_height}</dd></div>
+              <div><dt>{t("inspector.volume")}</dt><dd>{t("inspector.volumeUnit", { value: selectedZone.volume_m3 })}</dd></div>
+              <div><dt>{t("inspector.sourceLine")}</dt><dd>{selectedZone.source_line_number}</dd></div>
+              <div><dt>{t("inspector.readerMode")}</dt><dd>{project.reader_mode}</dd></div>
+              <div><dt>{t("inspector.status")}</dt><dd>{t("inspector.readOnlyValue")}</dd></div>
+            </dl>
+          ) : project ? (
+            <div className="context-empty">
+              <Info size={22} aria-hidden="true" />
+              <p>{t("inspector.noZone")}</p>
+            </div>
+          ) : (
+            <dl className="property-list">
             <div>
               <dt>{t("inspector.name")}</dt>
               <dd>{t(selectedObject)}</dd>
@@ -79,10 +102,11 @@ export function ContextSidebar({
               <dt>{t("inspector.status")}</dt>
               <dd>{t("inspector.statusValue")}</dd>
             </div>
-          </dl>
+            </dl>
+          )}
           <div className="context-note">
             <Info size={16} aria-hidden="true" />
-            <p>{t("inspector.readOnly")}</p>
+            <p>{t(project ? "inspector.realReadOnly" : "inspector.readOnly")}</p>
           </div>
         </div>
       ) : (

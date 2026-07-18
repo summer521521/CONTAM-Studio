@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-select-and-read-prj-zones"
+description = "Enables the select_and_read_prj_zones command without any pre-configured scope."
+commands.allow = ["select_and_read_prj_zones"]
+
+[[permission]]
+identifier = "deny-select-and-read-prj-zones"
+description = "Denies the select_and_read_prj_zones command without any pre-configured scope."
+commands.deny = ["select_and_read_prj_zones"]

@@ -10,23 +10,32 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { ProjectState } from "../../app/project-state";
+import { projectFileName } from "../../app/project-state";
 
 interface WelcomePageProps {
+  projectState: ProjectState;
   contextCollapsed: boolean;
   bottomCollapsed: boolean;
   onToggleContext: () => void;
   onToggleBottom: () => void;
+  onOpenProject: () => void;
+  openDisabled: boolean;
   onPlaceholder: (action: string) => void;
 }
 
 export function WelcomePage({
+  projectState,
   contextCollapsed,
   bottomCollapsed,
   onToggleContext,
   onToggleBottom,
+  onOpenProject,
+  openDisabled,
   onPlaceholder,
 }: WelcomePageProps) {
   const { t } = useTranslation();
+  const project = projectState.project;
 
   return (
     <main className="editor-surface">
@@ -58,6 +67,58 @@ export function WelcomePage({
       </div>
 
       <div className="welcome-scroll">
+        {project ? (
+          <div className="project-summary">
+            <header className="project-summary-header">
+              <div>
+                <span>{t("project.summaryEyebrow")}</span>
+                <h1>{projectFileName(project.source_path)}</h1>
+              </div>
+              <div className="summary-badges">
+                <span className="readonly-badge">{t("project.readOnly")}</span>
+                <span className="version-badge">ContamW {project.header_version}</span>
+              </div>
+            </header>
+
+            {projectState.status === "selecting" || projectState.status === "loading" ? (
+              <div className="loading-banner" role="status">
+                <span className="loading-indicator" aria-hidden="true" />
+                {t(`project.status.${projectState.status}`)}
+              </div>
+            ) : null}
+
+            <section className="summary-grid" aria-label={t("project.summary") }>
+              <div><span>{t("project.headerVersion")}</span><strong>{project.header_version}</strong></div>
+              <div><span>{t("project.zoneCount")}</span><strong>{project.declared_zone_count}</strong></div>
+              <div><span>{t("project.sourceSize")}</span><strong>{t("project.bytes", { value: project.source_size_bytes })}</strong></div>
+              <div><span>{t("project.hash")}</span><strong><code>{project.source_sha256.slice(0, 12)}…</code></strong></div>
+              <div className="summary-wide"><span>{t("project.readerMode")}</span><strong><code>{project.reader_mode}</code></strong></div>
+            </section>
+
+            <details className="source-path-details">
+              <summary>{t("project.showSourcePath")}</summary>
+              <code>{project.source_path}</code>
+            </details>
+
+            <section className="subset-notice">
+              <ShieldCheck size={20} aria-hidden="true" />
+              <div>
+                <strong>{t("project.strictSubset")}</strong>
+                <p>{t("project.strictSubsetBody")}</p>
+                {project.diagnostics.map((diagnostic) => (
+                  <p key={diagnostic.code}>{t(`diagnostics.${diagnostic.code}`)}</p>
+                ))}
+              </div>
+            </section>
+
+            <div className="project-summary-actions">
+              <button className="secondary-action" type="button" disabled={openDisabled} onClick={onOpenProject}>
+                <FolderOpen size={17} />
+                <span>{t("project.openAnother")}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="welcome-content">
           <section className="welcome-intro">
             <h1>{t("welcome.title")}</h1>
@@ -66,7 +127,8 @@ export function WelcomePage({
               <button
                 className="primary-action"
                 type="button"
-                onClick={() => onPlaceholder(t("welcome.openProject"))}
+                disabled={openDisabled}
+                onClick={onOpenProject}
               >
                 <FolderOpen size={18} />
                 <span>{t("welcome.openProject")}</span>
@@ -98,6 +160,17 @@ export function WelcomePage({
             <p>{t("welcome.phaseBody")}</p>
           </section>
 
+          {projectState.status === "selecting" || projectState.status === "loading" ? (
+            <div className="loading-banner" role="status">
+              <span className="loading-indicator" aria-hidden="true" />
+              {t(`project.status.${projectState.status}`)}
+            </div>
+          ) : null}
+
+          {projectState.status === "cancelled" ? (
+            <p className="cancelled-note" role="status">{t("project.cancelledHint")}</p>
+          ) : null}
+
           <section className="safety-notes">
             <div className="safety-note">
               <HardDrive size={19} aria-hidden="true" />
@@ -115,6 +188,7 @@ export function WelcomePage({
             </div>
           </section>
         </div>
+        )}
       </div>
     </main>
   );

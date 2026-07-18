@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Group, Panel, Separator, usePanelRef, type Layout } from "react-resizable-panels";
@@ -10,6 +10,15 @@ import { StatusBar } from "../components/workbench/StatusBar";
 import { TopBar } from "../components/workbench/TopBar";
 import { WelcomePage } from "../components/workbench/WelcomePage";
 import i18n from "../i18n";
+import { selectAndReadPrjZones } from "./desktop-api";
+import {
+  desktopOpenIssue,
+  envelopeIssue,
+  INITIAL_PROJECT_STATE,
+  projectReducer,
+  selectedZone,
+  zoneSelectionKey,
+} from "./project-state";
 import {
   getCenterLayout,
   getMainLayout,
@@ -23,7 +32,10 @@ function App() {
   const { t } = useTranslation();
   const [workbench, setWorkbench] = useState(loadWorkbenchState);
   const [selectedObject, setSelectedObject] = useState("navigation.classroom");
+  const [projectState, dispatchProject] = useReducer(projectReducer, INITIAL_PROJECT_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+  const mounted = useRef(true);
   const initialMainLayout = useRef(getMainLayout(workbench)).current;
   const initialCenterLayout = useRef(getCenterLayout(workbench)).current;
   const projectPanelRef = usePanelRef();
@@ -32,6 +44,14 @@ function App() {
 
   const updateWorkbench = useCallback((patch: Partial<WorkbenchState>) => {
     setWorkbench((current) => ({ ...current, ...patch }));
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestSequence.current += 1;
+    };
   }, []);
 
   useEffect(() => {
@@ -54,10 +74,80 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [placeholderNotice]);
 
+  useEffect(() => {
+    if (!projectState.issue) return;
+    bottomPanelRef.current?.expand();
+    updateWorkbench({ bottomCollapsed: false, bottomTab: "problems" });
+  }, [projectState.issue, updateWorkbench]);
+
   const showPlaceholder = useCallback(
     (action: string) => setPlaceholderNotice(t("mock.placeholder", { action })),
     [t],
   );
+
+  const openProject = useCallback(async () => {
+    const sequence = ++requestSequence.current;
+    dispatchProject({ type: "selection_started", sequence });
+    const requestId = crypto.randomUUID();
+    dispatchProject({ type: "loading_started", sequence, requestId });
+    try {
+      const response = await selectAndReadPrjZones(requestId);
+      if (!mounted.current || sequence !== requestSequence.current) return;
+      const desktopIssue = desktopOpenIssue(response, requestId);
+      if (desktopIssue) {
+        dispatchProject({
+          type: "loading_failed",
+          sequence,
+          requestId,
+          issue: desktopIssue,
+        });
+        return;
+      }
+      if (response.cancelled) {
+        dispatchProject({ type: "selection_cancelled", sequence });
+        return;
+      }
+      const envelope = response.envelope;
+      if (!envelope) return;
+      const issue = envelopeIssue(envelope, requestId);
+      if (issue || !envelope.result) {
+        dispatchProject({
+          type: "loading_failed",
+          sequence,
+          requestId,
+          issue: issue ?? {
+            code: "python_response_contract_invalid",
+            message: "Bridge response contract invalid",
+            source_line_number: null,
+            context: {},
+          },
+        });
+        return;
+      }
+      dispatchProject({
+        type: "loading_succeeded",
+        sequence,
+        requestId,
+        project: envelope.result,
+      });
+    } catch {
+      if (!mounted.current || sequence !== requestSequence.current) return;
+      dispatchProject({
+        type: "loading_failed",
+        sequence,
+        requestId,
+        issue: {
+          code: "desktop_bridge_invoke_failed",
+          message: "Desktop bridge invocation failed",
+          source_line_number: null,
+          context: {},
+        },
+      });
+    }
+  }, []);
+
+  const currentZone = selectedZone(projectState);
+  const openDisabled = projectState.status === "selecting" || projectState.status === "loading";
 
   const toggleProject = () => {
     if (workbench.projectCollapsed) projectPanelRef.current?.expand();
@@ -113,6 +203,8 @@ function App() {
         onThemeToggle={() =>
           updateWorkbench({ theme: workbench.theme === "light" ? "dark" : "light" })
         }
+        onOpenProject={openProject}
+        openDisabled={openDisabled}
         onPlaceholder={showPlaceholder}
       />
 
@@ -139,8 +231,17 @@ function App() {
             collapsedSize="0px"
           >
             <ProjectSidebar
+              projectState={projectState}
               selectedObject={selectedObject}
+              selectedZoneKey={projectState.selectedZoneKey}
               onSelectObject={setSelectedObject}
+              onSelectZone={(zone) =>
+                projectState.project &&
+                dispatchProject({
+                  type: "zone_selected",
+                  zoneKey: zoneSelectionKey(projectState.project, zone),
+                })
+              }
               onCollapse={toggleProject}
             />
           </Panel>
@@ -154,10 +255,13 @@ function App() {
             >
               <Panel id="editor" minSize="360px">
                 <WelcomePage
+                  projectState={projectState}
                   contextCollapsed={workbench.contextCollapsed}
                   bottomCollapsed={workbench.bottomCollapsed}
                   onToggleContext={toggleContext}
                   onToggleBottom={toggleBottom}
+                  onOpenProject={openProject}
+                  openDisabled={openDisabled}
                   onPlaceholder={showPlaceholder}
                 />
               </Panel>
@@ -173,6 +277,7 @@ function App() {
               >
                 <BottomPanel
                   activeTab={workbench.bottomTab}
+                  projectState={projectState}
                   onTabChange={(bottomTab) => updateWorkbench({ bottomTab })}
                   onCollapse={toggleBottom}
                 />
@@ -191,6 +296,8 @@ function App() {
           >
             <ContextSidebar
               activeTab={workbench.contextTab}
+              project={projectState.project}
+              selectedZone={currentZone}
               selectedObject={selectedObject}
               onTabChange={(contextTab) => updateWorkbench({ contextTab })}
               onCollapse={toggleContext}
@@ -199,7 +306,7 @@ function App() {
         </Group>
       </div>
 
-      <StatusBar theme={workbench.theme} />
+      <StatusBar theme={workbench.theme} projectState={projectState} />
 
       {placeholderNotice ? (
         <div className="placeholder-toast" role="status" aria-live="polite">
