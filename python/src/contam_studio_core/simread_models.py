@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -131,6 +131,7 @@ class ResultExtractionManifest:
     zone_number: int
     parsed_result: dict[str, Any] | None
     diagnostics: tuple[ResultDiagnostic, ...]
+    final_evidence: dict[str, bool | None] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -156,5 +157,6 @@ class ResultExtractionManifest:
             "result_type": self.result_type,
             "zone_number": self.zone_number,
             "parsed_result": self.parsed_result,
+            "final_evidence": self.final_evidence,
             "diagnostics": [item.to_dict() for item in self.diagnostics],
         }

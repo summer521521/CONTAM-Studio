@@ -32,4 +32,4 @@
 | Phase 4清单或SIM在后处理期间变化 | 结果与实际输入脱钩 | 高 | 单bytes manifest快照、PRJ/SIM多时点哈希复核、失败保留证据 | Phase 5A |
 | NFR缺少CONTAM日类型 | 下游误解day_type | 中 | 返回null并记录day_type_source，不推断日历或schedule类型 | Phase 5A |
 | Phase 4源证据与运行快照脱钩 | 结果可能归因到错误PRJ或SIM | 高 | 严格要求主PRJ source/snapshot字段和实际文件逐项相等，并在提取多时点复核 | Phase 5A |
-| SimRead失败证据不完整 | 失败被误判成功或无法审计 | 高 | 统一结果清单模型；保留stdin、退出/终止、流捕获和已生成NFR/XRF证据 | Phase 5A |
+| SimRead失败证据不完整 | 失败被误判成功或无法审计 | 高 | 统一结果清单模型；保留stdin、退出/终止请求与退出确认、流线程完成状态和已生成NFR/XRF证据；写入前统一复核Phase 4、工作区和SimRead身份 | Phase 5A |

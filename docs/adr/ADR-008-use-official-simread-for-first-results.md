@@ -20,7 +20,7 @@ SIM是ContamX生成的二进制详细结果文件。首个结果切片需要可�
 
 Phase 4运行目录和源项目保持不变，失败提取保留证据。当前不支持任意SIM、直接二进制解析、曲线、导出或其他结果类型；SimRead分发和打包仍需后续验证。
 
-Phase 5A加固后，只有完整且哈希绑定的Phase 4成功manifest可以作为入口；manifest、PRJ和SIM在提取多个阶段复核，SimRead探测通过的二进制在正式执行前后再次核对。工作区创建后失败清单与成功清单共用同一模型，保留真实进程、流和生成物证据；工作区创建前的入口拒绝不生成伪造清单。官方NFR没有独立CONTAM日类型列，因此结果字段`day_type`为null，不作日类型推断。
+Phase 5A加固后，只有完整且哈希绑定的Phase 4成功manifest可以作为入口；manifest、PRJ和SIM在提取多个阶段复核，SimRead探测通过的二进制在正式执行前后再次核对。工作区创建后失败清单与成功清单共用同一模型，保留真实进程、流和生成物证据；异常进程统一执行有界terminate/kill收口，只有确认退出才记录`termination_succeeded=true`；写清单前统一记录Phase 4、工作区和SimRead最终证据状态。工作区创建前的入口拒绝不生成伪造清单。官方NFR没有独立CONTAM日类型列，因此结果字段`day_type`为null，不作日类型推断。
 
 ## 替代方案
 

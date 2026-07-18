@@ -160,4 +160,4 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 提取阶段在多个时点复核Phase 4证据、工作区PRJ/SIM和SimRead二进制身份；工作区创建后成功和失败均通过同一result-manifest模型保留进程、流证据和SimRead生成物。工作区创建前的拒绝不写伪造清单。
 - Zone在启动SimRead前预验证；公开CLI不接受直接NFR或SIM。
 - `day_type`返回null并标注不可用来源；累计时间从首个样本起算。当前仍只支持`zone_air_state`，无GUI和其他结果类型。
-- 当前Phase 5A Python测试共247项通过，新增编排级TOCTOU、进程失败和清单Schema验证；真实Zone 1仍为577个样本。
+- 当前Phase 5A Python测试共253项通过，新增编排级TOCTOU、进程收口、流完成状态、最终证据和清单Schema验证；真实Zone 1仍为577个样本。

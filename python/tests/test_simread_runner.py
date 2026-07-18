@@ -242,7 +242,7 @@ class _WaitBroken:
 def test_process_wait_failure_is_structured() -> None:
     with pytest.raises(simread_runner.SimReadError) as error:
         simread_runner._capture_process(_WaitBroken(), timeout=1, evidence=None)
-    assert error.value.diagnostic.code == "simread_process_failed"
+    assert error.value.diagnostic.code == "simread_process_termination_failed"
 
 
 class _TerminateBroken:
@@ -816,6 +816,192 @@ def test_stream_failure_cannot_produce_success_manifest(
     assert payload["stdout"]["capture_complete"] is False
 
 
+def test_wait_oserror_still_terminates_and_records_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class Process(_FakeSimReadProcess):
+        def __init__(self):
+            super().__init__()
+            self.wait_calls = 0
+            self.terminate_calls = 0
+
+        def wait(self, timeout=None):
+            self.wait_calls += 1
+            if self.wait_calls == 1:
+                raise OSError("wait unavailable")
+            return 0
+
+        def terminate(self):
+            self.terminate_calls += 1
+
+    def popen(_args, **_kwargs):
+        process = Process()
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_process_failed"
+    payload = json.loads(next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8"))
+    assert calls[-1].terminate_calls == 1
+    assert payload["process"]["terminate_requested"] is True
+    assert payload["process"]["exit_confirmed"] is True
+    assert payload["process"]["termination_succeeded"] is True
+
+
+def test_wait_and_terminate_failure_falls_back_to_kill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class Process(_FakeSimReadProcess):
+        def __init__(self):
+            super().__init__()
+            self.wait_calls = 0
+            self.kill_calls = 0
+
+        def wait(self, timeout=None):
+            self.wait_calls += 1
+            if self.wait_calls < 3:
+                raise OSError("wait unavailable")
+            return -9
+
+        def terminate(self):
+            raise OSError("terminate unavailable")
+
+        def kill(self):
+            self.kill_calls += 1
+
+    def popen(_args, **_kwargs):
+        process = Process()
+        calls.append(process)
+        return process
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", popen)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_process_failed"
+    payload = json.loads(next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8"))
+    assert calls[-1].kill_calls == 1
+    assert payload["process"]["kill_requested"] is True
+    assert payload["process"]["exit_confirmed"] is True
+    assert payload["process"]["termination_succeeded"] is True
+
+
+def test_termination_unconfirmed_is_not_successful(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class Process(_FakeSimReadProcess):
+        def wait(self, timeout=None):
+            raise OSError("wait unavailable")
+
+        def terminate(self):
+            raise OSError("terminate unavailable")
+
+        def kill(self):
+            raise OSError("kill unavailable")
+
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", lambda *_a, **_k: Process())
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_process_termination_failed"
+    payload = json.loads(next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8"))
+    assert payload["process"]["exit_confirmed"] is False
+    assert payload["process"]["termination_succeeded"] is False
+
+
+def test_live_stream_thread_is_not_reported_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+
+    class StuckThread:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+        def is_alive(self):
+            return True
+
+    monkeypatch.setattr(simread_runner.threading, "Thread", StuckThread)
+    monkeypatch.setattr(simread_runner.subprocess, "Popen", lambda *_a, **_k: _FakeSimReadProcess())
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_stream_capture_failed"
+    payload = json.loads(next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8"))
+    assert payload["process"]["stream_capture_complete"] is False
+    assert payload["stdout"]["capture_complete"] is False
+
+
+def test_final_evidence_records_workspace_mutation_after_parse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    original_parse = simread_runner.parse_zone_air_state
+
+    def mutate_parse(path: Path, zone_number: int):
+        (path.parent / "model.sim").write_bytes(b"changed-after-parse")
+        return original_parse(path, zone_number)
+
+    monkeypatch.setattr(simread_runner, "parse_zone_air_state", mutate_parse)
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "result_snapshot_mismatch"
+    payload = json.loads(next((tmp_path / "results").rglob("result-manifest.json")).read_text(encoding="utf-8"))
+    assert payload["final_evidence"]["workspace_sim_unchanged"] is False
+    assert payload["generated_outputs"]
+
+
+def test_success_records_all_final_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(monkeypatch, tmp_path, calls)
+    result = simread_runner.extract_zone_air_state(
+        manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+    )
+    payload = json.loads(Path(result["result_manifest_path"]).read_text(encoding="utf-8"))
+    assert payload["final_evidence"] == {
+        "phase4_manifest_unchanged": True,
+        "phase4_prj_unchanged": True,
+        "phase4_sim_unchanged": True,
+        "workspace_prj_unchanged": True,
+        "workspace_sim_unchanged": True,
+        "simread_unchanged": True,
+    }
+
+
 def test_result_model_matches_written_schema() -> None:
     from contam_studio_core.simread_models import ResultExtractionManifest, RunManifestEvidence
 
@@ -853,3 +1039,4 @@ def test_result_model_matches_written_schema() -> None:
     ).to_dict()
     assert isinstance(model["run_manifest"], dict)
     assert "process" in model and "exit_code" in model and "timed_out" in model
+    assert "final_evidence" in model
