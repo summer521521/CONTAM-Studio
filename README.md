@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目已建立**Phase 3B：Zone体积Diff审阅与另存副本桌面闭环**。用户可为已加载Zone输入新的`volume_m3`数字记号，审阅单行Diff，明确确认后由Rust原生保存对话框选择一个尚不存在的新PRJ路径。完整Patch和源路径只保存在Rust内存会话，前端不能提交路径或Patch；Python重新验证全部前置条件后仅创建副本，成功时桌面切换到新副本。该能力不覆盖源PRJ，也不代表完整PRJ保存、回写、撤销或多Patch已经实现；ContamX运行和AI仍未接入。
+项目已建立**Phase 4A：独立ContamX运行工作区与可追溯运行清单**。Python核心可在用户明确提供NIST官方`contamx3.exe`后，为源PRJ创建独立快照、运行工作区和结构化manifest，记录求解器版本、哈希、退出码、日志证据和全部生成文件。该能力尚未接入React或Tauri，不读取SIM结果值，也不代表完整运行结果分析已经实现；Phase 3B仍只支持Zone体积副本修改。
 
 ## 架构方向
 
@@ -113,6 +113,8 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [PRJ简单Zone只读兼容范围](docs/architecture/prj-zone-reader-support.md)
 - [Tauri-Python Zone桥](docs/architecture/tauri-python-zone-bridge.md)
 - [Zone体积副本Patch](docs/architecture/zone-volume-patch.md)
+- [ContamX运行工作区](docs/architecture/contamx-run-workspace.md)
+- [Phase 4A开发与验证](docs/development/phase-4a-contamx-run-core-verification.md)
 - [Phase 2C开发与验证](docs/development/phase-2c-verification.md)
 - [Phase 3A-0开发与验证](docs/development/phase-3a-zone-volume-patch-verification.md)
 - [Phase 3B开发与验证](docs/development/phase-3b-zone-volume-gui-verification.md)
