@@ -46,6 +46,20 @@ Phase 3A-0建立的修改路径已在Phase 3B接入受控桌面审阅：
 
 前端不能提交源路径、输出路径或完整Patch。该路径不重建整份PRJ，只替换目标Zone的一个Vol ASCII记号；未知区块依靠原始字节保留。详细边界见[Zone体积副本Patch](zone-volume-patch.md)。
 
+Phase 4A的独立运行路径与项目打开、Patch应用分离：
+
+```text
+明确配置的NIST ContamX可执行文件 + PRJ
+↓ 运行前哈希与大小校验
+新的run_id/workspace输入快照
+↓ 参数数组、shell=False、固定cwd、一次性进程
+ContamX生成物与stdout/stderr证据
+↓ 哈希、退出码、超时和源目录清单
+不可覆盖的evidence/manifest.json
+```
+
+该路径只接受CLI绝对路径或`CONTAM_STUDIO_CONTAMX`，不回退PATH，不把求解器放入仓库。`contamxpy`的`inspect_prj`仍是隔离稳态初始化检查和交叉验证入口，不是正式运行管理器；Phase 4A也不解析SIM结果值。详细边界见[ContamX运行工作区](contamx-run-workspace.md)。
+
 ### 分层职责
 
 | 层 | 主要职责 | 不承担的职责 |
@@ -53,7 +67,7 @@ Phase 3A-0建立的修改路径已在Phase 3B接入受控桌面审阅：
 | React GUI | 双语交互、领域对象呈现、Diff与审批界面 | 直接编辑原始PRJ、直接调用求解器 |
 | Tauri桌面宿主 | 窗口、文件选择、能力控制、进程生命周期和桌面打包 | CONTAM领域规则和数值求解 |
 | 受控通信接口 | 暴露有限、结构化、可验证的领域操作 | 任意Shell或任意文件写入 |
-| Python领域核心 | 领域模型、文件处理、验证、快照、运行与结果管理 | 重写CONTAM数值算法 |
+| Python领域核心 | 领域模型、文件处理、验证、快照、运行清单和结果边界 | 重写CONTAM数值算法 |
 | 官方ContamX | 数值求解 | Studio交互、AI审批和项目版本管理 |
 
 ## GUI与AI共用接口
@@ -91,4 +105,5 @@ GUI和AI不能各自建立文件写入路径。所有变更必须转换为领域
 - ContamX及其他必要组件的发现、捆绑和升级方式。
 - PRJ分段、未知内容保留、无损回写、编号重排与复杂引用处理策略。
 - 结果文件首选读取路径和跨版本兼容性。
+- ContamX进程树治理、求解器安装包分发和签名升级策略。
 - Windows安装、签名、依赖兼容和许可声明方案。

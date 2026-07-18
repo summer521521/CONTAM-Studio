@@ -1,6 +1,6 @@
 # CONTAM Studio Python核心
 
-本目录包含Phase 2B-1严格Zone纯文档读取器、Phase 2A隔离contamxpy检查入口、Phase 2C一次性JSON桥和Phase 3A-0 Zone体积副本Patch。Phase 2C桥由Tauri按请求启动后退出，不是HTTP服务或长期Python sidecar；Phase 3A-0 Patch尚未接入桌面桥。
+本目录包含Phase 2B-1严格Zone纯文档读取器、Phase 2A隔离contamxpy检查入口、Phase 2C一次性JSON桥、Phase 3A-0 Zone体积副本Patch和Phase 4A独立ContamX运行核心。Phase 2C桥由Tauri按请求启动后退出，不是HTTP服务或长期Python sidecar；Phase 3A-0 Patch尚未接入桌面桥。
 
 ## 环境
 
@@ -52,6 +52,21 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 检查器先计算源文件哈希，再将PRJ复制到临时目录。临时副本哈希必须与源文件读取前哈希一致，否则禁止启动contamxpy工作进程。公开API调用结束后再次验证源文件哈希；结构化结果使用`source_unchanged`说明源PRJ未改变，使用`execution_mode=isolated_steady_initialization`明确执行语义，并通过`generated_artifacts`列出临时生成物。
 
 一次性子进程用于隔离原生崩溃和生成物，它不是权限沙箱，不能防御恶意构造的PRJ。当前入口只处理用户信任但可能损坏、不完整或版本不兼容的项目；未来桌面接入不得把该子进程描述成安全执行环境。
+
+## 独立ContamX运行工作区
+
+Phase 4A使用用户明确提供的NIST官方`contamx3.exe`，不回退PATH、不扫描磁盘、不自动下载求解器。求解器可通过绝对路径或`CONTAM_STUDIO_CONTAMX`提供，运行前会记录Windows文件版本、PE架构、SHA-256和大小。
+
+```powershell
+python\.venv\Scripts\python.exe -m contam_studio_core.contamx_runner probe `
+  --solver C:\path\to\contamx3.exe --json
+
+python\.venv\Scripts\python.exe -m contam_studio_core.contamx_runner run `
+  SOURCE.prj --solver C:\path\to\contamx3.exe `
+  --run-root F:\Codex_File\CONTAM-Studio\phase-4a-contamx-run-core\runs --json
+```
+
+每次运行创建新的`run_id/workspace`，复制并校验输入快照后，以参数数组、`shell=False`和固定工作目录启动ContamX。stdout/stderr证据、全部生成文件的哈希、退出码、超时、源目录前后清单和结构化manifest均保留在运行目录；当前只确认主要`.sim`文件存在，不解析结果值。该核心不接入GUI、不修改源PRJ、不提供批量运行或运行队列。
 
 ## 已知边界
 
