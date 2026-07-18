@@ -1,7 +1,11 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 5B-1 Results"
+    "phase": "Phase 4B-1 Desktop run"
+  },
+  "common": {
+    "yes": "Yes",
+    "no": "No"
   },
   "toolbar": {
     "newProject": "New project",
@@ -48,8 +52,8 @@
     "recent": "Recent projects",
     "recentEmpty": "No recent projects",
     "recentHint": "Recent projects are not stored or scanned automatically.",
-    "phaseTitle": "Current phase: Phase 5B-1 real result summary",
-    "phaseBody": "Air-state samples for the selected Zone can be extracted from a trusted Phase 4 run manifest. The desktop still does not run ContamX.",
+    "phaseTitle": "Current phase: Phase 4B-1 controlled desktop run",
+    "phaseBody": "Run the active project from the top toolbar and inspect a safe summary; loading this run into results remains a later slice.",
     "offlineTitle": "Offline first",
     "offlineBody": "This phase sends no network requests; the core desktop UI runs locally.",
     "protectionTitle": "Original file protection",
@@ -173,6 +177,27 @@
     "errorTitle": "Result loading failed",
     "retry": "Choose another run manifest"
   },
+  "run": {
+    "status": {
+      "idle": "Not run yet",
+      "running": "Running ContamX",
+      "succeeded": "Run succeeded",
+      "error": "This run failed"
+    },
+    "idleHint": "Open a supported PRJ, then use Run in the top toolbar to start official ContamX.",
+    "runningHint": "Running in an isolated workspace without a fabricated progress percentage.",
+    "successHint": "Run completed. The latest successful run is retained safely in this desktop session.",
+    "previousRetained": "The previous successful run summary is still retained.",
+    "runId": "Run ID",
+    "solver": "Solver",
+    "started": "Started",
+    "duration": "Duration",
+    "exitCode": "Exit code",
+    "timedOut": "Timed out",
+    "simCount": "Primary SIM count",
+    "sourceUnchanged": "Source unchanged",
+    "nextSlice": "A later slice will connect this active run directly to the Zone results view."
+  },
   "patch": {
     "editVolume": "Modify volume",
     "newVolumeToken": "New volume literal",
@@ -268,6 +293,20 @@
       "patch_application_failed": "A new PRJ copy could not be created safely",
       "patch_verification_failed": "The new copy failed deterministic verification and was removed",
       "bridge_internal_error": "Python reader bridge internal error",
+      "contamx_solver_not_configured": "A supported ContamX is not configured; set CONTAM_STUDIO_CONTAMX",
+      "contamx_solver_not_found": "The configured ContamX could not be found",
+      "contamx_solver_unsupported": "ContamX identity is not the supported NIST 3.4.0.3 build",
+      "run_project_mismatch": "The active project changed before the run; reopen it",
+      "run_root_invalid": "The application run workspace is unavailable",
+      "run_process_start_failed": "ContamX could not be started",
+      "run_process_timeout": "ContamX exceeded 60 seconds and was terminated",
+      "run_process_failed": "ContamX run failed",
+      "run_process_termination_failed": "ContamX exit could not be confirmed; the residual workspace is untrusted",
+      "run_stream_capture_failed": "ContamX run evidence capture failed",
+      "run_expected_artifact_missing": "The run produced no non-empty SIM result",
+      "run_source_changed": "The source project or directory changed during the run",
+      "run_response_contract_invalid": "ContamX run response violated the desktop contract",
+      "run_response_path_invalid": "Run evidence was outside the controlled application directory",
       "result_project_mismatch": "The run manifest does not belong to this project",
       "result_zone_mismatch": "The run result does not match the current Zone",
       "result_manifest_not_found": "The Phase 4 run manifest was not found",

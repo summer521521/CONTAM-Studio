@@ -4,6 +4,7 @@ import {
   planZoneVolumePatch,
   selectAndExtractZoneAirState,
   selectAndReadPrjZones,
+  runActiveContamProject,
 } from "./desktop-api";
 
 describe("desktop API boundary", () => {
@@ -24,5 +25,13 @@ describe("desktop API boundary", () => {
     expect(selectAndExtractZoneAirState.toString()).not.toContain("resultRoot");
     expect(selectAndExtractZoneAirState.toString()).not.toContain("sourcePath");
     expect(selectAndExtractZoneAirState.toString()).not.toContain("simreadPath");
+  });
+
+  it("sends only request and project session identity for ContamX runs", () => {
+    expect(runActiveContamProject).toHaveLength(2);
+    const source = runActiveContamProject.toString();
+    for (const forbidden of ["sourcePath", "solverPath", "runRoot", "manifestPath", "environment"]) {
+      expect(source).not.toContain(forbidden);
+    }
   });
 });

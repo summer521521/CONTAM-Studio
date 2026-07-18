@@ -17,6 +17,7 @@ import {
   planZoneVolumePatch,
   selectAndReadPrjZones,
   selectAndExtractZoneAirState,
+  runActiveContamProject,
 } from "./desktop-api";
 import {
   applyResponseIssue,
@@ -39,6 +40,7 @@ import {
   ZONE_RESULT_STAGE_EVENT,
   type ZoneResultStageEvent,
 } from "./result-state";
+import { INITIAL_RUN_STATE, runReducer, runResponseIssue } from "./run-state";
 import {
   getCenterLayout,
   getMainLayout,
@@ -55,9 +57,11 @@ function App() {
   const [projectState, dispatchProject] = useReducer(projectReducer, INITIAL_PROJECT_STATE);
   const [patchState, dispatchPatch] = useReducer(patchReducer, INITIAL_PATCH_STATE);
   const [resultState, dispatchResult] = useReducer(resultReducer, INITIAL_RESULT_STATE);
+  const [runState, dispatchRun] = useReducer(runReducer, INITIAL_RUN_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const resultSequence = useRef(0);
+  const runSequence = useRef(0);
   const mounted = useRef(true);
   const initialMainLayout = useRef(getMainLayout(workbench)).current;
   const initialCenterLayout = useRef(getCenterLayout(workbench)).current;
@@ -75,6 +79,7 @@ function App() {
       mounted.current = false;
       requestSequence.current += 1;
       resultSequence.current += 1;
+      runSequence.current += 1;
     };
   }, []);
 
@@ -175,6 +180,7 @@ function App() {
       });
       dispatchPatch({ type: "project_or_zone_changed" });
       dispatchResult({ type: "project_or_zone_changed" });
+      dispatchRun({ type: "project_changed" });
     } catch {
       if (!mounted.current || sequence !== requestSequence.current) return;
       dispatchProject({
@@ -262,6 +268,63 @@ function App() {
       token: String(currentZone.volume_m3),
     });
   }, [currentZone, projectState.projectSessionId]);
+
+  const runProject = useCallback(async () => {
+    if (!projectState.projectSessionId || !projectState.project) return;
+    const sequence = ++runSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchRun({
+      type: "run_started",
+      sequence,
+      requestId,
+      projectSessionId: projectState.projectSessionId,
+    });
+    bottomPanelRef.current?.expand();
+    updateWorkbench({ bottomCollapsed: false, bottomTab: "logs" });
+    try {
+      const response = await runActiveContamProject(requestId, projectState.projectSessionId);
+      if (!mounted.current || sequence !== runSequence.current) return;
+      const issue = runResponseIssue(response, requestId);
+      if (
+        issue ||
+        !response.summary ||
+        response.project_session_id !== projectState.projectSessionId
+      ) {
+        dispatchRun({
+          type: "run_failed",
+          sequence,
+          requestId,
+          issue: issue ?? {
+            code: "run_response_contract_invalid",
+            message: "Run response did not match the active project.",
+            source_line_number: null,
+            context: {},
+          },
+        });
+        return;
+      }
+      dispatchRun({
+        type: "run_succeeded",
+        sequence,
+        requestId,
+        projectSessionId: projectState.projectSessionId,
+        summary: response.summary,
+      });
+    } catch {
+      if (!mounted.current || sequence !== runSequence.current) return;
+      dispatchRun({
+        type: "run_failed",
+        sequence,
+        requestId,
+        issue: {
+          code: "desktop_bridge_invoke_failed",
+          message: "Desktop run bridge invocation failed",
+          source_line_number: null,
+          context: {},
+        },
+      });
+    }
+  }, [projectState.project, projectState.projectSessionId, updateWorkbench]);
 
   const planVolumePatch = useCallback(async () => {
     if (!patchState.projectSessionId || patchState.zoneNumber === null) return;
@@ -359,6 +422,7 @@ function App() {
         targetZoneNumber: response.target_zone_number,
       });
       dispatchResult({ type: "project_or_zone_changed" });
+      dispatchRun({ type: "project_changed" });
       dispatchPatch({ type: "apply_succeeded", requestId });
       setPlaceholderNotice(t("patch.copyCreatedSuccess"));
     } catch {
@@ -379,7 +443,9 @@ function App() {
     patchState.status === "planning" ||
     patchState.status === "applying" ||
     resultState.status === "selecting" ||
-    resultState.status === "loading";
+    resultState.status === "loading" ||
+    runState.status === "running";
+  const runDisabled = openDisabled || projectState.status !== "loaded" || !projectState.project;
 
   const toggleProject = () => {
     if (workbench.projectCollapsed) projectPanelRef.current?.expand();
@@ -437,6 +503,8 @@ function App() {
         }
         onOpenProject={openProject}
         openDisabled={openDisabled}
+        onRunProject={runProject}
+        runDisabled={runDisabled}
         onPlaceholder={showPlaceholder}
       />
 
@@ -515,6 +583,7 @@ function App() {
                 <BottomPanel
                   activeTab={workbench.bottomTab}
                   projectState={projectState}
+                  runState={runState}
                   onTabChange={(bottomTab) => updateWorkbench({ bottomTab })}
                   onCollapse={toggleBottom}
                 />

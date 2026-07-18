@@ -8,7 +8,9 @@ import { ContextSidebar } from "./ContextSidebar";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { ZoneVolumePatchDialog } from "./ZoneVolumePatchDialog";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
+import { TopBar } from "./TopBar";
 import { INITIAL_RESULT_STATE } from "../../app/result-state";
+import { INITIAL_RUN_STATE } from "../../app/run-state";
 
 const project: ProjectInspection = {
   schema_version: "1.0",
@@ -74,6 +76,23 @@ beforeAll(async () => {
 });
 
 describe("real project components", () => {
+  it("keeps the real run action disabled until a supported project is available", () => {
+    const markup = renderToStaticMarkup(
+      <TopBar
+        language="zh-CN"
+        theme="light"
+        onLanguageChange={() => undefined}
+        onThemeToggle={() => undefined}
+        onOpenProject={() => undefined}
+        openDisabled={false}
+        onRunProject={() => undefined}
+        runDisabled={true}
+        onPlaceholder={() => undefined}
+      />,
+    );
+    expect(markup).toContain("tool-button-run");
+    expect(markup).toMatch(/tool-button-run[^>]*disabled/);
+  });
   it("renders all Zones and their CONTAM numbers", () => {
     const markup = renderToStaticMarkup(
       <ProjectSidebar
@@ -218,6 +237,7 @@ describe("real project components", () => {
             context: { header_version: "3.4.0.8" },
           },
         }}
+        runState={INITIAL_RUN_STATE}
         onTabChange={() => undefined}
         onCollapse={() => undefined}
       />,
@@ -301,5 +321,37 @@ describe("real project components", () => {
       "This load was cancelled; the last successful results remain visible.",
     );
     await i18n.changeLanguage("zh-CN");
+  });
+
+  it("renders a safe ContamX run summary without local paths", () => {
+    const markup = renderToStaticMarkup(
+      <BottomPanel
+        activeTab="logs"
+        projectState={state}
+        runState={{
+          ...INITIAL_RUN_STATE,
+          status: "succeeded",
+          projectSessionId: "session-1",
+          summary: {
+            status: "succeeded",
+            run_id: "run-1",
+            solver_name: "contamx3.exe",
+            solver_version: "3.4.0.3",
+            started_at_utc: "2026-07-18T12:00:00Z",
+            duration_ms: 500,
+            exit_code: 0,
+            timed_out: false,
+            sim_artifact_count: 1,
+            source_unchanged: true,
+          },
+        }}
+        onTabChange={() => undefined}
+        onCollapse={() => undefined}
+      />,
+    );
+    expect(markup).toContain("contamx3.exe 3.4.0.3");
+    expect(markup).toContain("run-1");
+    expect(markup).not.toContain("F:\\");
+    expect(markup).not.toContain("manifest");
   });
 });

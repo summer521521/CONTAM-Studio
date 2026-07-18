@@ -5,6 +5,7 @@ import type {
 } from "./patch-state";
 import type { DesktopOpenResponse } from "./project-state";
 import type { DesktopZoneAirStateResponse } from "./result-state";
+import type { DesktopRunResponse } from "./run-state";
 
 export async function selectAndReadPrjZones(
   requestId: string,
@@ -47,5 +48,15 @@ export async function selectAndExtractZoneAirState(
     requestId,
     projectSessionId,
     zoneNumber,
+  });
+}
+
+export async function runActiveContamProject(
+  requestId: string,
+  projectSessionId: string,
+): Promise<DesktopRunResponse> {
+  return invoke<DesktopRunResponse>("run_active_contam_project", {
+    requestId,
+    projectSessionId,
   });
 }

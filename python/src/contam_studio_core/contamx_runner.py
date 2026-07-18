@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -66,6 +66,7 @@ ERROR_EXIT_CODES = {
     "run_stream_capture_failed": 22,
     "run_process_termination_failed": 23,
     "run_root_conflicts_with_source": 24,
+    "run_project_mismatch": 25,
 }
 
 
@@ -243,27 +244,58 @@ def _probe_version_command(path: Path) -> str:
     stdout_thread.start()
     stderr_thread.start()
     timed_out = False
-    termination_failed = False
+    wait_failed = False
+    exit_confirmed = False
     try:
         process.wait(timeout=VERSION_TIMEOUT_SECONDS)
+        exit_confirmed = process.returncode is not None
     except subprocess.TimeoutExpired:
         timed_out = True
+    except (OSError, AttributeError):
+        wait_failed = True
+    if not exit_confirmed:
+        try:
+            current = process.poll()
+            exit_confirmed = current is not None
+        except (OSError, AttributeError):
+            pass
+    if not exit_confirmed:
         try:
             process.terminate()
+        except (OSError, AttributeError):
+            pass
+        try:
             process.wait(timeout=2)
-        except (OSError, subprocess.TimeoutExpired):
-            try:
-                process.kill()
-                process.wait(timeout=2)
-            except (OSError, subprocess.TimeoutExpired):
-                termination_failed = True
+            exit_confirmed = process.returncode is not None
+        except (OSError, subprocess.TimeoutExpired, AttributeError):
+            pass
+    if not exit_confirmed:
+        try:
+            process.kill()
+        except (OSError, AttributeError):
+            pass
+        try:
+            process.wait(timeout=2)
+            exit_confirmed = process.returncode is not None
+        except (OSError, subprocess.TimeoutExpired, AttributeError):
+            pass
     stdout_thread.join(timeout=2)
     stderr_thread.join(timeout=2)
-    if termination_failed:
+    if not exit_confirmed or stdout_thread.is_alive() or stderr_thread.is_alive():
+        _close_parent_pipes(process)
+        stdout_thread.join(timeout=2)
+        stderr_thread.join(timeout=2)
+    if not exit_confirmed:
         _fail("contamx_solver_version_unavailable", "ContamX版本探测未能在限定时间内结束。")
     if timed_out:
         _fail("contamx_solver_version_unavailable", "ContamX版本探测超时。")
-    if stdout_thread.is_alive() or stderr_thread.is_alive() or stdout_capture.error or stderr_capture.error:
+    if (
+        wait_failed
+        or stdout_thread.is_alive()
+        or stderr_thread.is_alive()
+        or stdout_capture.error
+        or stderr_capture.error
+    ):
         _fail("contamx_solver_version_unavailable", "ContamX版本探测输出无法完整读取。")
     if stdout_capture.truncated or stderr_capture.truncated or process.returncode != 0:
         _fail("contamx_solver_version_unavailable", "ContamX版本探测证据无效。")
@@ -355,29 +387,73 @@ class _StreamCapture:
     truncated: bool = False
     digest: object = None
     capture_error: BaseException | None = None
+    thread_finished: bool = False
+    evidence_frozen: bool = False
+    _output: object | None = None
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
         self.digest = hashlib.sha256()
 
     def read(self, stream) -> None:
+        output = None
         try:
-            with self.path.open("wb") as output:
-                while True:
-                    chunk = stream.read(64 * 1024)
-                    if not chunk:
+            output = self.path.open("wb")
+            with self._lock:
+                if self.evidence_frozen:
+                    output.close()
+                    return
+                self._output = output
+            while True:
+                chunk = stream.read(64 * 1024)
+                if not chunk:
+                    break
+                with self._lock:
+                    if self.evidence_frozen:
                         break
                     self.total_bytes += len(chunk)
-                    if self.total_bytes <= self.buffer_limit:
-                        output.write(chunk)
-                        self.digest.update(chunk)
-                    else:
-                        allowed = max(0, self.buffer_limit - (self.total_bytes - len(chunk)))
-                        if allowed:
-                            output.write(chunk[:allowed])
-                            self.digest.update(chunk[:allowed])
+                    remaining = max(0, self.buffer_limit - output.tell())
+                    accepted = min(len(chunk), remaining)
+                    if accepted:
+                        output.write(chunk[:accepted])
+                        self.digest.update(chunk[:accepted])
+                    if accepted < len(chunk):
                         self.truncated = True
         except BaseException as error:  # noqa: BLE001 - propagated after the process drains.
             self.capture_error = error
+        finally:
+            with self._lock:
+                if self._output is output:
+                    self._output = None
+                if output is not None and not output.closed:
+                    try:
+                        output.flush()
+                        os.fsync(output.fileno())
+                    except BaseException as error:  # noqa: BLE001
+                        self.capture_error = self.capture_error or error
+                    finally:
+                        try:
+                            output.close()
+                        except BaseException as error:  # noqa: BLE001
+                            self.capture_error = self.capture_error or error
+                self.thread_finished = True
+
+    def freeze(self) -> None:
+        with self._lock:
+            self.evidence_frozen = True
+            output = self._output
+            self._output = None
+            if output is not None and not output.closed:
+                try:
+                    output.flush()
+                    os.fsync(output.fileno())
+                except BaseException as error:  # noqa: BLE001
+                    self.capture_error = self.capture_error or error
+                finally:
+                    try:
+                        output.close()
+                    except BaseException as error:  # noqa: BLE001
+                        self.capture_error = self.capture_error or error
 
     def evidence(self, root: Path) -> RunStreamEvidence:
         if not self.path.is_file():
@@ -394,6 +470,131 @@ class _StreamCapture:
             sha256=sha256,
             truncated=self.truncated,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _ProcessOutcome:
+    exit_code: int | None
+    timed_out: bool
+    exit_confirmed: bool
+    terminate_requested: bool
+    kill_requested: bool
+    stream_capture_complete: bool
+    diagnostic: RunDiagnostic | None
+
+
+def _close_parent_pipes(process: subprocess.Popen) -> bool:
+    complete = True
+    for name in ("stdin", "stdout", "stderr"):
+        stream = getattr(process, name, None)
+        if stream is None:
+            continue
+        try:
+            stream.close()
+        except Exception:  # noqa: BLE001 - reflected by the structured failure.
+            complete = False
+    return complete
+
+
+def _capture_process_outcome(
+    process: subprocess.Popen,
+    stdout_capture: _StreamCapture,
+    stderr_capture: _StreamCapture,
+    *,
+    timeout: int,
+) -> _ProcessOutcome:
+    threads = (
+        threading.Thread(target=stdout_capture.read, args=(process.stdout,), daemon=True),
+        threading.Thread(target=stderr_capture.read, args=(process.stderr,), daemon=True),
+    )
+    for thread in threads:
+        thread.start()
+    timed_out = False
+    wait_failed = False
+    exit_code: int | None = None
+    exit_confirmed = False
+    terminate_requested = False
+    kill_requested = False
+
+    def confirm_wait(limit: int) -> bool:
+        nonlocal exit_code
+        try:
+            exit_code = process.wait(timeout=limit)
+            if exit_code is None:
+                exit_code = getattr(process, "returncode", None)
+            return exit_code is not None
+        except (OSError, subprocess.TimeoutExpired, AttributeError):
+            return False
+
+    try:
+        exit_code = process.wait(timeout=timeout)
+        if exit_code is None:
+            exit_code = getattr(process, "returncode", None)
+        exit_confirmed = exit_code is not None
+    except subprocess.TimeoutExpired:
+        timed_out = True
+    except (OSError, AttributeError):
+        wait_failed = True
+    if not exit_confirmed:
+        try:
+            poll = getattr(process, "poll", None)
+            current = poll() if callable(poll) else getattr(process, "returncode", None)
+            if current is not None:
+                exit_code = current
+                exit_confirmed = True
+        except (OSError, AttributeError):
+            pass
+    if not exit_confirmed:
+        terminate_requested = True
+        try:
+            process.terminate()
+        except (OSError, AttributeError):
+            pass
+        exit_confirmed = confirm_wait(5)
+    if not exit_confirmed:
+        kill_requested = True
+        try:
+            process.kill()
+        except (OSError, AttributeError):
+            pass
+        exit_confirmed = confirm_wait(5)
+
+    for thread in threads:
+        thread.join(timeout=5)
+    complete = all(
+        capture.thread_finished and capture.capture_error is None and not thread.is_alive()
+        for capture, thread in zip((stdout_capture, stderr_capture), threads, strict=True)
+    )
+    pipes_closed = True
+    if not exit_confirmed or not complete:
+        pipes_closed = _close_parent_pipes(process)
+    for capture in (stdout_capture, stderr_capture):
+        capture.freeze()
+    for thread in threads:
+        if thread.is_alive():
+            thread.join(timeout=2)
+    complete = all(
+        capture.thread_finished and capture.capture_error is None and not thread.is_alive()
+        for capture, thread in zip((stdout_capture, stderr_capture), threads, strict=True)
+    )
+    diagnostic = None
+    if not exit_confirmed:
+        diagnostic = RunDiagnostic(
+            "run_process_termination_failed", "ContamX进程终止状态无法可靠确认。"
+        )
+    elif not complete or not pipes_closed:
+        diagnostic = RunDiagnostic("run_stream_capture_failed", "ContamX流证据无法完整冻结。")
+    elif wait_failed:
+        diagnostic = RunDiagnostic("run_process_failed", "无法可靠读取ContamX进程状态。")
+    return _ProcessOutcome(
+        exit_code=exit_code,
+        timed_out=timed_out,
+        exit_confirmed=exit_confirmed,
+        terminate_requested=terminate_requested,
+        kill_requested=kill_requested,
+        stream_capture_complete=complete,
+        diagnostic=diagnostic,
+    )
 
 
 def _classify_artifact(path: Path) -> str:
@@ -448,42 +649,15 @@ def _start_process(
     except OSError:
         _fail("run_process_start_failed", "无法启动ContamX进程。")
     assert process.stdout is not None and process.stderr is not None
-    stdout_thread = threading.Thread(target=stdout_capture.read, args=(process.stdout,), daemon=True)
-    stderr_thread = threading.Thread(target=stderr_capture.read, args=(process.stderr,), daemon=True)
-    stdout_thread.start()
-    stderr_thread.start()
-    timed_out = False
-    termination_failed = False
-    wait_failed = False
-    try:
-        process.wait(timeout=RUN_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        try:
-            process.terminate()
-            process.wait(timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
-            try:
-                process.kill()
-                process.wait(timeout=5)
-            except (OSError, subprocess.TimeoutExpired):
-                termination_failed = True
-    except OSError:
-        wait_failed = True
-    stdout_thread.join(timeout=5)
-    stderr_thread.join(timeout=5)
-    if termination_failed:
-        _fail("run_process_termination_failed", "ContamX超时后无法确认进程已结束。")
-    if (
-        stdout_thread.is_alive()
-        or stderr_thread.is_alive()
-        or stdout_capture.capture_error is not None
-        or stderr_capture.capture_error is not None
-    ):
-        _fail("run_stream_capture_failed", "ContamX标准输出或标准错误证据无法完整读取。")
-    if wait_failed:
-        _fail("run_process_failed", "无法确认ContamX进程退出状态。")
-    return process.returncode, timed_out
+    outcome = _capture_process_outcome(
+        process,
+        stdout_capture,
+        stderr_capture,
+        timeout=RUN_TIMEOUT_SECONDS,
+    )
+    if outcome.diagnostic is not None:
+        _fail(outcome.diagnostic.code, outcome.diagnostic.message)
+    return outcome.exit_code, outcome.timed_out
 
 
 def _manifest_result(
@@ -622,6 +796,8 @@ def run_contamx(
     solver: Path | None = None,
     run_root: Path,
     companion_paths: Iterable[Path] = (),
+    expected_source_path: Path | None = None,
+    expected_source_sha256: str | None = None,
 ) -> ContamXRunResult:
     source = Path(source_path).expanduser().resolve(strict=False)
     if source.suffix.casefold() != ".prj":
@@ -637,6 +813,19 @@ def run_contamx(
         source_entries_before = _directory_entries(source_directory)
     except OSError:
         _fail("run_source_invalid", "无法读取源PRJ或源目录完整性证据。")
+    if expected_source_path is not None or expected_source_sha256 is not None:
+        try:
+            expected_path = Path(expected_source_path).expanduser().resolve(strict=True)
+        except (OSError, TypeError):
+            _fail("run_project_mismatch", "活动项目身份与运行源不一致。")
+        if (
+            expected_path != source
+            or not isinstance(expected_source_sha256, str)
+            or len(expected_source_sha256) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in expected_source_sha256)
+            or source_hash.casefold() != expected_source_sha256.casefold()
+        ):
+            _fail("run_project_mismatch", "活动项目身份与运行源不一致。")
     input_paths, input_baselines = _normalize_inputs(source, companion_paths)
     if input_baselines[source] != (source_hash, source_size):
         _fail("run_snapshot_mismatch", "主PRJ在初始证据采集后发生变化。")
@@ -705,6 +894,8 @@ def run_contamx(
                 stderr_capture,
             )
         except ContamXRunnerError as error:
+            if error.code == "run_process_termination_failed":
+                raise
             diagnostics.append(error.diagnostic)
     ended = _utc_now()
     final_snapshot_records, inputs_unchanged = _current_input_records(

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
+from .contamx_runner import ContamXRunnerError, run_contamx
 from .prj_zone_models import ReaderDiagnostic
 from .prj_zone_reader import PrjZoneReaderError, read_simple_zones
 from .zone_patch_models import (
@@ -28,6 +29,7 @@ OPERATION_READ_SIMPLE_ZONES = "read_simple_zones"
 OPERATION_PLAN_ZONE_VOLUME_PATCH = "plan_zone_volume_patch"
 OPERATION_APPLY_ZONE_VOLUME_PATCH = "apply_zone_volume_patch_to_copy"
 OPERATION_EXTRACT_ZONE_AIR_STATE = "extract_zone_air_state"
+OPERATION_RUN_ACTIVE_PROJECT = "run_active_project"
 MAX_REQUEST_BYTES = 128 * 1024
 MAX_REQUEST_ID_LENGTH = 128
 MAX_SOURCE_PATH_LENGTH = 32_768
@@ -143,6 +145,7 @@ def _require_common(payload: object) -> tuple[dict[str, Any], str, str]:
         OPERATION_PLAN_ZONE_VOLUME_PATCH,
         OPERATION_APPLY_ZONE_VOLUME_PATCH,
         OPERATION_EXTRACT_ZONE_AIR_STATE,
+        OPERATION_RUN_ACTIVE_PROJECT,
     }:
         _fail_request("bridge_operation_unsupported", "桥接操作不受支持。", request_id)
     return request, request_id, operation
@@ -354,6 +357,40 @@ def handle_request(payload: object) -> dict[str, object]:
                 {"result_type": "zone_air_state_extraction", **result},
             )
 
+        if operation == OPERATION_RUN_ACTIVE_PROJECT:
+            _require_object(
+                request,
+                "request",
+                {
+                    "protocol_version",
+                    "request_id",
+                    "operation",
+                    "source_path",
+                    "source_sha256",
+                    "run_root",
+                },
+                request_id,
+            )
+            source_path = Path(_require_string(request["source_path"], "source_path", request_id))
+            source_sha256 = _require_string(
+                request["source_sha256"],
+                "source_sha256",
+                request_id,
+                max_length=64,
+                ascii_only=True,
+            )
+            run_root = Path(_require_string(request["run_root"], "run_root", request_id))
+            run = run_contamx(
+                source_path,
+                run_root=run_root,
+                expected_source_path=source_path,
+                expected_source_sha256=source_sha256,
+            )
+            return _success_envelope(
+                request_id,
+                {"result_type": "contamx_run", "run": run.to_dict()},
+            )
+
         _require_object(
             request,
             "request",
@@ -391,7 +428,7 @@ def handle_request(payload: object) -> dict[str, object]:
         if created_output:
             _cleanup_verified_output(*created_output)
         return _error_envelope(error.request_id, error.diagnostic)
-    except (PrjZoneReaderError, ZoneVolumePatchError, SimReadError) as error:
+    except (PrjZoneReaderError, ZoneVolumePatchError, SimReadError, ContamXRunnerError) as error:
         if created_output:
             _cleanup_verified_output(*created_output)
         return _error_envelope(request_id, error.diagnostic)
