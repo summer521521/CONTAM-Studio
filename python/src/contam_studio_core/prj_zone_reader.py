@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import re
 import sys
 from pathlib import Path
 
 from .prj_zone_models import PrjZoneDocument, ReaderDiagnostic, ZoneDocumentRecord
+from .strict_numeric import parse_ascii_finite_float
 
 SCHEMA_VERSION = "1.0"
 READER_MODE = "strict_contam_3_4_simple_zone_v1"
@@ -17,9 +17,6 @@ SUPPORTED_HEADER_VERSIONS = frozenset({"3.4.0.0", "3.4.0.4"})
 _HEADER_PATTERN = re.compile(r"^ContamW +([^ ]+) +([+-]?[0-9]+)$")
 _ZONE_MARKER_PATTERN = re.compile(r"^ *([^ ]*) +! *zones: *$")
 _INTEGER_PATTERN = re.compile(r"^[+-]?[0-9]+$")
-_FLOAT_PATTERN = re.compile(
-    r"^[+-]?(?:(?:[0-9]+(?:[.][0-9]*)?)|(?:[.][0-9]+))(?:[eE][+-]?[0-9]+)?$"
-)
 
 ERROR_EXIT_CODES = {
     "source_not_found": 2,
@@ -199,30 +196,16 @@ def _parse_integer(token: str, field: str, line_number: int) -> int:
 
 
 def _parse_float(token: str, field: str, line_number: int) -> float:
-    if _FLOAT_PATTERN.fullmatch(token) is None:
-        _fail(
-            "invalid_zone_field",
-            f"Zone字段{field}不是有效ASCII十进制浮点数字面量。",
-            line_number,
-            {"field": field, "token": token[:80]},
-        )
     try:
-        value = float(token)
-    except (ValueError, OverflowError):
+        return parse_ascii_finite_float(token)
+    except ValueError:
         _fail(
             "invalid_zone_field",
-            f"Zone字段{field}不是有效浮点数。",
+            f"Zone字段{field}不是有效且有限的ASCII十进制浮点数字面量。",
             line_number,
             {"field": field, "token": token[:80]},
         )
-    if not math.isfinite(value):
-        _fail(
-            "invalid_zone_field",
-            f"Zone字段{field}必须是有限浮点数。",
-            line_number,
-            {"field": field, "token": token[:80]},
-        )
-    return value
+    raise AssertionError("unreachable")
 
 
 def _looks_like_split_name(tokens: list[str]) -> bool:
@@ -233,9 +216,9 @@ def _looks_like_split_name(tokens: list[str]) -> bool:
             if _INTEGER_PATTERN.fullmatch(tokens[index]) is None:
                 return False
         for index in range(6, 10):
-            if _FLOAT_PATTERN.fullmatch(tokens[index]) is None:
-                return False
-            if not math.isfinite(float(tokens[index])):
+            try:
+                parse_ascii_finite_float(tokens[index])
+            except ValueError:
                 return False
         if any(_INTEGER_PATTERN.fullmatch(token) is None for token in tokens[-8:]):
             return False
