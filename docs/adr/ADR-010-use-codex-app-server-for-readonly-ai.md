@@ -42,3 +42,7 @@ Thread必须使用受控空目录、只读沙箱和禁止审批升级的策略�
 ## 许可与来源
 
 协议事实来自OpenAI官方[Codex仓库](https://github.com/openai/codex)及[App Server README](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)。上游仓库采用Apache-2.0。CONTAM Studio未复制App Server实现代码，也未复制AGPL项目`llm-for-zotero`的代码、包装器或UI；只独立实现公开的客户端架构。
+
+## 实现后续：受控CLI安装
+
+用户明确要求桌面端在CLI缺失时提供安装提醒和一键安装。该后续不改变AI只读决策：安装必须由用户二次确认，React不能提交URL、命令、参数或路径；Rust只执行固定OpenAI官方安装入口，并在执行前验证当前已审阅脚本的大小和SHA-256。脚本身份变化、超时、非零退出或安装后版本探测失败时拒绝继续。该受控操作不登录、不读取认证文件、不提升权限、不修改项目，也不向WebView开放通用Shell、文件系统或HTTP能力。

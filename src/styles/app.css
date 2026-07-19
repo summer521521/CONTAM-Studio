@@ -1226,6 +1226,100 @@ input:focus-visible,
   font-size: 11px;
 }
 
+.assistant-install-reminder {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-surface-subtle);
+  border-left: 3px solid var(--accent);
+}
+
+.assistant-install-reminder svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.assistant-install-reminder.success {
+  border-left-color: var(--success);
+}
+
+.assistant-install-reminder.success svg {
+  color: var(--success);
+}
+
+.assistant-install-reminder p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-install-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 58%);
+}
+
+.assistant-install-dialog {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  padding: 22px;
+  overflow: auto;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-overlay);
+}
+
+.assistant-install-dialog h3 {
+  margin: 0 36px 12px 0;
+  font-size: 16px;
+}
+
+.assistant-install-dialog p,
+.assistant-install-dialog li,
+.assistant-install-dialog summary,
+.assistant-install-dialog code {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.assistant-install-dialog ul {
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.assistant-install-dialog details {
+  margin-top: 14px;
+}
+
+.assistant-install-dialog code {
+  display: block;
+  margin-top: 8px;
+  padding: 10px;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+}
+
+.assistant-install-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.assistant-install-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
 .assistant-field {
   display: grid;
   gap: 6px;

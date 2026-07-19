@@ -27,6 +27,7 @@ import {
   previewAiContext,
   startReadonlyAiTurn,
   interruptReadonlyAiTurn,
+  installOfficialCodexCli,
   clearReadonlyAiSession,
   disconnectCodexAppServer,
   undoProjectDraft,
@@ -689,6 +690,34 @@ function App() {
     }
   }, []);
 
+  const installCodexCli = useCallback(async () => {
+    const sequence = ++aiSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchAi({ type: "install_started", requestId });
+    try {
+      const response = await installOfficialCodexCli(requestId);
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      if (
+        response.request_id !== requestId
+        || response.error
+        || !["installed", "already_available"].includes(response.status)
+        || !response.probe?.found
+        || !response.probe.version
+      ) {
+        dispatchAi({
+          type: "operation_failed",
+          requestId,
+          issue: response.error ?? { code: "codex_cli_install_verification_failed", message: "Codex CLI installation response invalid." },
+        });
+        return;
+      }
+      dispatchAi({ type: "install_succeeded", requestId });
+    } catch {
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_cli_install_failed", message: "Codex CLI installation failed." } });
+    }
+  }, []);
+
   const disconnectAi = useCallback(async () => {
     aiSequence.current += 1;
     try {
@@ -1028,6 +1057,7 @@ function App() {
               aiState={aiState}
               aiContextAvailable={Boolean(projectState.projectSessionId && projectState.draft && currentZone)}
               onAiConnect={() => void updateAiConnection(false)}
+              onAiInstall={() => void installCodexCli()}
               onAiRefresh={() => void updateAiConnection(true)}
               onAiDisconnect={() => void disconnectAi()}
               onAiScopeToggle={toggleAiScope}

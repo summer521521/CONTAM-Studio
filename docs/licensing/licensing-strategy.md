@@ -9,7 +9,7 @@
 - CONTAM Studio自身代码和内容采用何种许可证尚未由用户决定。
 - Phase 5C新增`echarts 6.1.0`，来源为Apache ECharts官方包，许可证为Apache-2.0。项目只使用模块化Canvas折线图组件；发布前第三方声明需包含该依赖及其许可证文本。
 - Phase 3C新增Rust `uuid 1.24.0`，只启用确定性UUID v5所需feature，来源为官方crates.io包，许可证为Apache-2.0 OR MIT。未新增前端或Python运行时依赖；发布前第三方声明需包含该crate及实际锁定的传递依赖。
-- Phase 6A未新增Rust、前端或Python运行时依赖。外部Codex CLI/App Server由用户单独安装，官方OpenAI Codex仓库采用Apache-2.0；Studio只实现公开stdio协议客户端，不复制上游实现。研究时查看的`llm-for-zotero`为AGPL-3.0，本项目未复制其代码、协议包装、注释或UI，因此未引入其代码许可义务；发布前仍需在产品说明中明确Codex是外部可选工具并链接官方来源。
+- Phase 6A未新增Rust、前端或Python运行时依赖。外部Codex CLI/App Server可以由用户单独安装，也可以在用户明确确认后由Studio调用固定OpenAI官方安装入口；CLI二进制不捆绑进仓库或安装包，Studio只实现公开stdio协议客户端和受控安装编排。官方OpenAI Codex仓库采用Apache-2.0。研究时查看的`llm-for-zotero`为AGPL-3.0，本项目未复制其代码、协议包装、注释或UI，因此未引入其代码许可义务；发布前仍需在产品说明中明确Codex是外部可选工具并链接官方来源。
 
 ## Phase 0处理
 

@@ -23,9 +23,14 @@ Tauri受控命令
 Rust按以下顺序发现Codex：
 
 1. `CONTAM_STUDIO_CODEX`指定的绝对`codex.exe`路径；
-2. 当前进程`PATH`中名为`codex.exe`的普通文件。
+2. 当前Windows用户的OpenAI官方独立安装位置；
+3. 当前进程`PATH`中名为`codex.exe`的普通文件。
 
-不扫描磁盘、注册表、用户目录或`.codex`，不自动安装，也不修改`PATH`。探测使用参数数组执行`codex --version`，限制时间与输出，WebView只收到版本和来源，不收到路径或stderr。
+不扫描磁盘、注册表、其他用户目录或`.codex`，也不修改`PATH`。探测使用参数数组执行`codex --version`，限制时间与输出，WebView只收到版本和来源，不收到路径或stderr。显式环境变量仍高于官方用户安装位置和`PATH`，因此管理员或开发环境可以保持确定的受控覆盖。
+
+CLI缺失时，AI侧栏显示安装提醒、联网和落盘影响、哈希锁定策略以及官方手动命令。一键安装只在用户点击确认后执行，React只发送`request_id`。Rust使用固定的OpenAI官方`https://chatgpt.com/codex/install.ps1`入口、固定Windows PowerShell路径和固定参数；当前审阅脚本大小为30133字节，SHA-256为`95923C2AC60B963C95435AAEAEFEAAB3CBC01559E21FCE1FA501EE1F9793AC0E`。下载超过128 KiB、哈希变化、运行超过180秒、非零退出或安装后`codex --version`复核失败均整体拒绝。上游脚本变化必须先由新版本Studio重新审阅并更新锁定值，不能静默接受。
+
+该入口是Rust内部固定操作，不是通用命令执行能力。它不接受用户URL、参数或目标目录，不向WebView开放Shell、文件系统或HTTP插件权限，不自动登录、不读取认证文件、不提权，也不修改项目。安装使用当前Windows用户范围并由Codex维护独立程序包缓存；已经存在可探测CLI时不会重复安装。安装临时目录位于应用本地数据，完成后尽力清理。
 
 连接时Rust在应用本地数据目录创建空的`ai/codex-runtime/<session>/`工作目录，并以`codex app-server --stdio`启动。该目录不是项目、草稿、运行、结果或仓库目录，且不会写入PRJ、SIM、manifest或上下文文件。进程使用管道JSONL、受控环境、有界消息和有界关闭流程；应用退出或用户断开时关闭stdin并终止子进程。
 
@@ -75,4 +80,4 @@ Rust监视命令执行、文件修改、MCP、动态工具、网页搜索、Comp
 
 ## 诊断
 
-对外诊断为稳定白名单，例如`codex_cli_not_found`、`codex_not_authenticated`、`codex_readonly_mode_unavailable`、`ai_context_stale`、`ai_tool_use_blocked`和`ai_response_contract_invalid`。诊断不包含CLI路径、项目路径、stderr、RPC正文、凭据或Traceback。
+对外诊断为稳定白名单，例如`codex_cli_not_found`、`codex_cli_install_failed`、`codex_cli_installer_unsupported`、`codex_not_authenticated`、`codex_readonly_mode_unavailable`、`ai_context_stale`、`ai_tool_use_blocked`和`ai_response_contract_invalid`。诊断不包含CLI路径、项目路径、下载输出、stderr、RPC正文、凭据或Traceback。

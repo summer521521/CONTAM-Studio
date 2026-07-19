@@ -54,6 +54,15 @@ describe("read-only AI state", () => {
     expect(INITIAL_AI_STATE.connection).toBeNull();
   });
 
+  it("tracks a confirmed installation separately from connection", () => {
+    const installing = aiReducer(INITIAL_AI_STATE, { type: "install_started", requestId: "install-1" });
+    expect(installing.status).toBe("installing");
+    expect(aiReducer(installing, { type: "install_succeeded", requestId: "old" })).toEqual(installing);
+    const installed = aiReducer(installing, { type: "install_succeeded", requestId: "install-1" });
+    expect(installed.status).toBe("installed");
+    expect(installed.connection).toBeNull();
+  });
+
   it("uses the server model order and default reasoning effort", () => {
     const connecting = aiReducer(INITIAL_AI_STATE, { type: "connect_started", requestId: "r1" });
     const ready = aiReducer(connecting, { type: "connect_succeeded", requestId: "r1", connection });
@@ -108,6 +117,7 @@ describe("read-only AI state", () => {
         }}
         contextAvailable
         onConnect={() => undefined}
+        onInstall={() => undefined}
         onRefresh={() => undefined}
         onDisconnect={() => undefined}
         onScopeToggle={() => undefined}
@@ -147,6 +157,7 @@ describe("read-only AI state", () => {
         }}
         contextAvailable
         onConnect={() => undefined}
+        onInstall={() => undefined}
         onRefresh={() => undefined}
         onDisconnect={() => undefined}
         onScopeToggle={() => undefined}
@@ -178,6 +189,7 @@ describe("read-only AI state", () => {
         }}
         contextAvailable
         onConnect={() => undefined}
+        onInstall={() => undefined}
         onRefresh={() => undefined}
         onDisconnect={() => undefined}
         onScopeToggle={() => undefined}
@@ -209,7 +221,7 @@ describe("read-only AI state", () => {
     expect(interrupted.preview).toEqual(preview);
     expect(interrupted.answer).toBeNull();
     const disconnected = aiReducer(interrupted, { type: "disconnected" });
-    expect(disconnected).toEqual(INITIAL_AI_STATE);
+    expect(disconnected).toEqual({ ...INITIAL_AI_STATE, status: "installed" });
   });
 
   it("renders the Chinese network and context disclosure labels", async () => {
@@ -219,6 +231,7 @@ describe("read-only AI state", () => {
         state={{ ...INITIAL_AI_STATE, status: "available", connection, preview }}
         contextAvailable
         onConnect={() => undefined}
+        onInstall={() => undefined}
         onRefresh={() => undefined}
         onDisconnect={() => undefined}
         onScopeToggle={() => undefined}
@@ -235,5 +248,30 @@ describe("read-only AI state", () => {
     expect(html).toContain("结构化上下文预览");
     expect(html).toContain("不包含绝对路径、PRJ正文或完整结果序列");
     await i18n.changeLanguage("en");
+  });
+
+  it("renders an install reminder without exposing a configurable command", () => {
+    const html = renderToStaticMarkup(
+      <CodexAssistantPanel
+        state={{ ...INITIAL_AI_STATE, issue: { code: "codex_cli_not_found", message: "hidden" } }}
+        contextAvailable={false}
+        onConnect={() => undefined}
+        onInstall={() => undefined}
+        onRefresh={() => undefined}
+        onDisconnect={() => undefined}
+        onScopeToggle={() => undefined}
+        onModelChange={() => undefined}
+        onEffortChange={() => undefined}
+        onPreview={() => undefined}
+        onQuestionChange={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+        onClear={() => undefined}
+      />,
+    );
+    expect(html).toContain("Install Codex CLI");
+    expect(html).toContain("official OpenAI build");
+    expect(html).not.toContain("C:\\");
+    expect(html).not.toContain("--danger");
   });
 });

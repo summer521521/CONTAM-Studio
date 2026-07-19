@@ -5,7 +5,8 @@
 ## 实现边界
 
 - 用户点击连接前不发现账号、不启动App Server，也不发起模型请求。
-- Rust通过显式路径或当前`PATH`发现Codex，以参数数组执行`--version`和`app-server --stdio`；不使用Shell，不扫描`.codex`，不读取认证文件。
+- Rust通过显式路径、精确的官方用户安装位置或当前`PATH`发现Codex，以参数数组执行`--version`和`app-server --stdio`；不扫描`.codex`，不读取认证文件。
+- CLI缺失时只显示提醒；用户二次确认后，Rust才以固定PowerShell路径和参数下载固定OpenAI官方安装脚本，校验大小和SHA-256并执行。React不能提供URL、命令、参数或路径，Tauri没有通用Shell、文件系统或HTTP权限。
 - App Server工作目录位于应用本地数据的空AI目录，不是项目、草稿、运行、结果或仓库目录。
 - 上下文只从Rust活动状态生成；默认披露当前Zone和草稿摘要，不含路径、PRJ正文、日志、manifest、SIM或完整577条样本。
 - Thread要求`read-only`沙箱、`never`审批、空MCP/动态工具/环境/能力根；工具事件触发中断并丢弃回答。
@@ -13,18 +14,18 @@
 
 ## 自动验证
 
-- Rust：`51 passed, 1 ignored`；`cargo fmt --check`和`cargo check`通过。测试覆盖CLI发现与可执行文件身份复核、账号和模型清理、JSONL限制、只读Thread/Turn参数、上下文绑定、预览失效、结构化回答、旧Turn、工具/审批拦截、停止和连接清理。
-- 前端：Vitest `11 files, 112 tests passed`；TypeScript和Vite生产构建通过。测试覆盖不自动连接、未安装/未登录状态、模型和推理强度、范围选择、Rust预览、过期保护、生成/停止、结构化分区、双语及安全桌面API。
+- Rust：`56 passed, 1 ignored`；`cargo fmt --check`和`cargo check`通过。新增覆盖环境变量、官方用户安装位置和PATH优先级、固定安装入口与脚本哈希、超时和错误映射、安装响应路径隔离、显式ACL；原有账号、模型、JSONL、只读Thread/Turn、上下文绑定、工具拦截和连接清理回归保持。
+- 前端：Vitest `11 files, 115 tests passed`；TypeScript和Vite生产构建通过。新增覆盖安装状态、缺失提醒、双语确认文案及只含`request_id`的桌面API；原有模型、范围、Rust预览、生成/停止和结构化回答回归保持。
 - Python：`266 passed`；Ruff通过。AI没有增加Python文件读取接口，既有Zone、Patch、ContamX、SimRead和结果回归保持通过。
-- 通用：58个Markdown文件相对链接、8个已跟踪JSON、pnpm与Cargo锁、依赖清单和`git diff --check`通过。Phase 6A没有新增依赖。
+- 通用：62个Markdown文件相对链接、8个已跟踪JSON、pnpm与Cargo锁、依赖清单和`git diff --check`通过。Phase 6A没有新增依赖。
 
 ## 真实Codex探测
 
-当前机器的`PATH`解析到Microsoft Store版Codex桌面应用内的`codex.exe`，但普通桌面进程直接执行该WindowsApps文件时返回`Access is denied`。因此本次能够真实确认发现结果，但不能取得可靠的CLI `--version`，也不能继续完成真实`initialize`、`account/read`、`model/list`、只读Thread、Turn或`turn/interrupt`验证。
+当前机器已安装OpenAI官方独立Codex CLI，真实`codex --version`返回`codex-cli 0.144.6`。Studio的新发现顺序会在未设置`CONTAM_STUDIO_CODEX`时优先采用精确的当前用户官方安装位置，避免Microsoft Store WindowsApps入口抢先命中；WebView仍只收到版本和`official_install`来源，不收到实际路径或文件哈希。
 
-本任务未提升权限、未复制WindowsApps二进制、未修改`PATH`、未设置`CONTAM_STUDIO_CODEX`、未读取`.codex`、未发起登录，也未把桌面应用包版本冒充CLI版本。用户可在手动GUI验收前把`CONTAM_STUDIO_CODEX`指向一个普通权限可执行的绝对`codex.exe`，或把官方CLI放入当前进程`PATH`后重新检测。
+真实App Server验证完成`initialize`、`initialized`、`account/read`和`model/list`：账号为已认证ChatGPT Plus；服务端返回4个可用模型，其中`gpt-5.6-sol`为默认模型，推理强度保持服务端返回顺序。真实只读Thread确认`readOnly`、网络工具关闭和`never`审批；最小官方fixture Zone上下文得到四字段Schema回答，无命令、文件、审批或其他工具事件，回答不含项目路径。第二个Turn在中断请求到达前已经自行完成，因此本次不能把真实`turn/interrupt`写成已验证中断成功；Fake App Server回归继续覆盖中断协议。
 
-因此真实Codex集成状态为`blocked_by_local_codex_executable_acl`；Fake App Server和单元测试不能替代真实网络验证。AI不可用不影响项目、草稿、运行、结果与CSV能力。
+本次未重新执行一键安装，因为当前官方CLI已经可用，避免无意义地修改用户安装。重新下载的官方`install.ps1`为30133字节，SHA-256为`95923C2AC60B963C95435AAEAEFEAAB3CBC01559E21FCE1FA501EE1F9793AC0E`，与生产锁定值一致。真实验证未提升权限、未修改`PATH`、未读取`.codex`、未发起登录、未发送用户科研项目，也未运行ContamX。
 
 ## Phase 3C收口
 
@@ -32,4 +33,4 @@
 
 ## 手动GUI状态
 
-`pending_user`。真实AI步骤依赖普通权限可执行且已登录的Codex CLI、网络及可用订阅额度；不得把当前ACL阻塞写成已通过。
+`pending_user`。需在真实Tauri窗口确认CLI缺失提醒、安装影响对话框、已安装CLI不重复安装、连接后的版本/订阅/模型目录、上下文披露、回答、停止、双语主题和退出后无残留进程。一键安装本身应在无CLI的隔离测试账户或干净环境验证，不应为了验收覆盖当前正常安装。

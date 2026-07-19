@@ -1,5 +1,7 @@
 export type AiConnectionStatus =
   | "disabled"
+  | "installed"
+  | "installing"
   | "connecting"
   | "not_authenticated"
   | "available"
@@ -24,7 +26,7 @@ export interface AiDiagnostic {
 export interface CodexCliProbeView {
   found: boolean;
   version: string | null;
-  source: "environment" | "path" | null;
+  source: "environment" | "official_install" | "path" | null;
 }
 
 export interface CodexAccountView {
@@ -100,6 +102,13 @@ export interface DesktopCodexConnectionResponse {
   error: AiDiagnostic | null;
 }
 
+export interface DesktopCodexInstallResponse {
+  request_id: string;
+  status: "installed" | "already_available" | "error";
+  probe: CodexCliProbeView | null;
+  error: AiDiagnostic | null;
+}
+
 export interface DesktopAiContextPreviewResponse {
   request_id: string;
   preview: AiContextDisclosureView | null;
@@ -151,6 +160,8 @@ export const INITIAL_AI_STATE: AiState = {
 };
 
 export type AiAction =
+  | { type: "install_started"; requestId: string }
+  | { type: "install_succeeded"; requestId: string }
   | { type: "connect_started"; requestId: string }
   | { type: "connect_succeeded"; requestId: string; connection: CodexConnectionView }
   | { type: "operation_failed"; requestId: string | null; issue: AiDiagnostic }
@@ -176,6 +187,11 @@ function selectValidModel(connection: CodexConnectionView) {
 
 export function aiReducer(state: AiState, action: AiAction): AiState {
   switch (action.type) {
+    case "install_started":
+      return { ...state, status: "installing", activeRequestId: action.requestId, issue: null };
+    case "install_succeeded":
+      if (state.activeRequestId !== action.requestId) return state;
+      return { ...state, status: "installed", activeRequestId: null, issue: null };
     case "connect_started":
       return { ...state, status: "connecting", activeRequestId: action.requestId, issue: null };
     case "connect_succeeded": {
@@ -229,7 +245,10 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
     case "session_cleared":
       return { ...state, preview: null, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
     case "disconnected":
-      return INITIAL_AI_STATE;
+      return {
+        ...INITIAL_AI_STATE,
+        status: state.connection?.cli.found ? "installed" : "disabled",
+      };
     default:
       return state;
   }

@@ -11,6 +11,7 @@ fn main() {
         "export_active_zone_air_state_csv",
         "run_active_contam_project",
         "probe_codex_app_server",
+        "install_official_codex_cli",
         "connect_codex_app_server",
         "refresh_codex_account",
         "preview_ai_context",

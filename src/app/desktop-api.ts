@@ -14,6 +14,7 @@ import type {
   DesktopAiContextPreviewResponse,
   DesktopAiTurnResponse,
   DesktopCodexConnectionResponse,
+  DesktopCodexInstallResponse,
   DesktopCodexProbeResponse,
 } from "./ai-state";
 
@@ -127,6 +128,10 @@ export async function runActiveContamProject(
 
 export async function probeCodexAppServer(requestId: string): Promise<DesktopCodexProbeResponse> {
   return invoke<DesktopCodexProbeResponse>("probe_codex_app_server", { requestId });
+}
+
+export async function installOfficialCodexCli(requestId: string): Promise<DesktopCodexInstallResponse> {
+  return invoke<DesktopCodexInstallResponse>("install_official_codex_cli", { requestId });
 }
 
 export async function connectCodexAppServer(requestId: string): Promise<DesktopCodexConnectionResponse> {

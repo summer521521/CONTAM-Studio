@@ -11,6 +11,7 @@ import {
   runActiveContamProject,
   undoProjectDraft,
   connectCodexAppServer,
+  installOfficialCodexCli,
   previewAiContext,
   startReadonlyAiTurn,
   interruptReadonlyAiTurn,
@@ -83,6 +84,15 @@ describe("desktop API boundary", () => {
       for (const forbidden of ["codexPath", "sourcePath", "draftRoot", "manifestPath", "simPath", "prjText", "projectJson", "runJson", "resultJson", "shellCommand"]) {
         expect(source).not.toContain(forbidden);
       }
+    }
+  });
+
+  it("starts only the fixed Rust-held Codex installer action", () => {
+    expect(installOfficialCodexCli).toHaveLength(1);
+    const source = installOfficialCodexCli.toString();
+    expect(source).toContain("install_official_codex_cli");
+    for (const forbidden of ["downloadUrl", "shellCommand", "arguments", "installerPath", "powershell"]) {
+      expect(source).not.toContain(forbidden);
     }
   });
 });

@@ -21,6 +21,7 @@ interface ContextSidebarProps {
   aiState?: AiState;
   aiContextAvailable?: boolean;
   onAiConnect?: () => void;
+  onAiInstall?: () => void;
   onAiRefresh?: () => void;
   onAiDisconnect?: () => void;
   onAiScopeToggle?: (scope: AiContextScope) => void;
@@ -48,6 +49,7 @@ export function ContextSidebar({
   aiState = INITIAL_AI_STATE,
   aiContextAvailable = false,
   onAiConnect = () => undefined,
+  onAiInstall = () => undefined,
   onAiRefresh = () => undefined,
   onAiDisconnect = () => undefined,
   onAiScopeToggle = () => undefined,
@@ -202,6 +204,7 @@ export function ContextSidebar({
           state={aiState}
           contextAvailable={aiContextAvailable}
           onConnect={onAiConnect}
+          onInstall={onAiInstall}
           onRefresh={onAiRefresh}
           onDisconnect={onAiDisconnect}
           onScopeToggle={onAiScopeToggle}

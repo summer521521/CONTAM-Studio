@@ -1,4 +1,5 @@
-import { Bot, CircleStop, Eye, Link2, RefreshCw, Send, Trash2, Unplug } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bot, CircleStop, Download, Eye, Link2, RefreshCw, Send, ShieldCheck, Trash2, Unplug, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AiContextScope, AiState } from "../../app/ai-state";
 
@@ -15,6 +16,7 @@ interface CodexAssistantPanelProps {
   state: AiState;
   contextAvailable: boolean;
   onConnect: () => void;
+  onInstall: () => void;
   onRefresh: () => void;
   onDisconnect: () => void;
   onScopeToggle: (scope: AiContextScope) => void;
@@ -31,6 +33,7 @@ export function CodexAssistantPanel({
   state,
   contextAvailable,
   onConnect,
+  onInstall,
   onRefresh,
   onDisconnect,
   onScopeToggle,
@@ -43,10 +46,24 @@ export function CodexAssistantPanel({
   onClear,
 }: CodexAssistantPanelProps) {
   const { t } = useTranslation();
+  const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const installDialogRef = useRef<HTMLElement>(null);
   const model = state.connection?.models.find((item) => item.id === state.modelId) ?? null;
   const connected = Boolean(state.connection);
   const ready = state.status === "available";
-  const busy = state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
+  const busy = state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
+
+  useEffect(() => {
+    if (!installDialogOpen) return undefined;
+    installDialogRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && state.status !== "installing") {
+        setInstallDialogOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [installDialogOpen, state.status]);
 
   return (
     <div className="context-content codex-assistant" role="tabpanel">
@@ -68,9 +85,16 @@ export function CodexAssistantPanel({
 
       <div className="assistant-actions compact-actions">
         {!connected ? (
-          <button type="button" className="primary-action" onClick={onConnect} disabled={busy}>
-            <Link2 size={15} />{t(state.status === "connecting" ? "assistant.connecting" : "assistant.connect")}
-          </button>
+          <>
+            <button type="button" className="primary-action" onClick={onConnect} disabled={busy}>
+              <Link2 size={15} />{t(state.status === "connecting" ? "assistant.connecting" : "assistant.connect")}
+            </button>
+            {state.status !== "installed" ? (
+              <button type="button" className="secondary-action" onClick={() => setInstallDialogOpen(true)} disabled={busy}>
+                <Download size={15} />{t(state.status === "installing" ? "assistant.installing" : "assistant.installCli")}
+              </button>
+            ) : null}
+          </>
         ) : (
           <>
             <button type="button" className="secondary-action" onClick={onRefresh} disabled={busy}>
@@ -82,6 +106,18 @@ export function CodexAssistantPanel({
           </>
         )}
       </div>
+
+      {!connected && state.status === "installed" ? (
+        <div className="assistant-install-reminder success">
+          <ShieldCheck size={16} aria-hidden="true" />
+          <p>{t("assistant.installComplete")}</p>
+        </div>
+      ) : !connected ? (
+        <div className="assistant-install-reminder">
+          <ShieldCheck size={16} aria-hidden="true" />
+          <p>{t("assistant.installReminder")}</p>
+        </div>
+      ) : null}
 
       <div className="assistant-boundary">
         <p>{t("assistant.networkDisclosure")}</p>
@@ -195,6 +231,63 @@ export function CodexAssistantPanel({
             </article>
           ) : null}
         </>
+      ) : null}
+
+
+      {installDialogOpen ? (
+        <div className="assistant-install-backdrop">
+          <section
+            ref={installDialogRef}
+            className="assistant-install-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="codex-install-dialog-title"
+            tabIndex={-1}
+          >
+            <button
+              type="button"
+              className="panel-icon-button assistant-install-close"
+              onClick={() => setInstallDialogOpen(false)}
+              aria-label={t("assistant.installCancel")}
+              disabled={state.status === "installing"}
+            >
+              <X size={16} />
+            </button>
+            <h3 id="codex-install-dialog-title">{t("assistant.installTitle")}</h3>
+            <p>{t("assistant.installImpact")}</p>
+            <ul>
+              <li>{t("assistant.installNetwork")}</li>
+              <li>{t("assistant.installLocation")}</li>
+              <li>{t("assistant.installNoLogin")}</li>
+            </ul>
+            <p>{t("assistant.installPinNotice")}</p>
+            <details>
+              <summary>{t("assistant.manualInstall")}</summary>
+              <code>$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex</code>
+            </details>
+            <div className="assistant-actions assistant-install-actions">
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => setInstallDialogOpen(false)}
+                disabled={state.status === "installing"}
+              >
+                {t("assistant.installCancel")}
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => {
+                  onInstall();
+                  setInstallDialogOpen(false);
+                }}
+                disabled={state.status === "installing"}
+              >
+                <Download size={15} />{t("assistant.installConfirm")}
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   );

@@ -9,7 +9,8 @@
 - AI上下文只由Rust从当前可信项目session、Revision、稳定Zone UUID、活动运行和活动结果生成。默认仅披露当前Zone和草稿摘要；用户发送前必须查看Rust生成的结构化预览，预览后上下文变化会使其失效。
 - Thread固定使用只读沙箱和`never`审批，不启用MCP、动态工具、能力根或项目工作目录。命令执行、文件变更、网络搜索、MCP、动态工具、审批或权限请求等事件会触发中断并丢弃回答。
 - 回答必须满足封闭Schema，并在界面分成确定性事实复述、AI解释和限制。Phase 6A不实现AI Patch、AI运行、项目搜索、完整结果序列分析、其他AI后端或跨重启聊天历史。
-- 自动测试与生产构建已覆盖受控协议和UI状态；当前机器仅能发现Microsoft Store应用包内Codex入口，普通进程执行该WindowsApps文件时被ACL拒绝，因此真实账号、模型和Turn联调尚未完成，不能把Fake App Server测试写成真实订阅验证通过。
+- 当前机器已安装并真实探测OpenAI Codex CLI `0.144.6`；真实App Server初始化、ChatGPT Plus账号状态、服务端4个可用模型和一个只读结构化Turn均验证通过，未观察到工具事件或路径泄漏。第二个Turn在中断请求到达前已完成，因此真实`turn/interrupt`仍保留为手动GUI验证项。
+- AI侧栏在CLI缺失时提供安装提醒和二次确认。受控安装只在用户确认后从固定OpenAI入口下载当前已审阅的安装脚本，校验大小和SHA-256后执行；脚本身份变化时拒绝继续。React不能提供URL、命令、参数或路径，Tauri capability也未开放通用Shell、文件系统或网络权限。
 
 ## Phase 3C不可变草稿与撤销工作流
 

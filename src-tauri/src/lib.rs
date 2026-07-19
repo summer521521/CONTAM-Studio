@@ -19,6 +19,7 @@ pub fn run() {
             zone_bridge::export_active_zone_air_state_csv,
             zone_bridge::run_active_contam_project,
             codex_app_server::probe_codex_app_server,
+            codex_app_server::install_official_codex_cli,
             codex_app_server::connect_codex_app_server,
             codex_app_server::refresh_codex_account,
             codex_app_server::preview_ai_context,

@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -16,6 +16,11 @@ use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 const CODEX_ENVIRONMENT_VARIABLE: &str = "CONTAM_STUDIO_CODEX";
+const OFFICIAL_CODEX_INSTALLER_URL: &str = "https://chatgpt.com/codex/install.ps1";
+const OFFICIAL_CODEX_INSTALLER_SHA256: &str =
+    "95923C2AC60B963C95435AAEAEFEAAB3CBC01559E21FCE1FA501EE1F9793AC0E";
+const MAX_INSTALLER_SCRIPT_BYTES: usize = 128 * 1024;
+const INSTALL_TIMEOUT: Duration = Duration::from_secs(180);
 const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 const TURN_TIMEOUT: Duration = Duration::from_secs(90);
 const PROCESS_STOP_TIMEOUT: Duration = Duration::from_secs(3);
@@ -115,6 +120,14 @@ pub struct DesktopCodexProbeResponse {
 pub struct DesktopCodexConnectionResponse {
     request_id: String,
     connection: Option<CodexConnectionView>,
+    error: Option<AiDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopCodexInstallResponse {
+    request_id: String,
+    status: String,
+    probe: Option<CodexCliProbeView>,
     error: Option<AiDiagnostic>,
 }
 
@@ -224,6 +237,7 @@ struct AssistantState {
     active_turn_request_id: Option<String>,
     cancel_requested: bool,
     token_usage: Option<AiTokenUsageView>,
+    installing: bool,
 }
 
 #[derive(Default)]
@@ -603,13 +617,27 @@ fn safe_language(value: &str) -> bool {
     matches!(value, "zh-CN" | "en")
 }
 
+fn official_codex_install_path(local_app_data: &Path) -> PathBuf {
+    local_app_data
+        .join("Programs")
+        .join("OpenAI")
+        .join("Codex")
+        .join("bin")
+        .join("codex.exe")
+}
+
 fn discover_codex() -> Result<(PathBuf, String), AiDiagnostic> {
-    discover_codex_from(env::var_os(CODEX_ENVIRONMENT_VARIABLE), env::var_os("PATH"))
+    discover_codex_from(
+        env::var_os(CODEX_ENVIRONMENT_VARIABLE),
+        env::var_os("PATH"),
+        env::var_os("LOCALAPPDATA"),
+    )
 }
 
 fn discover_codex_from(
     configured: Option<OsString>,
     process_path: Option<OsString>,
+    local_app_data: Option<OsString>,
 ) -> Result<(PathBuf, String), AiDiagnostic> {
     if let Some(value) = configured {
         let path = PathBuf::from(value);
@@ -637,6 +665,14 @@ fn discover_codex_from(
             ));
         }
         return Ok((canonical, "environment".to_string()));
+    }
+    if let Some(root) = local_app_data {
+        let candidate = official_codex_install_path(Path::new(&root));
+        if candidate.is_file() {
+            if let Ok(canonical) = fs::canonicalize(candidate) {
+                return Ok((canonical, "official_install".to_string()));
+            }
+        }
     }
     let path = process_path.unwrap_or_default();
     for directory in env::split_paths(&path) {
@@ -677,6 +713,31 @@ fn capture_limited<R: Read + Send + 'static>(
     })
 }
 
+fn join_capture_bounded(
+    handle: thread::JoinHandle<(Vec<u8>, bool)>,
+    timeout: Duration,
+) -> Option<(Vec<u8>, bool)> {
+    let deadline = Instant::now() + timeout;
+    while !handle.is_finished() && Instant::now() < deadline {
+        thread::sleep(POLL_INTERVAL);
+    }
+    if !handle.is_finished() {
+        return None;
+    }
+    handle.join().ok()
+}
+
+fn wait_for_child_exit(child: &mut Child, timeout: Duration) -> Option<ExitStatus> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
+            _ => return None,
+        }
+    }
+}
+
 fn prepare_runtime_dir(root: &Path, request_id: &str) -> Result<PathBuf, AiDiagnostic> {
     fs::create_dir_all(root).map_err(|_| {
         AiDiagnostic::new(
@@ -696,6 +757,14 @@ fn prepare_runtime_dir(root: &Path, request_id: &str) -> Result<PathBuf, AiDiagn
 
 fn probe_codex_executable(probe_dir: &Path) -> Result<CodexExecutable, AiDiagnostic> {
     let (path, source) = discover_codex()?;
+    probe_codex_at(path, source, probe_dir)
+}
+
+fn probe_codex_at(
+    path: PathBuf,
+    source: String,
+    probe_dir: &Path,
+) -> Result<CodexExecutable, AiDiagnostic> {
     let before = fs::metadata(&path)
         .map_err(|_| AiDiagnostic::new("codex_cli_invalid", "Codex CLI could not be inspected."))?;
     let (before_sha256, before_size) = sha256_file(&path)
@@ -807,6 +876,216 @@ fn verify_codex_identity(executable: &CodexExecutable) -> Result<(), RpcFailure>
         return Err(RpcFailure::new("codex_cli_invalid"));
     }
     Ok(())
+}
+
+fn installer_wrapper_script() -> String {
+    format!(
+        "$ErrorActionPreference = 'Stop'\r\n\
+$ProgressPreference = 'SilentlyContinue'\r\n\
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\r\n\
+$installerPath = Join-Path -Path $PSScriptRoot -ChildPath 'official-install.ps1'\r\n\
+Invoke-WebRequest -UseBasicParsing -Uri '{OFFICIAL_CODEX_INSTALLER_URL}' -OutFile $installerPath\r\n\
+$installerFile = Get-Item -LiteralPath $installerPath\r\n\
+if ($installerFile.Length -gt {MAX_INSTALLER_SCRIPT_BYTES}) {{ exit 21 }}\r\n\
+$installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToUpperInvariant()\r\n\
+if ($installerHash -ne '{OFFICIAL_CODEX_INSTALLER_SHA256}') {{ exit 22 }}\r\n\
+$env:CODEX_NON_INTERACTIVE = '1'\r\n\
+& $installerPath\r\n\
+if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}\r\n\
+exit 0\r\n"
+    )
+}
+
+fn powershell_executable() -> Result<PathBuf, AiDiagnostic> {
+    let system_root = env::var_os("SystemRoot").ok_or_else(|| {
+        AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "Windows PowerShell is unavailable for the controlled installation.",
+        )
+    })?;
+    let path = PathBuf::from(system_root)
+        .join("System32")
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
+    let canonical = fs::canonicalize(path).map_err(|_| {
+        AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "Windows PowerShell is unavailable for the controlled installation.",
+        )
+    })?;
+    if !canonical.is_file()
+        || !canonical
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("powershell.exe"))
+    {
+        return Err(AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "Windows PowerShell is unavailable for the controlled installation.",
+        ));
+    }
+    Ok(canonical)
+}
+
+fn installer_exit_diagnostic(code: Option<i32>, timed_out: bool) -> AiDiagnostic {
+    if timed_out {
+        return AiDiagnostic::new(
+            "codex_cli_install_timeout",
+            "The controlled Codex CLI installation timed out.",
+        );
+    }
+    if matches!(code, Some(21 | 22)) {
+        return AiDiagnostic::new(
+            "codex_cli_installer_unsupported",
+            "The official Codex installer no longer matches the reviewed identity.",
+        );
+    }
+    AiDiagnostic::new(
+        "codex_cli_install_failed",
+        "The controlled Codex CLI installation failed.",
+    )
+}
+
+fn run_official_installer(install_dir: &Path) -> Result<(), AiDiagnostic> {
+    fs::create_dir(install_dir).map_err(|_| {
+        AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "A fresh controlled installer directory could not be created.",
+        )
+    })?;
+    let wrapper_path = install_dir.join("install-official-codex.ps1");
+    let mut wrapper = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&wrapper_path)
+        .map_err(|_| {
+            AiDiagnostic::new(
+                "codex_cli_install_failed",
+                "The controlled installer could not be prepared.",
+            )
+        })?;
+    wrapper
+        .write_all(installer_wrapper_script().as_bytes())
+        .and_then(|_| wrapper.flush())
+        .and_then(|_| wrapper.sync_all())
+        .map_err(|_| {
+            AiDiagnostic::new(
+                "codex_cli_install_failed",
+                "The controlled installer could not be prepared.",
+            )
+        })?;
+
+    let powershell = powershell_executable()?;
+    let mut command = Command::new(powershell);
+    command
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(&wrapper_path)
+        .current_dir(install_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    apply_codex_environment(&mut command);
+    command.env("CODEX_NON_INTERACTIVE", "1");
+    let mut child = command.spawn().map_err(|_| {
+        AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "The controlled Codex CLI installer could not be started.",
+        )
+    })?;
+    let stdout = capture_limited(
+        child.stdout.take().expect("piped installer stdout"),
+        MAX_PROBE_STREAM_BYTES,
+    );
+    let stderr = capture_limited(
+        child.stderr.take().expect("piped installer stderr"),
+        MAX_PROBE_STREAM_BYTES,
+    );
+    let deadline = Instant::now() + INSTALL_TIMEOUT;
+    let mut timed_out = false;
+    let mut wait_failed = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
+            Ok(None) => {
+                timed_out = true;
+                break if child.kill().is_ok() {
+                    wait_for_child_exit(&mut child, PROCESS_STOP_TIMEOUT)
+                } else {
+                    None
+                };
+            }
+            Err(_) => {
+                wait_failed = true;
+                break if child.kill().is_ok() {
+                    wait_for_child_exit(&mut child, PROCESS_STOP_TIMEOUT)
+                } else {
+                    None
+                };
+            }
+        }
+    };
+    let stdout_capture = join_capture_bounded(stdout, PROCESS_STOP_TIMEOUT);
+    let stderr_capture = join_capture_bounded(stderr, PROCESS_STOP_TIMEOUT);
+    if stdout_capture.is_none() || stderr_capture.is_none() {
+        return Err(AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "The controlled installer stream capture did not finish.",
+        ));
+    }
+    let (_, stdout_truncated) = stdout_capture.expect("checked installer stdout capture");
+    let (_, stderr_truncated) = stderr_capture.expect("checked installer stderr capture");
+    if stdout_truncated || stderr_truncated {
+        return Err(AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "The controlled installer output exceeded its safety limit.",
+        ));
+    }
+    if wait_failed || status.is_none_or(|status| !status.success()) {
+        return Err(installer_exit_diagnostic(
+            status.and_then(|status| status.code()),
+            timed_out,
+        ));
+    }
+    Ok(())
+}
+
+fn install_official_codex_cli_blocking(
+    install_root: &Path,
+    local_app_data: &Path,
+) -> Result<CodexExecutable, AiDiagnostic> {
+    run_official_installer(install_root)?;
+    let executable_path = official_codex_install_path(local_app_data);
+    if !executable_path.is_file() {
+        return Err(AiDiagnostic::new(
+            "codex_cli_install_verification_failed",
+            "The installed Codex CLI could not be verified.",
+        ));
+    }
+    probe_codex_at(
+        fs::canonicalize(executable_path).map_err(|_| {
+            AiDiagnostic::new(
+                "codex_cli_install_verification_failed",
+                "The installed Codex CLI could not be verified.",
+            )
+        })?,
+        "official_install".to_string(),
+        install_root,
+    )
+    .map_err(|_| {
+        AiDiagnostic::new(
+            "codex_cli_install_verification_failed",
+            "The installed Codex CLI could not be verified.",
+        )
+    })
 }
 
 fn initialize_connection(connection: &AppServerConnection) -> Result<(), RpcFailure> {
@@ -1325,6 +1604,113 @@ fn clear_pending_turn(store: &CodexAssistantStore, request_id: &str) {
         state.active_turn_id = None;
         state.active_turn_request_id = None;
         state.cancel_requested = false;
+    }
+}
+
+#[tauri::command]
+pub async fn install_official_codex_cli(
+    app: AppHandle,
+    request_id: String,
+) -> DesktopCodexInstallResponse {
+    if !safe_request_id(&request_id) {
+        return DesktopCodexInstallResponse {
+            request_id,
+            status: "error".to_string(),
+            probe: None,
+            error: Some(AiDiagnostic::new(
+                "codex_cli_install_failed",
+                "The Codex install request was invalid.",
+            )),
+        };
+    }
+    let store = app.state::<CodexAssistantStore>();
+    {
+        let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+        if state.installing || state.active_turn_request_id.is_some() {
+            return DesktopCodexInstallResponse {
+                request_id,
+                status: "error".to_string(),
+                probe: None,
+                error: Some(AiDiagnostic::new(
+                    "codex_cli_install_failed",
+                    "Another Codex operation is active.",
+                )),
+            };
+        }
+        state.installing = true;
+    }
+
+    let app_local_data = app.path().app_local_data_dir();
+    let local_app_data = env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    let result = match (app_local_data, local_app_data) {
+        (Ok(app_local_data), Some(local_app_data)) if local_app_data.is_absolute() => {
+            let install_root = app_local_data
+                .join("ai")
+                .join("codex-installer")
+                .join(format!("install-{request_id}"));
+            let cleanup_root = install_root.clone();
+            let configured = env::var_os(CODEX_ENVIRONMENT_VARIABLE).is_some();
+            let task = tauri::async_runtime::spawn_blocking(move || {
+                if let Some(parent) = install_root.parent() {
+                    fs::create_dir_all(parent).map_err(|_| {
+                        AiDiagnostic::new(
+                            "codex_cli_install_failed",
+                            "The controlled installer directory is unavailable.",
+                        )
+                    })?;
+                }
+                if install_root.exists() {
+                    return Err(AiDiagnostic::new(
+                        "codex_cli_install_failed",
+                        "A fresh controlled installer directory could not be created.",
+                    ));
+                }
+                match probe_codex_executable(install_root.parent().unwrap_or(&install_root)) {
+                    Ok(executable) => Ok(("already_available", executable)),
+                    Err(error) if configured => Err(error),
+                    Err(_) => install_official_codex_cli_blocking(&install_root, &local_app_data)
+                        .map(|executable| ("installed", executable)),
+                }
+            })
+            .await;
+            let _ = fs::remove_dir_all(cleanup_root);
+            match task {
+                Ok(value) => value,
+                Err(_) => Err(AiDiagnostic::new(
+                    "codex_cli_install_failed",
+                    "The controlled Codex CLI installation task failed.",
+                )),
+            }
+        }
+        _ => Err(AiDiagnostic::new(
+            "codex_cli_install_failed",
+            "The controlled installer directory is unavailable.",
+        )),
+    };
+
+    let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+    state.installing = false;
+    match result {
+        Ok((status, executable)) => {
+            let probe = CodexCliProbeView {
+                found: true,
+                version: Some(executable.version),
+                source: Some(executable.source),
+            };
+            state.cli = Some(probe.clone());
+            DesktopCodexInstallResponse {
+                request_id,
+                status: status.to_string(),
+                probe: Some(probe),
+                error: None,
+            }
+        }
+        Err(error) => DesktopCodexInstallResponse {
+            request_id,
+            status: "error".to_string(),
+            probe: None,
+            error: Some(error),
+        },
     }
 }
 
@@ -2576,19 +2962,105 @@ mod tests {
         let executable = root.join("codex.exe");
         fs::write(&executable, b"fake").unwrap();
         let (configured, source) =
-            discover_codex_from(Some(executable.clone().into_os_string()), None).unwrap();
+            discover_codex_from(Some(executable.clone().into_os_string()), None, None).unwrap();
         assert_eq!(configured, fs::canonicalize(&executable).unwrap());
         assert_eq!(source, "environment");
         assert_eq!(
-            discover_codex_from(Some(OsString::from("codex.exe --danger")), None)
+            discover_codex_from(Some(OsString::from("codex.exe --danger")), None, None)
                 .unwrap_err()
                 .code,
             "codex_cli_invalid"
         );
         let path = env::join_paths([root.as_path()]).unwrap();
-        let (_, source) = discover_codex_from(None, Some(path)).unwrap();
+        let (_, source) = discover_codex_from(None, Some(path), None).unwrap();
         assert_eq!(source, "path");
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn official_user_install_is_preferred_over_path_without_scanning() {
+        let root = test_root("official-install-discovery");
+        let local = root.join("local");
+        let path_dir = root.join("path");
+        let official = official_codex_install_path(&local);
+        fs::create_dir_all(official.parent().unwrap()).unwrap();
+        fs::create_dir_all(&path_dir).unwrap();
+        fs::write(&official, b"official").unwrap();
+        fs::write(path_dir.join("codex.exe"), b"path").unwrap();
+        let path = env::join_paths([path_dir.as_path()]).unwrap();
+        let (selected, source) =
+            discover_codex_from(None, Some(path), Some(local.clone().into_os_string())).unwrap();
+        assert_eq!(selected, fs::canonicalize(official).unwrap());
+        assert_eq!(source, "official_install");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn explicit_environment_path_still_precedes_official_user_install() {
+        let root = test_root("configured-before-official");
+        let configured = root.join("configured").join("codex.exe");
+        let local = root.join("local");
+        let official = official_codex_install_path(&local);
+        fs::create_dir_all(configured.parent().unwrap()).unwrap();
+        fs::create_dir_all(official.parent().unwrap()).unwrap();
+        fs::write(&configured, b"configured").unwrap();
+        fs::write(&official, b"official").unwrap();
+        let (selected, source) = discover_codex_from(
+            Some(configured.clone().into_os_string()),
+            None,
+            Some(local.into_os_string()),
+        )
+        .unwrap();
+        assert_eq!(selected, fs::canonicalize(configured).unwrap());
+        assert_eq!(source, "environment");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn official_installer_wrapper_is_fixed_pinned_and_noninteractive() {
+        let script = installer_wrapper_script();
+        assert!(script.contains(OFFICIAL_CODEX_INSTALLER_URL));
+        assert!(script.contains(OFFICIAL_CODEX_INSTALLER_SHA256));
+        assert!(script.contains("CODEX_NON_INTERACTIVE"));
+        assert!(script.contains("Get-FileHash"));
+        assert!(!script.contains("request_id"));
+        assert!(!script.contains("Invoke-Expression"));
+        assert!(INSTALL_TIMEOUT <= Duration::from_secs(180));
+        assert!(MAX_INSTALLER_SCRIPT_BYTES <= 128 * 1024);
+    }
+
+    #[test]
+    fn installer_failures_map_to_stable_codes_without_output() {
+        assert_eq!(
+            installer_exit_diagnostic(Some(22), false).code,
+            "codex_cli_installer_unsupported"
+        );
+        assert_eq!(
+            installer_exit_diagnostic(None, true).code,
+            "codex_cli_install_timeout"
+        );
+        assert_eq!(
+            installer_exit_diagnostic(Some(1), false).code,
+            "codex_cli_install_failed"
+        );
+    }
+
+    #[test]
+    fn installer_response_contains_no_command_url_or_path() {
+        let response = DesktopCodexInstallResponse {
+            request_id: "request-1".into(),
+            status: "installed".into(),
+            probe: Some(CodexCliProbeView {
+                found: true,
+                version: Some("0.144.6".into()),
+                source: Some("official_install".into()),
+            }),
+            error: None,
+        };
+        let serialized = serde_json::to_string(&response).unwrap();
+        for forbidden in ["C:\\", "https://", "powershell", "install.ps1"] {
+            assert!(!serialized.contains(forbidden));
+        }
     }
 
     #[test]
