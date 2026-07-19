@@ -42,7 +42,7 @@ validation:
   - 两次CSV编码均为58550字节且SHA-256完全一致，Python csv独立重读13列577行通过
   - 锁文件、JSON、Markdown相对链接和git diff检查通过
 automated_validation_status: passed
-manual_gui_validation_status: pending_user
+manual_gui_validation_status: passed
 delivery_status: pushed_draft_pr
 pull_request: https://github.com/summer521521/CONTAM-Studio/pull/13
 token_usage:
@@ -51,5 +51,5 @@ token_usage:
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: GUI验收由用户按最终清单完成；不使用Computer Use，不新增验收截图。客户端未提供精确逐任务Token数据，未作估算，也未读取隐藏或敏感数据。
+notes: 用户已完成真实Tauri GUI复核，证据为https://github.com/summer521521/CONTAM-Studio/pull/13#issuecomment-5013358557；未改写本任务历史时间、耗时或Token字段。客户端未提供精确逐任务Token数据，未作估算，也未读取隐藏或敏感数据。
 ```

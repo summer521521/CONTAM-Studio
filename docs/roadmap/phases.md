@@ -30,7 +30,7 @@
 - **主要交付物**：稳定UUID、结构化Patch、Diff、验证、确认、快照和撤销入口。
 - **退出条件**：修改只作用于副本或草稿，保存前后检查可重复，原始PRJ默认不覆盖。
 - **不包含**：复杂引用、全格式无损回写和批量编辑。
-- **当前进展**：Phase 3A-0已在Python核心实现哈希绑定、仅写新副本的单Zone `volume_m3` Patch。Phase 3B进一步建立Rust内存session、完整Patch保管、前端安全审阅视图、单行Diff和原生“另存为新副本”流程；前端不能提交路径或完整Patch，应用成功后切换到新副本。尚未建立稳定UUID、快照、撤销、多Patch、其他字段或完整PRJ保存，因此Phase 3仍未整体完成。
+- **当前进展**：Phase 3A-0实现哈希绑定的单Zone `volume_m3` Patch，Phase 3B建立Rust内存Patch保管和安全Diff审阅。当前Phase 3C把批准的Patch应用到Rust控制的不可变内部Revision，建立确定性Zone UUID、线性Undo/Redo和安全另存当前草稿；运行和结果绑定当前Revision。仍不支持其他字段、多Patch事务、复杂历史、跨重启恢复或完整PRJ保存。
 
 ## Phase 4：第一次真实ContamX运行
 
@@ -73,4 +73,4 @@
 - Phase 5B-1：桌面端真实Zone空气状态摘要已完成。绑定用户选择的Phase 4成功运行清单，显示当前Zone样本表格。
 - Phase 4B-1：受控桌面ContamX运行与安全摘要已完成，用户手动GUI验收通过。
 - Phase 5B-2：已完成。用户明确触发后直接使用Rust内存中的最新成功manifest加载当前Zone结果，同时保留手动清单入口；不在运行结束后自动提取。真实桌面验收证据已记录。
-- Phase 5C：当前切片。为严格验证的当前Zone结果增加原始三联曲线、确定性统计、完整数据表和Rust受控CSV副本导出；仍不包含其他结果类型、多Zone/多运行比较、运行历史、Excel或AI解释。
+- Phase 5C：已完成。为严格验证的当前Zone结果增加原始三联曲线、确定性统计、完整数据表和Rust受控CSV副本导出；真实GUI复核证据见[PR #13评论](https://github.com/summer521521/CONTAM-Studio/pull/13#issuecomment-5013358557)。仍不包含其他结果类型、多Zone/多运行比较、运行历史、Excel或AI解释。

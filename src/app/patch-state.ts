@@ -1,4 +1,4 @@
-import { sanitizeDiagnostic, type ProjectInspection, type ReaderDiagnostic } from "./project-state";
+import { isDraftSummaryValid, isSafeProjectInspection, sanitizeDiagnostic, type DraftSummary, type ProjectInspection, type ReaderDiagnostic } from "./project-state";
 
 export type PatchStatus =
   | "idle"
@@ -12,6 +12,7 @@ export type PatchStatus =
 export interface PatchReviewView {
   project_session_id: string;
   patch_id: string;
+  zone_id: string;
   zone_number: number;
   zone_name: string;
   field: "volume_m3";
@@ -37,6 +38,8 @@ export interface DesktopApplyResponse {
   project_session_id: string | null;
   project: ProjectInspection | null;
   target_zone_number: number | null;
+  target_zone_id: string | null;
+  draft: DraftSummary | null;
   error: ReaderDiagnostic | null;
 }
 
@@ -46,7 +49,7 @@ export interface PatchState {
   planRequestId: string | null;
   applyRequestId: string | null;
   projectSessionId: string | null;
-  zoneNumber: number | null;
+  zoneId: string | null;
   patchId: string | null;
   review: PatchReviewView | null;
   issue: ReaderDiagnostic | null;
@@ -58,14 +61,14 @@ export const INITIAL_PATCH_STATE: PatchState = {
   planRequestId: null,
   applyRequestId: null,
   projectSessionId: null,
-  zoneNumber: null,
+  zoneId: null,
   patchId: null,
   review: null,
   issue: null,
 };
 
 export type PatchAction =
-  | { type: "start_editing"; projectSessionId: string; zoneNumber: number; token: string }
+  | { type: "start_editing"; projectSessionId: string; zoneId: string; token: string }
   | { type: "input_changed"; token: string }
   | { type: "plan_started"; requestId: string }
   | { type: "plan_succeeded"; requestId: string; review: PatchReviewView }
@@ -86,7 +89,7 @@ export function patchReducer(state: PatchState, action: PatchAction): PatchState
         status: "editing",
         newVolumeToken: action.token,
         projectSessionId: action.projectSessionId,
-        zoneNumber: action.zoneNumber,
+        zoneId: action.zoneId,
       };
     case "input_changed":
       return { ...state, status: "editing", newVolumeToken: action.token, patchId: null, review: null, issue: null };
@@ -137,10 +140,9 @@ export function applyResponseIssue(
   if (response.request_id !== requestId) {
     return { code: "patch_apply_response_invalid", message: "Patch apply response mismatch", source_line_number: null, context: {} };
   }
-  const success = !response.cancelled && response.project !== null && response.project_session_id !== null && response.target_zone_number !== null && response.error === null;
-  const cancelled = response.cancelled && response.project === null && response.project_session_id === null && response.error === null;
-  const failed = !response.cancelled && response.project === null && response.project_session_id === null && response.error !== null;
-  if (!success && !cancelled && !failed) {
+  const success = !response.cancelled && response.project !== null && isSafeProjectInspection(response.project) && response.project_session_id !== null && response.target_zone_number !== null && response.target_zone_id !== null && response.draft !== null && isDraftSummaryValid(response.draft) && response.error === null;
+  const failed = !response.cancelled && response.project === null && response.project_session_id === null && response.target_zone_number === null && response.target_zone_id === null && response.draft === null && response.error !== null;
+  if (!success && !failed) {
     return { code: "patch_apply_response_invalid", message: "Patch apply response contract invalid", source_line_number: null, context: {} };
   }
   return response.error ? sanitizeDiagnostic(response.error) : null;

@@ -17,7 +17,7 @@ import { INITIAL_RUN_STATE } from "../../app/run-state";
 const project: ProjectInspection = {
   schema_version: "1.0",
   reader_mode: "strict_contam_3_4_simple_zone_v1",
-  source_path: "F:\\models\\real.prj",
+  source_path: "real.prj",
   source_sha256: "a".repeat(64),
   source_size_bytes: 200,
   source_unchanged: true,
@@ -26,6 +26,7 @@ const project: ProjectInspection = {
   declared_zone_count: 2,
   zones: [
     {
+      zone_id: "00000000-0000-5000-8000-000000000001",
       contam_number: 1,
       name: "One",
       flags: 3,
@@ -35,6 +36,7 @@ const project: ProjectInspection = {
       source_line_number: 243,
     },
     {
+      zone_id: "00000000-0000-5000-8000-000000000002",
       contam_number: 2,
       name: "Two",
       flags: 3,
@@ -54,6 +56,7 @@ const state: ProjectState = {
   activeRequestId: null,
   project,
   projectSessionId: "request-1",
+  draft: { revision_id: "00000000-0000-5000-8000-000000000099", revision_number: 0, history_tip: 0, dirty: false, exported: false, can_undo: false, can_redo: false },
   selectedZoneKey: zoneSelectionKey(project, project.zones[0]),
   issue: null,
 };
@@ -63,6 +66,7 @@ const zoneResult = {
   result_type: "zone_air_state" as const,
   run_id: "run-1",
   extraction_id: "extract-1",
+  zone_id: "00000000-0000-5000-8000-000000000001",
   zone_number: 1,
   zone_name: "One",
   source_line_number: 243,
@@ -89,11 +93,47 @@ describe("real project components", () => {
         openDisabled={false}
         onRunProject={() => undefined}
         runDisabled={true}
+        onUndoDraft={() => undefined}
+        undoDisabled={true}
+        onRedoDraft={() => undefined}
+        redoDisabled={true}
+        onExportDraft={() => undefined}
+        exportDraftDisabled={true}
         onPlaceholder={() => undefined}
       />,
     );
     expect(markup).toContain("tool-button-run");
     expect(markup).toMatch(/tool-button-run[^>]*disabled/);
+  });
+
+  it("renders accessible draft history and copy commands", async () => {
+    await i18n.changeLanguage("en");
+    try {
+      const markup = renderToStaticMarkup(
+        <TopBar
+          language="en"
+          theme="dark"
+          onLanguageChange={() => undefined}
+          onThemeToggle={() => undefined}
+          onOpenProject={() => undefined}
+          openDisabled={false}
+          onRunProject={() => undefined}
+          runDisabled={false}
+          onUndoDraft={() => undefined}
+          undoDisabled={false}
+          onRedoDraft={() => undefined}
+          redoDisabled={false}
+          onExportDraft={() => undefined}
+          exportDraftDisabled={false}
+          onPlaceholder={() => undefined}
+        />,
+      );
+      expect(markup).toContain("aria-label=\"Undo\"");
+      expect(markup).toContain("aria-label=\"Redo\"");
+      expect(markup).toContain("aria-label=\"Save current draft as copy\"");
+    } finally {
+      await i18n.changeLanguage("zh-CN");
+    }
   });
   it("renders all Zones and their CONTAM numbers", () => {
     const markup = renderToStaticMarkup(
@@ -141,7 +181,7 @@ describe("real project components", () => {
           planRequestId: null,
           applyRequestId: null,
           projectSessionId: null,
-          zoneNumber: null,
+          zoneId: null,
           patchId: null,
           review: null,
           issue: null,
@@ -174,7 +214,7 @@ describe("real project components", () => {
           planRequestId: null,
           applyRequestId: null,
           projectSessionId: "session-1",
-          zoneNumber: 1,
+          zoneId: project.zones[0].zone_id,
           patchId: null,
           review: null,
           issue: null,
@@ -199,6 +239,7 @@ describe("real project components", () => {
         review={{
           project_session_id: "session-1",
           patch_id: "patch-1",
+          zone_id: project.zones[0].zone_id,
           zone_number: 1,
           zone_name: "One",
           field: "volume_m3",
@@ -220,7 +261,7 @@ describe("real project components", () => {
     );
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-labelledby="patch-review-title"');
-    expect(markup).toContain("另存为新副本");
+    expect(markup).toContain("应用到草稿");
     expect(markup).toContain("-1 ... 600 ... One");
     expect(markup).toContain("+1 ... 650.0 ... One");
   });
@@ -359,6 +400,7 @@ describe("real project components", () => {
             byte_count: 256,
             run_id: "run-1",
             extraction_id: "extract-1",
+            zone_id: project.zones[0].zone_id,
             zone_number: 1,
           },
         }}

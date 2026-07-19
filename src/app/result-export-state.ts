@@ -14,6 +14,7 @@ export interface ZoneAirStateCsvExportSummary {
   byte_count: number;
   run_id: string;
   extraction_id: string;
+  zone_id: string;
   zone_number: number;
 }
 
@@ -37,6 +38,7 @@ export interface ResultExportState {
   activeSequence: number | null;
   activeRequestId: string | null;
   projectSessionId: string | null;
+  zoneId: string | null;
   zoneNumber: number | null;
   runId: string | null;
   extractionId: string | null;
@@ -49,6 +51,7 @@ export const INITIAL_RESULT_EXPORT_STATE: ResultExportState = {
   activeSequence: null,
   activeRequestId: null,
   projectSessionId: null,
+  zoneId: null,
   zoneNumber: null,
   runId: null,
   extractionId: null,
@@ -62,6 +65,7 @@ export type ResultExportAction =
       sequence: number;
       requestId: string;
       projectSessionId: string;
+      zoneId: string;
       zoneNumber: number;
       runId: string;
       extractionId: string;
@@ -93,6 +97,7 @@ export function resultExportReducer(
         activeSequence: action.sequence,
         activeRequestId: action.requestId,
         projectSessionId: action.projectSessionId,
+        zoneId: action.zoneId,
         zoneNumber: action.zoneNumber,
         runId: action.runId,
         extractionId: action.extractionId,
@@ -115,6 +120,7 @@ export function resultExportReducer(
             activeSequence: null,
             activeRequestId: null,
             projectSessionId: action.projectSessionId,
+            zoneId: action.summary.zone_id,
             zoneNumber: action.summary.zone_number,
             runId: action.summary.run_id,
             extractionId: action.summary.extraction_id,

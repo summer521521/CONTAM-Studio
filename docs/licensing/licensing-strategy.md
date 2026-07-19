@@ -8,6 +8,7 @@
 - CONTAM Studio是独立项目，不是NIST官方产品，不得暗示NIST认可、维护或背书。
 - CONTAM Studio自身代码和内容采用何种许可证尚未由用户决定。
 - Phase 5C新增`echarts 6.1.0`，来源为Apache ECharts官方包，许可证为Apache-2.0。项目只使用模块化Canvas折线图组件；发布前第三方声明需包含该依赖及其许可证文本。
+- Phase 3C新增Rust `uuid 1.24.0`，只启用确定性UUID v5所需feature，来源为官方crates.io包，许可证为Apache-2.0 OR MIT。未新增前端或Python运行时依赖；发布前第三方声明需包含该crate及实际锁定的传递依赖。
 
 ## Phase 0处理
 

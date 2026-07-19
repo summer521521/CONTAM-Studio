@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 5C Result analysis"
+    "phase": "Phase 3C reversible drafts"
   },
   "common": {
     "yes": "Yes",
@@ -17,6 +17,21 @@
     "light": "Light",
     "dark": "Dark",
     "settings": "Settings"
+  },
+  "draft": {
+    "toolbarLabel": "Draft history",
+    "undo": "Undo",
+    "redo": "Redo",
+    "export": "Save current draft as copy",
+    "statusTitle": "Current draft revision",
+    "original": "Original project",
+    "revision": "Draft Revision {{revision}}",
+    "notExported": "Current changes not saved as a copy",
+    "exported": "Current revision saved as a copy",
+    "undoSuccess": "Moved to Revision {{revision}}.",
+    "redoSuccess": "Moved to Revision {{revision}}.",
+    "exportCancelled": "Draft export was cancelled; the draft is unchanged.",
+    "exportSuccess": "Created {{file}} from the current draft; the original PRJ is unchanged."
   },
   "navigation": {
     "projects": "Projects",
@@ -130,7 +145,7 @@
     "bytes": "{{value}} bytes",
     "hash": "SHA-256",
     "readerMode": "Reader mode",
-    "showSourcePath": "Show full source path",
+    "showSourcePath": "Show source file name",
     "openAnother": "Open another PRJ",
     "cancelledHint": "File selection was cancelled. No file was read.",
     "status": {
@@ -266,12 +281,15 @@
     "newValue": "New value",
     "diffLabel": "Single-line Zone volume Diff",
     "originalUnchanged": "The original PRJ will not be overwritten",
-    "copyOnlyBoundary": "Confirmation creates a new PRJ copy and changes only one Vol token.",
+    "copyOnlyBoundary": "Confirmation creates a new immutable internal draft revision and changes only one Vol token.",
     "bytePreservation": "Unknown sections are preserved as original bytes; the full PRJ is not rebuilt.",
     "backToEdit": "Back to edit",
     "cancel": "Cancel change",
     "saveAsCopy": "Save as new copy",
     "creatingCopy": "Creating copy",
+    "applyToDraft": "Apply to draft",
+    "applyingDraft": "Applying to draft",
+    "draftAppliedSuccess": "Draft Revision {{revision}} is active. The original PRJ was not modified.",
     "saveDialogCancelled": "Save As was cancelled; the review remains open.",
     "copyCreatedSuccess": "A new copy was created and opened. The original PRJ was not modified."
   },
@@ -343,6 +361,21 @@
       "patch_precondition_failed": "The source or Patch preconditions changed; generate a new preview",
       "patch_application_failed": "A new PRJ copy could not be created safely",
       "patch_verification_failed": "The new copy failed deterministic verification and was removed",
+      "draft_session_missing": "No active draft session is available",
+      "draft_session_mismatch": "The draft session changed; reopen the project",
+      "draft_revision_missing": "The draft revision file is unavailable",
+      "draft_revision_changed": "The draft revision no longer matches its verified snapshot",
+      "draft_history_limit_reached": "The draft history limit was reached",
+      "draft_baseline_changed": "The original PRJ changed outside CONTAM Studio; the baseline cannot be restored",
+      "draft_identity_mismatch": "The draft no longer preserves the verified Zone identities",
+      "draft_apply_failed": "The approved change could not be applied to a new draft revision",
+      "draft_undo_unavailable": "No earlier draft revision is available",
+      "draft_redo_unavailable": "No later draft revision is available",
+      "draft_export_destination_invalid": "The draft copy destination is invalid",
+      "draft_export_destination_exists": "A file already exists there and will not be overwritten",
+      "draft_export_conflicts_with_source": "The draft copy cannot replace the original or an internal snapshot",
+      "draft_export_write_failed": "The draft copy could not be written safely",
+      "draft_export_verification_failed": "The exported draft copy failed verification and was removed",
       "bridge_internal_error": "Python reader bridge internal error",
       "contamx_solver_not_configured": "A supported ContamX is not configured; set CONTAM_STUDIO_CONTAMX",
       "contamx_solver_not_found": "The configured ContamX could not be found",

@@ -10,6 +10,7 @@ import {
 const review: PatchReviewView = {
   project_session_id: "session-1",
   patch_id: "patch-1",
+  zone_id: "00000000-0000-5000-8000-000000000001",
   zone_number: 1,
   zone_name: "One",
   field: "volume_m3",
@@ -28,7 +29,7 @@ describe("Patch workflow reducer", () => {
     const editing = patchReducer(INITIAL_PATCH_STATE, {
       type: "start_editing",
       projectSessionId: "session-1",
-      zoneNumber: 1,
+      zoneId: review.zone_id,
       token: "600",
     });
     const changed = patchReducer(editing, { type: "input_changed", token: "650.0" });
@@ -57,7 +58,7 @@ describe("Patch workflow reducer", () => {
     expect(patchReducer(state, { type: "plan_succeeded", requestId: "patch-1", review })).toBe(state);
   });
 
-  it("keeps review after native save cancellation", () => {
+  it("keeps review if a legacy cancellation action is received", () => {
     const applying = {
       ...INITIAL_PATCH_STATE,
       status: "applying" as const,
@@ -107,12 +108,12 @@ describe("desktop Patch response contracts", () => {
     expect(JSON.stringify(review)).not.toContain("source_path");
   });
 
-  it("accepts native save cancellation as a normal apply response", () => {
-    expect(applyResponseIssue({ request_id: "apply-1", cancelled: true, project_session_id: null, project: null, target_zone_number: null, error: null }, "apply-1")).toBeNull();
+  it("rejects cancellation because draft application has no save dialog", () => {
+    expect(applyResponseIssue({ request_id: "apply-1", cancelled: true, project_session_id: null, project: null, target_zone_number: null, target_zone_id: null, draft: null, error: null }, "apply-1")?.code).toBe("patch_apply_response_invalid");
   });
 
   it("rejects a stale or contradictory apply response", () => {
-    const issue = applyResponseIssue({ request_id: "old", cancelled: true, project_session_id: null, project: null, target_zone_number: null, error: null }, "apply-1");
+    const issue = applyResponseIssue({ request_id: "old", cancelled: true, project_session_id: null, project: null, target_zone_number: null, target_zone_id: null, draft: null, error: null }, "apply-1");
     expect(issue?.code).toBe("patch_apply_response_invalid");
   });
 });

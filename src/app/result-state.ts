@@ -18,6 +18,7 @@ export interface ZoneAirStateResult {
   result_type: "zone_air_state";
   run_id: string;
   extraction_id: string;
+  zone_id: string;
   zone_number: number;
   zone_name: string;
   source_line_number: number;
@@ -48,6 +49,7 @@ export interface ResultState {
   activeSequence: number | null;
   activeRequestId: string | null;
   projectSessionId: string | null;
+  zoneId: string | null;
   zoneNumber: number | null;
   result: ZoneAirStateResult | null;
   resultSource: ResultLoadSource | null;
@@ -56,8 +58,8 @@ export interface ResultState {
 }
 
 export type ResultAction =
-  | { type: "selection_started"; sequence: number; requestId: string; projectSessionId: string; zoneNumber: number }
-  | { type: "active_run_started"; sequence: number; requestId: string; projectSessionId: string; zoneNumber: number }
+  | { type: "selection_started"; sequence: number; requestId: string; projectSessionId: string; zoneId: string; zoneNumber: number }
+  | { type: "active_run_started"; sequence: number; requestId: string; projectSessionId: string; zoneId: string; zoneNumber: number }
   | { type: "host_loading_started"; requestId: string }
   | { type: "load_cancelled"; sequence: number; requestId: string }
   | { type: "load_succeeded"; sequence: number; requestId: string; projectSessionId: string; result: ZoneAirStateResult }
@@ -70,6 +72,7 @@ export const INITIAL_RESULT_STATE: ResultState = {
   activeSequence: null,
   activeRequestId: null,
   projectSessionId: null,
+  zoneId: null,
   zoneNumber: null,
   result: null,
   resultSource: null,
@@ -90,6 +93,7 @@ export function resultReducer(state: ResultState, action: ResultAction): ResultS
         activeSequence: action.sequence,
         activeRequestId: action.requestId,
         projectSessionId: action.projectSessionId,
+        zoneId: action.zoneId,
         zoneNumber: action.zoneNumber,
         pendingSource: "selected_manifest",
         issue: null,
@@ -101,6 +105,7 @@ export function resultReducer(state: ResultState, action: ResultAction): ResultS
         activeSequence: action.sequence,
         activeRequestId: action.requestId,
         projectSessionId: action.projectSessionId,
+        zoneId: action.zoneId,
         zoneNumber: action.zoneNumber,
         pendingSource: "active_run",
         issue: null,
@@ -121,6 +126,7 @@ export function resultReducer(state: ResultState, action: ResultAction): ResultS
             activeSequence: null,
             activeRequestId: null,
             projectSessionId: action.projectSessionId,
+            zoneId: action.result.zone_id,
             zoneNumber: action.result.zone_number,
             result: action.result,
             resultSource: state.pendingSource,

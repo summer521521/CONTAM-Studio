@@ -2,7 +2,7 @@
 
 ## 决策状态
 
-Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch计划和副本应用。Python冻结、安装包路径及长期进程形式仍未定型。
+Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Python冻结、安装包路径及长期进程形式仍未定型。
 
 ## 概念架构
 
@@ -30,21 +30,21 @@ Rust受控命令
 
 该路径不调用contamxpy或ContamX。React只接收结构化结果，不直接读取文件或启动进程；详细边界见[Tauri-Python Zone桥](tauri-python-zone-bridge.md)。
 
-Phase 3A-0建立的修改路径已在Phase 3B接入受控桌面审阅：
+Phase 3A-0建立的修改路径在Phase 3C形成可逆草稿闭环：
 
 ```text
 严格Zone读取结果+源文件字节
 ↓ 哈希、大小、行号、旧记号和字节范围绑定
 结构化volume_m3 Patch+单行Diff
 ↓ Rust内存保管完整Patch，React只审阅安全视图
-用户确认+Rust原生另存为
+用户确认“应用到草稿”+Rust生成内部新Revision
 ↓ 应用时重新验证
-不存在的新PRJ副本
+不可变内部PRJ快照
 ↓ 字节公式与严格读取器后置验证
-已验证副本
+已验证Revision→Undo/Redo指针或安全另存副本
 ```
 
-前端不能提交源路径、输出路径或完整Patch。该路径不重建整份PRJ，只替换目标Zone的一个Vol ASCII记号；未知区块依靠原始字节保留。详细边界见[Zone体积副本Patch](zone-volume-patch.md)。
+前端不能提交源路径、内部快照路径、输出路径、完整Patch或CONTAM编号。Rust以稳定`zone_id`解析当前Revision中的外部编号；该路径不重建整份PRJ，只替换目标Zone的一个Vol ASCII记号。详细边界见[Zone体积副本Patch](zone-volume-patch.md)和[不可变草稿Revision](draft-project-revisions.md)。
 
 Phase 4A的独立运行路径与项目打开、Patch应用分离：
 

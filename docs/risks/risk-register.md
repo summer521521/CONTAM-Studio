@@ -38,3 +38,7 @@
 | R-5C-1 | 图表或统计改变、丢弃或误解释结果样本 | 高 | 纯TypeScript一次遍历契约；拒绝非有限值、重复索引和时间倒退；曲线禁用平滑、采样、插值和缺失值连接；保留完整数据表 | Phase 5C |
 | R-5C-2 | WebView伪造CSV内容或导出路径 | 极高 | Rust内存`ActiveResultContext`绑定项目/Zone/运行/提取；React只提交身份；原生保存对话框持有路径；不开放前端文件系统权限 | Phase 5C |
 | R-5C-3 | CSV覆盖既有证据或触发表格公式 | 高 | 只写不存在的新`.csv`；同目录独占临时文件、flush、fsync和原子提交；RFC转义及危险文本前缀防护 | Phase 5C |
+| R-3C-1 | 草稿快照覆盖原始PRJ或泄露内部路径 | 极高 | Revision 0只读；内部Revision仅由Rust在应用本地数据目录创建；WebView只接收文件名和安全摘要；另存拒绝源文件、内部快照和既有目标 | Phase 3C |
+| R-3C-2 | UUID跨项目误复用或Revision间身份漂移 | 极高 | UUID v5绑定基线SHA-256、对象类型、基线编号、源行和名称；每次新Revision、Undo/Redo都严格重读并验证映射 | Phase 3C |
+| R-3C-3 | Undo/Redo失败移动cursor或旧运行结果跨Revision复用 | 极高 | 切换前验证目标哈希、大小和Zone身份；失败保持cursor及可靠上下文；成功后清除Patch、运行、结果和导出状态 | Phase 3C-5 |
+| R-3C-4 | 崩溃残留草稿被错误恢复为可信项目 | 高 | 草稿仅限当前应用会话；正常切换/退出尽可能清理；启动时不扫描、不恢复、不信任残留目录 | Phase 3C、Beta |

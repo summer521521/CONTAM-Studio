@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   desktopOpenIssue,
   INITIAL_PROJECT_STATE,
+  isDraftExportSummaryValid,
+  isDraftSummaryValid,
+  isSafeProjectInspection,
   projectReducer,
   selectedZone,
   zoneSelectionKey,
@@ -11,6 +14,7 @@ import {
 
 function project(zoneCount = 2): ProjectInspection {
   const zones = Array.from({ length: zoneCount }, (_, index) => ({
+    zone_id: `00000000-0000-5000-8000-${String(index + 1).padStart(12, "0")}`,
     contam_number: index + 1,
     name: `Zone${index + 1}`,
     flags: index + 3,
@@ -22,7 +26,7 @@ function project(zoneCount = 2): ProjectInspection {
   return {
     schema_version: "1.0",
     reader_mode: "strict_contam_3_4_simple_zone_v1",
-    source_path: "F:\\models\\sample.prj",
+    source_path: "sample.prj",
     source_sha256: "a".repeat(64),
     source_size_bytes: 1000,
     source_unchanged: true,
@@ -41,6 +45,7 @@ const issue: ReaderDiagnostic = {
   source_line_number: 12,
   context: { field: "Vol", token: "bad" },
 };
+const draft = { revision_id: "00000000-0000-5000-8000-000000000099", revision_number: 0, history_tip: 0, dirty: false, exported: false, can_undo: false, can_redo: false };
 
 describe("projectReducer", () => {
   it("moves from idle through loading to loaded", () => {
@@ -63,6 +68,7 @@ describe("projectReducer", () => {
       requestId: "request-1",
       project: project(),
       projectSessionId: "request-1",
+      draft,
     });
     expect(loaded.status).toBe("loaded");
     expect(loaded.project?.zones).toHaveLength(2);
@@ -132,6 +138,7 @@ describe("projectReducer", () => {
       requestId: "request-3",
       project: project(),
       projectSessionId: "request-3",
+      draft,
     });
     expect(stale).toBe(current);
   });
@@ -152,13 +159,14 @@ describe("projectReducer", () => {
       requestId: "request-1",
       project: project(0),
       projectSessionId: "request-1",
+      draft,
     });
     expect(loaded.status).toBe("loaded");
     expect(loaded.selectedZoneKey).toBeNull();
     expect(selectedZone(loaded)).toBeNull();
   });
 
-  it("selects another Zone by a non-persistent composite key", () => {
+  it("selects another Zone by its stable UUID", () => {
     const loadedProject = project();
     const state = {
       ...INITIAL_PROJECT_STATE,
@@ -172,13 +180,48 @@ describe("projectReducer", () => {
     });
     expect(selectedZone(selected)?.name).toBe("Zone2");
   });
+
+  it("replaces a revision while preserving the selected stable UUID", () => {
+    const baseline = project();
+    const selectedId = baseline.zones[1].zone_id;
+    const state = {
+      ...INITIAL_PROJECT_STATE,
+      status: "loaded" as const,
+      project: baseline,
+      projectSessionId: "session-1",
+      draft,
+      selectedZoneKey: selectedId,
+    };
+    const revision = {
+      ...baseline,
+      source_sha256: "b".repeat(64),
+      zones: baseline.zones.map((zone) => zone.zone_id === selectedId ? { ...zone, volume_m3: 650 } : zone),
+    };
+    const nextDraft = { ...draft, revision_id: "00000000-0000-5000-8000-000000000100", revision_number: 1, history_tip: 1, dirty: true, can_undo: true };
+    const next = projectReducer(state, {
+      type: "draft_replaced",
+      project: revision,
+      projectSessionId: "session-1",
+      targetZoneId: selectedId,
+      draft: nextDraft,
+    });
+    expect(next.selectedZoneKey).toBe(selectedId);
+    expect(selectedZone(next)?.volume_m3).toBe(650);
+    expect(next.draft?.can_undo).toBe(true);
+  });
+
+  it("marks only the active revision as exported", () => {
+    const state = { ...INITIAL_PROJECT_STATE, draft: { ...draft, dirty: true } };
+    expect(projectReducer(state, { type: "draft_exported", revisionId: "old" })).toEqual(state);
+    expect(projectReducer(state, { type: "draft_exported", revisionId: draft.revision_id }).draft?.exported).toBe(true);
+  });
 });
 
 describe("desktop open response", () => {
   it("treats cancellation without an envelope as a normal response", () => {
     expect(
       desktopOpenIssue(
-        { request_id: "request-1", cancelled: true, project_session_id: null, envelope: null },
+        { request_id: "request-1", cancelled: true, project_session_id: null, envelope: null, draft: null },
         "request-1",
       ),
     ).toBeNull();
@@ -190,6 +233,7 @@ describe("desktop open response", () => {
         request_id: "request-1",
         cancelled: true,
         project_session_id: null,
+        draft: null,
         envelope: {
           protocol_version: "1.0",
           request_id: "request-1",
@@ -205,9 +249,23 @@ describe("desktop open response", () => {
 
   it("rejects a response for another request", () => {
     const invalid = desktopOpenIssue(
-      { request_id: "request-2", cancelled: true, project_session_id: null, envelope: null },
+      { request_id: "request-2", cancelled: true, project_session_id: null, envelope: null, draft: null },
       "request-1",
     );
     expect(invalid?.code).toBe("desktop_response_request_mismatch");
+  });
+
+  it("rejects paths and inconsistent draft metadata at the WebView boundary", () => {
+    expect(isSafeProjectInspection(project())).toBe(true);
+    expect(isSafeProjectInspection({ ...project(), source_path: "F:\\private\\sample.prj" })).toBe(false);
+    expect(isDraftSummaryValid(draft)).toBe(true);
+    expect(isDraftSummaryValid({ ...draft, can_undo: true })).toBe(false);
+  });
+
+  it("accepts only a path-free verified draft export summary", () => {
+    const summary = { file_name: "sample-copy.prj", sha256: "b".repeat(64), size_bytes: 1000, zone_count: 2, revision_number: 1, matches_active_revision: true };
+    expect(isDraftExportSummaryValid(summary)).toBe(true);
+    expect(isDraftExportSummaryValid({ ...summary, file_name: "F:\\private\\sample-copy.prj" })).toBe(false);
+    expect(isDraftExportSummaryValid({ ...summary, matches_active_revision: false })).toBe(false);
   });
 });

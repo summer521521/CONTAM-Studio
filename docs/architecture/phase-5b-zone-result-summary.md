@@ -5,7 +5,7 @@
 Phase 5B-1把一个已打开的受支持PRJ、当前Zone和用户主动选择的Phase 4成功运行清单连接到现有Phase 5A `zone_air_state`提取接口。Phase 5B-2增加另一条显式入口：用户点击后直接使用Rust内存中的最新成功运行。桌面只显示当前Zone的真实摘要与可滚动样本表格。
 
 ```text
-React（request_id、project_session_id、Zone编号）
+React（request_id、project_session_id、稳定zone_id）
 ↓ Tauri invoke
 Rust（活动项目会话、应用本地结果根目录）
 ├─ 最新运行：受控ActiveRunContext，不打开对话框
@@ -18,7 +18,7 @@ extract_zone_air_state（Phase 4 manifest → SimRead → 严格NFR）
 
 ## 路径与身份边界
 
-React不能提交PRJ、manifest、SIM、SimRead、结果目录路径或`run_id`。Rust只接受当前内存中的项目session和Zone编号；结果提取根目录由Tauri `app_local_data_dir()/result-extractions`确定。手动入口由原生JSON对话框取得manifest。最新运行入口只接受`ActiveRunContext`中严格位于`<app-local-data>/runs/<run_id>/evidence/manifest.json`的规范化manifest，并绑定当前项目session和SHA-256。Python在启动SimRead前验证Phase 4 manifest属于当前项目、源SHA-256一致且Zone存在，Phase 5A继续负责其余证据复核。
+React不能提交PRJ、manifest、SIM、SimRead、结果目录路径、`run_id`或CONTAM编号。Rust只接受当前项目session和稳定`zone_id`，解析当前Revision中的外部编号；结果提取根目录由Tauri `app_local_data_dir()/result-extractions`确定。手动入口由原生JSON对话框取得manifest。最新运行入口只接受`ActiveRunContext`中的受控manifest，并绑定当前项目session、`revision_id`和SHA-256。Python在启动SimRead前验证Phase 4 manifest属于当前Revision、源SHA-256一致且Zone存在，Phase 5A继续负责其余证据复核。
 
 取消manifest选择不是错误，不启动Python。错误不会把其他项目或其他Zone的部分结果交给WebView。Rust验证协议、request_id、Zone身份、样本数量、有限数值、单调时间和`day_type=null`后才返回安全结果视图；Python原始路径和诊断文本不进入界面。
 
@@ -36,4 +36,4 @@ React不能提交PRJ、manifest、SIM、SimRead、结果目录路径或`run_id`�
 
 ## 当前不支持
 
-不支持任意SIM/NFR、自动结果提取、多Zone或多运行比较、运行历史、路径流量、污染物、AI、长期Python服务和结果自动清理。Phase 5C已增加当前Zone曲线和CSV副本导出；session、活动运行和活动结果只在本次应用内存中有效，不是稳定UUID。
+不支持任意SIM/NFR、自动结果提取、多Zone或多运行比较、运行历史、路径流量、污染物、AI、长期Python服务和结果自动清理。Phase 5C已增加当前Zone曲线和CSV副本导出；项目session、活动运行和活动结果只在本次应用内存中有效，Zone UUID只在同一原始基线及其草稿Revision范围内稳定。

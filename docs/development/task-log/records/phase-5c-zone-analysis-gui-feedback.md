@@ -39,5 +39,6 @@ token_usage:
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: 三个展示修正等待用户在真实Tauri窗口复核；不使用Computer Use，不更新截图。用户生成的fixture目录CSV是手动验收产物，保持未跟踪且不修改、不提交。客户端未提供精确逐任务Token数据。
+manual_gui_validation_status: passed
+notes: 用户已完成三个展示修正的真实Tauri复核，证据为https://github.com/summer521521/CONTAM-Studio/pull/13#issuecomment-5013358557；未改写历史开始时间、结束时间、耗时或Token字段。用户生成的fixture目录CSV保持未跟踪且不修改、不提交。
 ```

@@ -8,7 +8,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             zone_bridge::select_and_read_prj_zones,
             zone_bridge::plan_zone_volume_patch,
-            zone_bridge::apply_zone_volume_patch_to_copy,
+            zone_bridge::apply_zone_volume_patch_to_draft,
+            zone_bridge::undo_project_draft,
+            zone_bridge::redo_project_draft,
+            zone_bridge::export_active_project_draft_copy,
             zone_bridge::select_and_extract_zone_air_state,
             zone_bridge::extract_active_run_zone_air_state,
             zone_bridge::export_active_zone_air_state_csv,

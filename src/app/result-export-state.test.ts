@@ -10,6 +10,7 @@ const start = () => resultExportReducer(INITIAL_RESULT_EXPORT_STATE, {
   sequence: 1,
   requestId: "export-1",
   projectSessionId: "session-1",
+  zoneId: "00000000-0000-5000-8000-000000000001",
   zoneNumber: 1,
   runId: "run-1",
   extractionId: "extract-1",
@@ -44,7 +45,7 @@ describe("Zone result CSV export state", () => {
       sequence: 0,
       requestId: "old",
       projectSessionId: "session-1",
-      summary: { file_name: "old.csv", row_count: 1, byte_count: 2, run_id: "run-1", extraction_id: "extract-1", zone_number: 1 },
+      summary: { file_name: "old.csv", row_count: 1, byte_count: 2, run_id: "run-1", extraction_id: "extract-1", zone_id: "00000000-0000-5000-8000-000000000001", zone_number: 1 },
     });
     expect(stale).toEqual(selecting);
     expect(resultExportReducer(selecting, { type: "result_changed" })).toEqual(INITIAL_RESULT_EXPORT_STATE);

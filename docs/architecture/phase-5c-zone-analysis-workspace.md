@@ -30,17 +30,17 @@ ActiveResultContext（仅桌面宿主内存）
 
 Rust只在Python成功、严格结果契约、项目、Zone、运行和提取身份全部验证后保存`ActiveResultContext`。上下文绑定：
 
-- 项目session和源SHA-256；
+- 项目session、活动`revision_id`和源SHA-256；
 - Zone编号、名称和源行号；
 - `run_id`和`extraction_id`；
 - `active_run`或`selected_manifest`来源；
 - 完整严格结果、样本数和SI单位。
 
-提取失败或对话框取消不覆盖旧上下文；新项目或Patch副本激活时清除；新Zone结果成功时替换；新ContamX运行成功时保留旧结果，以便界面明确标记为较早运行。上下文不持久化，不是稳定UUID，也不向WebView序列化manifest、SIM或结果目录路径。
+提取失败或对话框取消不覆盖旧上下文；新项目、新草稿Revision、Undo或Redo成功时清除；新Zone结果成功时替换；新ContamX运行成功时保留旧结果，以便界面明确标记为较早运行。上下文不持久化，也不向WebView序列化内部快照、manifest、SIM或结果目录路径。
 
 ## 导出边界
 
-React只提交`request_id`、项目session、Zone编号、`run_id`和`extraction_id`。它不提交导出路径、样本、CSV、PRJ、manifest、SIM或结果目录。Rust从`ActiveResultContext`重新验证所有身份，并在对话框前、写入前和写入后流式复核源PRJ大小与SHA-256；变化时删除本次新CSV并整体拒绝。目标通过原生保存对话框取得。取消不是错误，现有文件、非`.csv`、源PRJ、缺失父目录和不可用目录整体拒绝。
+React只提交`request_id`、项目session、`revision_id`、稳定`zone_id`、`run_id`和`extraction_id`。它不提交CONTAM编号、导出路径、样本、CSV、PRJ、manifest、SIM或结果目录。Rust从`ActiveResultContext`重新验证所有身份，并在对话框前、写入前和写入后流式复核当前Revision大小与SHA-256；变化时删除本次新CSV并整体拒绝。目标通过原生保存对话框取得。取消不是错误，现有文件、非`.csv`、当前PRJ、缺失父目录和不可用目录整体拒绝。
 
 导出在目标目录用`create_new`创建临时文件，完整写入后`flush`、`sync_all`、关闭并原子重命名；失败清理临时文件。最终目标绝不静默覆盖。WebView只收到文件名、数据行数、字节数和结果身份，不收到路径或底层IO错误。
 

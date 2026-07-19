@@ -11,6 +11,7 @@ export const RESULT_FIXTURE: ZoneAirStateResult = {
   result_type: "zone_air_state",
   run_id: "run-1",
   extraction_id: "extract-1",
+  zone_id: "00000000-0000-5000-8000-000000000001",
   zone_number: 1,
   zone_name: "One",
   source_line_number: 243,
@@ -35,6 +36,7 @@ function start(sequence = 1, requestId = "r1") {
     sequence,
     requestId,
     projectSessionId: "s1",
+    zoneId: RESULT_FIXTURE.zone_id,
     zoneNumber: 1,
   });
 }
@@ -53,6 +55,7 @@ describe("Zone result state", () => {
       sequence: 1,
       requestId: "active-1",
       projectSessionId: "s1",
+      zoneId: RESULT_FIXTURE.zone_id,
       zoneNumber: 1,
     });
     expect(loading.status).toBe("loading");
@@ -112,6 +115,7 @@ describe("Zone result state", () => {
       sequence: 2,
       requestId: "r2",
       projectSessionId: "s1",
+      zoneId: RESULT_FIXTURE.zone_id,
       zoneNumber: 1,
     });
     const cancelled = resultReducer(selecting, { type: "load_cancelled", sequence: 2, requestId: "r2" });
@@ -123,6 +127,7 @@ describe("Zone result state", () => {
       sequence: 3,
       requestId: "r3",
       projectSessionId: "s1",
+      zoneId: RESULT_FIXTURE.zone_id,
       zoneNumber: 1,
     });
     const failed = resultReducer(retry, {

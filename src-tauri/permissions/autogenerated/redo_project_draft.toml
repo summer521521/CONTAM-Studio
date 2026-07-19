@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-redo-project-draft"
+description = "Enables the redo_project_draft command without any pre-configured scope."
+commands.allow = ["redo_project_draft"]
+
+[[permission]]
+identifier = "deny-redo-project-draft"
+description = "Denies the redo_project_draft command without any pre-configured scope."
+commands.deny = ["redo_project_draft"]

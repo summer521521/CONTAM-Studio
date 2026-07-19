@@ -2,7 +2,7 @@
 
 ## 定位
 
-`contam_studio_core.zone_volume_patch`是严格单字段修改切片。它只为读取模式`strict_contam_3_4_simple_zone_v1`下的`volume_m3`生成结构化Patch，并只应用到尚不存在的新`.prj`副本。Phase 3B已通过一次性Python桥把计划、Diff审阅和“另存为新副本”接入桌面；它仍不是完整PRJ保存、回写或通用编辑框架，也未接入AI。
+`contam_studio_core.zone_volume_patch`是严格单字段修改切片。它只为读取模式`strict_contam_3_4_simple_zone_v1`下的`volume_m3`生成结构化Patch，并只应用到尚不存在的新`.prj`副本。Phase 3C通过一次性Python桥复用计划、Diff和副本应用，把输出登记为Rust控制的不可变草稿Revision；它仍不是完整PRJ保存、回写或通用编辑框架，也未接入AI。
 
 ## Patch契约
 
@@ -52,14 +52,14 @@ source_bytes[:byte_start]
 - 目标Zone只有`volume_m3`变化，其他已解析字段不变；其他Zone完全不变。
 - 输出目录没有新增SIM、LOG或XLOG。
 
-## 桌面审阅边界
+## 桌面草稿边界
 
-- 打开成功后Rust在内存中保存规范化源路径、源哈希、大小、读取模式和文件头，并以本次请求ID作为临时`project_session_id`。它不是稳定UUID，不落盘、不跨重启恢复。
-- 计划命令只允许前端提交session、CONTAM Zone编号和原始新记号。Rust验证Python返回的完整Patch后将其保存在内存，只向前端返回Zone、旧/新值、行号和单行Diff。
+- 打开成功后Rust在内存中保存原始基线、确定性Zone UUID、Revision 0和线性历史；`project_session_id`只属于当前应用运行，不跨重启恢复。
+- 计划命令只允许前端提交session、稳定`zone_id`和原始新记号。Rust解析当前Revision的CONTAM编号，验证Python返回的完整Patch后将其保存在内存，只向前端返回Zone、旧/新值、行号和单行Diff。
 - 前端不能取得或回传源路径、输出路径、字节范围、前置条件或完整Patch。修改输入、切换Zone或成功打开新项目都会使旧审阅失效。
-- 只有用户点击“另存为新副本”后Rust才打开原生保存对话框。取消不会写文件且保留审阅；输出已存在、等于源文件或后缀不受支持时失败关闭。
-- 应用命令只接受session和`patch_id`，完整Patch来自Rust内存，输出路径来自Rust对话框。Python应用后再次严格读取副本，Rust再验证结果和新项目文档，全部通过后桌面才切换到副本。
-- 打开、计划和应用通过宿主操作门闩串行化；Rust不在等待对话框或Python时持有普通状态锁。应用失败保留原项目，前置条件失效会清除旧计划。
+- 用户点击“应用到草稿”后，Rust生成内部下一Revision路径并调用Python；不打开保存对话框。全部验证通过后才提交新Revision并清除旧运行/结果，失败保持当前Revision和历史。
+- Undo/Redo只验证并移动不可变Revision指针。另存当前草稿是独立命令，只复制活动Revision到用户明确选择且不存在的新PRJ，不自动切换项目或创建Revision。
+- 打开、计划、应用、Undo/Redo、另存和运行通过宿主操作门闩串行化；Rust不在等待对话框或Python时持有普通状态锁。
 
 ## CLI
 
@@ -83,8 +83,8 @@ python\.venv\Scripts\python.exe -m contam_studio_core.zone_volume_patch apply SO
 
 - 覆盖源PRJ或既有输出。
 - Zone名称、楼层、flags、温度、压力及其他字段。
-- 多Patch、Patch合并、并发编辑、撤销栈、稳定UUID或完整PRJ AST。
+- 多Patch、Patch合并、并发编辑、复杂分支历史、跨重启草稿恢复或完整PRJ AST。
 - 完整PRJ保存、编号重排、未知区块语义修改或复杂Zone记录。
 - 多字段GUI编辑、传统“保存当前项目”、AI自动应用或ContamX运行。
 
-当前桌面只支持人工审阅单行Diff并另存新副本；Patch不能直接交给AI自动执行。
+当前桌面只支持人工审阅单行Diff、应用到不可变草稿Revision、线性Undo/Redo和安全另存副本；Patch不能直接交给AI自动执行。
