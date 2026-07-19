@@ -755,18 +755,19 @@ fn capture_limited<R: Read + Send + 'static>(
     })
 }
 
-fn join_capture_bounded(
-    handle: thread::JoinHandle<(Vec<u8>, bool)>,
+fn join_capture_pair_bounded(
+    first: thread::JoinHandle<(Vec<u8>, bool)>,
+    second: thread::JoinHandle<(Vec<u8>, bool)>,
     timeout: Duration,
-) -> Option<(Vec<u8>, bool)> {
+) -> Option<((Vec<u8>, bool), (Vec<u8>, bool))> {
     let deadline = Instant::now() + timeout;
-    while !handle.is_finished() && Instant::now() < deadline {
+    while (!first.is_finished() || !second.is_finished()) && Instant::now() < deadline {
         thread::sleep(POLL_INTERVAL);
     }
-    if !handle.is_finished() {
+    if !first.is_finished() || !second.is_finished() {
         return None;
     }
-    handle.join().ok()
+    Some((first.join().ok()?, second.join().ok()?))
 }
 
 fn wait_for_child_exit(child: &mut Child, timeout: Duration) -> Option<ExitStatus> {
@@ -802,61 +803,34 @@ fn probe_codex_executable(probe_dir: &Path) -> Result<CodexExecutable, AiDiagnos
     probe_codex_at(path, source, probe_dir)
 }
 
-fn probe_codex_at(
-    path: PathBuf,
-    source: String,
-    probe_dir: &Path,
-) -> Result<CodexExecutable, AiDiagnostic> {
+fn probe_codex_presence(probe_dir: &Path) -> Result<CodexCliProbeView, AiDiagnostic> {
+    let (path, source) = discover_codex()?;
     let before = fs::metadata(&path)
         .map_err(|_| AiDiagnostic::new("codex_cli_invalid", "Codex CLI could not be inspected."))?;
-    let (before_sha256, before_size) = sha256_file(&path)
-        .map_err(|_| AiDiagnostic::new("codex_cli_invalid", "Codex CLI could not be inspected."))?;
-    if before_size != before.len() {
+    if !before.is_file() {
+        return Err(AiDiagnostic::new(
+            "codex_cli_invalid",
+            "Codex CLI could not be inspected.",
+        ));
+    }
+    let version = probe_codex_version_at(&path, probe_dir)?;
+    let after = fs::metadata(&path)
+        .map_err(|_| AiDiagnostic::new("codex_cli_invalid", "Codex CLI changed during probe."))?;
+    if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
         return Err(AiDiagnostic::new(
             "codex_cli_invalid",
             "Codex CLI changed during probe.",
         ));
     }
-    let mut command = Command::new(&path);
-    command
-        .arg("--version")
-        .current_dir(probe_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    apply_codex_environment(&mut command);
-    let mut child = command.spawn().map_err(|_| {
-        AiDiagnostic::new("codex_cli_probe_failed", "Codex CLI version probe failed.")
-    })?;
-    let stdout = capture_limited(
-        child.stdout.take().expect("piped Codex probe stdout"),
-        MAX_PROBE_STREAM_BYTES,
-    );
-    let stderr = capture_limited(
-        child.stderr.take().expect("piped Codex probe stderr"),
-        MAX_PROBE_STREAM_BYTES,
-    );
-    let deadline = Instant::now() + PROBE_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break None;
-            }
-        }
-    };
-    let (stdout, stdout_truncated) = stdout.join().unwrap_or((Vec::new(), true));
-    let (_, stderr_truncated) = stderr.join().unwrap_or((Vec::new(), true));
-    if status.is_none_or(|status| !status.success()) || stdout_truncated || stderr_truncated {
-        return Err(AiDiagnostic::new(
-            "codex_cli_probe_failed",
-            "Codex CLI version probe failed.",
-        ));
-    }
-    let text = std::str::from_utf8(&stdout)
+    Ok(CodexCliProbeView {
+        found: true,
+        version: Some(version),
+        source: Some(source),
+    })
+}
+
+fn parse_codex_version(stdout: &[u8]) -> Result<String, AiDiagnostic> {
+    let text = std::str::from_utf8(stdout)
         .ok()
         .map(str::trim)
         .filter(|text| text.is_ascii() && text.len() <= 96)
@@ -881,6 +855,89 @@ fn probe_codex_at(
             "Codex CLI version was not recognized.",
         ));
     }
+    Ok(version.to_string())
+}
+
+fn probe_codex_version_at(path: &Path, probe_dir: &Path) -> Result<String, AiDiagnostic> {
+    let mut command = Command::new(path);
+    command
+        .arg("--version")
+        .current_dir(probe_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    apply_codex_environment(&mut command);
+    let mut child = command.spawn().map_err(|_| {
+        AiDiagnostic::new("codex_cli_probe_failed", "Codex CLI version probe failed.")
+    })?;
+    let stdout = capture_limited(
+        child.stdout.take().expect("piped Codex probe stdout"),
+        MAX_PROBE_STREAM_BYTES,
+    );
+    let stderr = capture_limited(
+        child.stderr.take().expect("piped Codex probe stderr"),
+        MAX_PROBE_STREAM_BYTES,
+    );
+    let deadline = Instant::now() + PROBE_TIMEOUT;
+    let mut wait_failed = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
+            Ok(None) => {
+                break if child.kill().is_ok() {
+                    wait_for_child_exit(&mut child, PROCESS_STOP_TIMEOUT)
+                } else {
+                    None
+                };
+            }
+            Err(_) => {
+                wait_failed = true;
+                break if child.kill().is_ok() {
+                    wait_for_child_exit(&mut child, PROCESS_STOP_TIMEOUT)
+                } else {
+                    None
+                };
+            }
+        }
+    };
+    let Some(((stdout, stdout_truncated), (_, stderr_truncated))) =
+        join_capture_pair_bounded(stdout, stderr, PROCESS_STOP_TIMEOUT)
+    else {
+        return Err(AiDiagnostic::new(
+            "codex_cli_probe_failed",
+            "Codex CLI version probe failed.",
+        ));
+    };
+    if wait_failed
+        || status.is_none_or(|status| !status.success())
+        || stdout_truncated
+        || stderr_truncated
+    {
+        return Err(AiDiagnostic::new(
+            "codex_cli_probe_failed",
+            "Codex CLI version probe failed.",
+        ));
+    }
+    parse_codex_version(&stdout)
+}
+
+fn probe_codex_at(
+    path: PathBuf,
+    source: String,
+    probe_dir: &Path,
+) -> Result<CodexExecutable, AiDiagnostic> {
+    let before = fs::metadata(&path)
+        .map_err(|_| AiDiagnostic::new("codex_cli_invalid", "Codex CLI could not be inspected."))?;
+    let (before_sha256, before_size) = sha256_file(&path)
+        .map_err(|_| AiDiagnostic::new("codex_cli_invalid", "Codex CLI could not be inspected."))?;
+    if before_size != before.len() {
+        return Err(AiDiagnostic::new(
+            "codex_cli_invalid",
+            "Codex CLI changed during probe.",
+        ));
+    }
+    let version = probe_codex_version_at(&path, probe_dir)?;
     let after = fs::metadata(&path)
         .map_err(|_| AiDiagnostic::new("codex_cli_invalid", "Codex CLI changed during probe."))?;
     let (after_sha256, after_size) = sha256_file(&path)
@@ -897,7 +954,7 @@ fn probe_codex_at(
     }
     Ok(CodexExecutable {
         path,
-        version: version.to_string(),
+        version,
         source,
         sha256: after_sha256,
         size_bytes: after_size,
@@ -1075,16 +1132,15 @@ fn run_official_installer(install_dir: &Path) -> Result<(), AiDiagnostic> {
             }
         }
     };
-    let stdout_capture = join_capture_bounded(stdout, PROCESS_STOP_TIMEOUT);
-    let stderr_capture = join_capture_bounded(stderr, PROCESS_STOP_TIMEOUT);
-    if stdout_capture.is_none() || stderr_capture.is_none() {
+    let capture = join_capture_pair_bounded(stdout, stderr, PROCESS_STOP_TIMEOUT);
+    if capture.is_none() {
         return Err(AiDiagnostic::new(
             "codex_cli_install_failed",
             "The controlled installer stream capture did not finish.",
         ));
     }
-    let (_, stdout_truncated) = stdout_capture.expect("checked installer stdout capture");
-    let (_, stderr_truncated) = stderr_capture.expect("checked installer stderr capture");
+    let ((_, stdout_truncated), (_, stderr_truncated)) =
+        capture.expect("checked installer stream capture");
     if stdout_truncated || stderr_truncated {
         return Err(AiDiagnostic::new(
             "codex_cli_install_failed",
@@ -1862,20 +1918,16 @@ pub async fn probe_codex_app_server(
     };
     let cleanup_dir = runtime_dir.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let result = probe_codex_executable(&runtime_dir);
+        let result = probe_codex_presence(&runtime_dir);
         let _ = fs::remove_dir_all(runtime_dir);
         result
     })
     .await;
     let _ = fs::remove_dir_all(cleanup_dir);
     match result {
-        Ok(Ok(executable)) => DesktopCodexProbeResponse {
+        Ok(Ok(probe)) => DesktopCodexProbeResponse {
             request_id,
-            probe: Some(CodexCliProbeView {
-                found: true,
-                version: Some(executable.version),
-                source: Some(executable.source),
-            }),
+            probe: Some(probe),
             error: None,
         },
         Ok(Err(error)) => DesktopCodexProbeResponse {
@@ -2903,6 +2955,59 @@ mod tests {
         assert!(MAX_RPC_TOTAL_BYTES <= 8 * 1024 * 1024);
         assert!(RPC_TIMEOUT <= Duration::from_secs(10));
         assert!(TURN_TIMEOUT <= Duration::from_secs(90));
+        assert!(PROBE_TIMEOUT <= Duration::from_secs(5));
+        assert!(PROCESS_STOP_TIMEOUT <= Duration::from_secs(3));
+    }
+
+    #[test]
+    fn codex_version_output_is_strict_and_bounded() {
+        assert_eq!(
+            parse_codex_version(b"codex-cli 0.144.6\r\n").unwrap(),
+            "0.144.6"
+        );
+        for invalid in [
+            b"".as_slice(),
+            b"codex-cli".as_slice(),
+            b"codex-cli 0.144.6 extra".as_slice(),
+            b"other 0.144.6".as_slice(),
+            b"codex-cli 0.144.6 --danger".as_slice(),
+            &[0xff],
+        ] {
+            assert_eq!(
+                parse_codex_version(invalid).unwrap_err().code,
+                "codex_cli_probe_failed"
+            );
+        }
+        assert_eq!(
+            parse_codex_version(format!("codex-cli {}", "1".repeat(97)).as_bytes())
+                .unwrap_err()
+                .code,
+            "codex_cli_probe_failed"
+        );
+    }
+
+    #[test]
+    fn probe_stream_pair_uses_one_shared_join_deadline() {
+        let first = thread::spawn(|| (b"version".to_vec(), false));
+        let second = thread::spawn(|| (Vec::new(), false));
+        assert_eq!(
+            join_capture_pair_bounded(first, second, Duration::from_secs(1)),
+            Some(((b"version".to_vec(), false), (Vec::new(), false)))
+        );
+
+        let (release_sender, release_receiver) = mpsc::channel();
+        let (finished_sender, finished_receiver) = mpsc::channel();
+        let blocked = thread::spawn(move || {
+            let _ = release_receiver.recv();
+            let _ = finished_sender.send(());
+            (Vec::new(), false)
+        });
+        let ready = thread::spawn(|| (Vec::new(), false));
+        assert!(join_capture_pair_bounded(blocked, ready, Duration::from_millis(10)).is_none());
+        release_sender.send(()).unwrap();
+        finished_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap();
     }
 
     #[test]

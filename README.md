@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目当前进入**Phase 6A：Codex只读AI助手**。工作台首次绘制后仅本地检查一次OpenAI官方Codex CLI版本，清楚区分“CLI已安装，AI未连接”和“CLI未检测到”；这不会启动`codex app-server`、读取账号或联系模型。用户主动连接本地`codex app-server`后，可以在发送前查看Rust从当前可信Revision和Zone生成的结构化上下文，并获得严格区分事实复述、AI解释和限制的回答。App Server在本机运行，但模型推理需要联网并使用用户现有ChatGPT订阅；无需单独API Key。AI不能读取PRJ或项目目录、运行命令、修改项目、启动ContamX或应用Patch，无AI时全部核心工作流保持可用。使用前需要OpenAI官方Codex CLI；AI侧栏会提示缺失状态，并可在用户明确确认后执行固定官方来源、安装脚本哈希锁定的一键安装，也保留官方手动安装命令。
+项目当前进入**Phase 6A：Codex只读AI助手**。工作台首次绘制后仅本地检查一次OpenAI官方Codex CLI版本，清楚区分“CLI已安装，AI未连接”和“CLI未检测到”；启动提示采用不读取整个可执行文件的有界轻量探测，不启动`codex app-server`、读取账号或联系模型。用户主动连接时Rust仍会对同一CLI执行完整的前后SHA-256身份复核，再启动本地`codex app-server`。用户可以在发送前查看Rust从当前可信Revision和Zone生成的结构化上下文，并获得严格区分事实复述、AI解释和限制的回答。App Server在本机运行，但模型推理需要联网并使用用户现有ChatGPT订阅；无需单独API Key。AI不能读取PRJ或项目目录、运行命令、修改项目、启动ContamX或应用Patch，无AI时全部核心工作流保持可用。使用前需要OpenAI官方Codex CLI；AI侧栏会提示缺失状态，并可在用户明确确认后执行固定官方来源、安装脚本哈希锁定的一键安装，也保留官方手动安装命令。
 
 ## 架构方向
 
