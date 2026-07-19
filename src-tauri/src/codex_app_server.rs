@@ -23,7 +23,10 @@ const MAX_INSTALLER_SCRIPT_BYTES: usize = 128 * 1024;
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(180);
 const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 const TURN_TIMEOUT: Duration = Duration::from_secs(90);
+const TURN_INTERRUPT_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const TURN_INTERRUPT_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
 const PROCESS_STOP_TIMEOUT: Duration = Duration::from_secs(3);
+const STREAM_JOIN_TIMEOUT: Duration = Duration::from_millis(250);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MAX_RPC_LINE_BYTES: usize = 256 * 1024;
@@ -224,6 +227,12 @@ struct AiPreviewRecord {
     reasoning_effort: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ConnectionLease {
+    generation: u64,
+    request_id: String,
+}
+
 #[derive(Default)]
 struct AssistantState {
     connection: Option<Arc<AppServerConnection>>,
@@ -233,14 +242,81 @@ struct AssistantState {
     preview: Option<AiPreviewRecord>,
     thread_id: Option<String>,
     thread_binding: Option<AiThreadBinding>,
+    // This remains available while a context invalidation is interrupting a
+    // previously started turn. It must not be reused as a current thread.
+    active_turn_thread_id: Option<String>,
     active_turn_id: Option<String>,
     active_turn_request_id: Option<String>,
+    active_turn_epoch: Option<u64>,
+    active_turn_cancel: Option<Arc<AtomicBool>>,
+    active_turn_interrupt_requested: Option<Arc<AtomicBool>>,
     cancel_requested: bool,
     token_usage: Option<AiTokenUsageView>,
     installing: bool,
+    context_epoch: u64,
+    connection_generation: u64,
+    connecting: Option<ConnectionLease>,
 }
 
 impl AssistantState {
+    fn clear_active_turn(&mut self) {
+        self.active_turn_thread_id = None;
+        self.active_turn_id = None;
+        self.active_turn_request_id = None;
+        self.active_turn_epoch = None;
+        self.active_turn_cancel = None;
+        self.active_turn_interrupt_requested = None;
+        self.cancel_requested = false;
+    }
+
+    fn clear_connection_catalog(&mut self) {
+        self.cli = None;
+        self.account = None;
+        self.models.clear();
+        self.preview = None;
+        self.thread_id = None;
+        self.thread_binding = None;
+        self.clear_active_turn();
+        self.token_usage = None;
+    }
+
+    fn reserve_connection(&mut self, request_id: &str) -> Result<ConnectionLease, AiDiagnostic> {
+        if self.connecting.is_some() {
+            return Err(AiDiagnostic::new(
+                "codex_app_server_start_failed",
+                "Codex App Server is already starting.",
+            ));
+        }
+        self.connection_generation = self.connection_generation.wrapping_add(1);
+        let lease = ConnectionLease {
+            generation: self.connection_generation,
+            request_id: request_id.to_string(),
+        };
+        self.connecting = Some(lease.clone());
+        Ok(lease)
+    }
+
+    fn release_connection_lease(&mut self, lease: &ConnectionLease) {
+        if self.connecting.as_ref() == Some(lease) {
+            self.connecting = None;
+        }
+    }
+
+    fn connection_lease_is_current(&self, lease: &ConnectionLease) -> bool {
+        self.connection_generation == lease.generation && self.connecting.as_ref() == Some(lease)
+    }
+
+    fn has_connection(&self, expected: &Arc<AppServerConnection>) -> bool {
+        self.connection
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, expected))
+    }
+
+    fn invalidate_connection_attempt(&mut self) {
+        self.connection_generation = self.connection_generation.wrapping_add(1);
+        self.connecting = None;
+    }
+
     /// Drop a dead or incomplete connection before its stale catalog can be reused.
     fn take_unusable_connection(&mut self) -> Option<Arc<AppServerConnection>> {
         let unusable = self
@@ -252,16 +328,7 @@ impl AssistantState {
             return None;
         }
         let connection = self.connection.take();
-        self.cli = None;
-        self.account = None;
-        self.models.clear();
-        self.preview = None;
-        self.thread_id = None;
-        self.thread_binding = None;
-        self.active_turn_id = None;
-        self.active_turn_request_id = None;
-        self.cancel_requested = false;
-        self.token_usage = None;
+        self.clear_connection_catalog();
         connection
     }
 }
@@ -269,18 +336,98 @@ impl AssistantState {
 #[derive(Default)]
 pub struct CodexAssistantStore {
     state: Mutex<AssistantState>,
+    // Keep an incomplete close alive so a child handle and its stream threads
+    // are not detached while the controlled runtime directory is still live.
+    retired_connections: Mutex<Vec<Arc<AppServerConnection>>>,
 }
 
 impl CodexAssistantStore {
+    fn retain_connection(&self, connection: Arc<AppServerConnection>) {
+        let mut retired = self
+            .retired_connections
+            .lock()
+            .expect("retired Codex connection mutex poisoned");
+        if !retired
+            .iter()
+            .any(|existing| Arc::ptr_eq(existing, &connection))
+        {
+            retired.push(connection);
+        }
+    }
+
+    fn close_or_retain(&self, connection: Arc<AppServerConnection>) -> ConnectionCloseOutcome {
+        let outcome = connection.close();
+        if outcome.needs_retry() {
+            self.retain_connection(connection);
+        }
+        outcome
+    }
+
+    fn retry_retired_connections(&self) {
+        let retired = std::mem::take(
+            &mut *self
+                .retired_connections
+                .lock()
+                .expect("retired Codex connection mutex poisoned"),
+        );
+        if retired.is_empty() {
+            return;
+        }
+        let mut still_retired = Vec::new();
+        for connection in retired {
+            if connection.close().needs_retry() {
+                still_retired.push(connection);
+            }
+        }
+        if !still_retired.is_empty() {
+            for connection in still_retired {
+                self.retain_connection(connection);
+            }
+        }
+    }
+
     pub(crate) fn invalidate_context(&self) {
-        let mut state = self.state.lock().expect("Codex assistant mutex poisoned");
-        state.preview = None;
-        state.thread_id = None;
-        state.thread_binding = None;
-        state.active_turn_id = None;
-        state.active_turn_request_id = None;
-        state.cancel_requested = false;
-        state.token_usage = None;
+        let interrupt_target = {
+            let mut state = self.state.lock().expect("Codex assistant mutex poisoned");
+            state.context_epoch = state.context_epoch.wrapping_add(1);
+            let active_target = match (
+                state.connection.clone(),
+                state.active_turn_thread_id.clone(),
+                state.active_turn_id.clone(),
+                state.active_turn_interrupt_requested.clone(),
+            ) {
+                (Some(connection), Some(thread_id), Some(turn_id), Some(interrupt_requested)) => {
+                    Some((connection, thread_id, turn_id, interrupt_requested))
+                }
+                _ => None,
+            };
+            state.preview = None;
+            state.thread_id = None;
+            state.thread_binding = None;
+            state.token_usage = None;
+            if state.active_turn_request_id.is_none() {
+                state.cancel_requested = false;
+                None
+            } else {
+                state.cancel_requested = true;
+                if let Some(cancel) = &state.active_turn_cancel {
+                    cancel.store(true, Ordering::Release);
+                }
+                active_target
+            }
+        };
+        if let Some((connection, thread_id, turn_id, interrupt_requested)) = interrupt_target {
+            if !claim_turn_interrupt(&interrupt_requested) {
+                return;
+            }
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                let _ = connection.request(
+                    "turn/interrupt",
+                    json!({"threadId": thread_id, "turnId": turn_id}),
+                    RPC_TIMEOUT,
+                );
+            });
+        }
     }
 }
 
@@ -288,13 +435,55 @@ impl Drop for CodexAssistantStore {
     fn drop(&mut self) {
         if let Ok(state) = self.state.get_mut() {
             if let Some(connection) = state.connection.take() {
-                connection.close();
+                let first = connection.close();
+                if first.needs_retry() {
+                    let _ = connection.close();
+                }
+            }
+        }
+        if let Ok(retired) = self.retired_connections.get_mut() {
+            for connection in std::mem::take(retired) {
+                let first = connection.close();
+                if first.needs_retry() {
+                    let _ = connection.close();
+                }
             }
         }
     }
 }
 
-#[derive(Debug)]
+fn retry_retired_connections_async(app: &AppHandle) {
+    let app = app.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        app.state::<CodexAssistantStore>()
+            .retry_retired_connections();
+    });
+}
+
+async fn close_connection_for_app(
+    app: &AppHandle,
+    connection: Arc<AppServerConnection>,
+) -> ConnectionCloseOutcome {
+    let app = app.clone();
+    let store_app = app.clone();
+    let fallback = Arc::clone(&connection);
+    match tauri::async_runtime::spawn_blocking(move || {
+        store_app
+            .state::<CodexAssistantStore>()
+            .close_or_retain(connection)
+    })
+    .await
+    {
+        Ok(outcome) => outcome,
+        Err(_) => {
+            app.state::<CodexAssistantStore>()
+                .retain_connection(fallback);
+            ConnectionCloseOutcome::default()
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 struct RpcFailure {
     code: &'static str,
 }
@@ -317,6 +506,22 @@ struct AppServerConnection {
     stderr_capture: Arc<Mutex<Vec<u8>>>,
     stderr_truncated: Arc<AtomicBool>,
     runtime_dir: PathBuf,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ConnectionCloseOutcome {
+    exit_confirmed: bool,
+    stdin_closed: bool,
+    kill_requested: bool,
+    stdout_joined: bool,
+    stderr_joined: bool,
+    runtime_removed: bool,
+}
+
+impl ConnectionCloseOutcome {
+    fn needs_retry(self) -> bool {
+        !self.exit_confirmed || !self.stdout_joined || !self.stderr_joined || !self.runtime_removed
+    }
 }
 
 fn parse_protocol_message(bytes: &mut Vec<u8>, total: &mut usize) -> Result<Value, RpcFailure> {
@@ -364,7 +569,7 @@ impl AppServerConnection {
             (child.stdin.take(), child.stdout.take(), child.stderr.take())
         else {
             let _ = child.kill();
-            let _ = child.wait();
+            let _ = Self::wait_for_exit(&mut child, Instant::now() + PROCESS_STOP_TIMEOUT);
             return Err(RpcFailure::new("codex_app_server_start_failed"));
         };
         let (notification_tx, notification_rx) = mpsc::channel();
@@ -576,46 +781,82 @@ impl AppServerConnection {
         }
     }
 
-    fn close(&self) {
-        self.stdin
+    fn wait_for_exit(child: &mut Child, deadline: Instant) -> bool {
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => return true,
+                Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
+                Ok(None) | Err(_) => return false,
+            }
+        }
+    }
+
+    fn join_stream_thread_bounded(
+        handle_slot: &Mutex<Option<thread::JoinHandle<()>>>,
+        deadline: Instant,
+    ) -> bool {
+        let mut handle = handle_slot
+            .lock()
+            .expect("stream thread mutex poisoned")
+            .take();
+        let Some(handle) = handle.take() else {
+            return true;
+        };
+        while !handle.is_finished() && Instant::now() < deadline {
+            thread::sleep(POLL_INTERVAL);
+        }
+        if handle.is_finished() {
+            let _ = handle.join();
+            true
+        } else {
+            *handle_slot.lock().expect("stream thread mutex poisoned") = Some(handle);
+            false
+        }
+    }
+
+    fn close(&self) -> ConnectionCloseOutcome {
+        self.disconnected.store(true, Ordering::Release);
+        let stdin = self
+            .stdin
             .lock()
             .expect("Codex stdin mutex poisoned")
             .take();
+        let stdin_closed = stdin.is_some();
+        drop(stdin);
         let deadline = Instant::now() + PROCESS_STOP_TIMEOUT;
+        let mut outcome = ConnectionCloseOutcome {
+            stdin_closed,
+            ..ConnectionCloseOutcome::default()
+        };
         let mut child_guard = self.child.lock().expect("Codex child mutex poisoned");
         if let Some(child) = child_guard.as_mut() {
-            loop {
-                match child.try_wait() {
-                    Ok(Some(_)) => break,
-                    Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
-                    _ => {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        break;
-                    }
-                }
+            outcome.exit_confirmed = Self::wait_for_exit(child, deadline);
+            if !outcome.exit_confirmed {
+                outcome.kill_requested = true;
+                let _ = child.kill();
+                outcome.exit_confirmed =
+                    Self::wait_for_exit(child, Instant::now() + PROCESS_STOP_TIMEOUT);
             }
+            if outcome.exit_confirmed {
+                child_guard.take();
+            }
+        } else {
+            outcome.exit_confirmed = true;
         }
-        child_guard.take();
         drop(child_guard);
-        if let Some(handle) = self
-            .stdout_thread
-            .lock()
-            .expect("stdout thread mutex poisoned")
-            .take()
-        {
-            let _ = handle.join();
+        let stream_deadline = Instant::now() + STREAM_JOIN_TIMEOUT;
+        outcome.stdout_joined =
+            Self::join_stream_thread_bounded(&self.stdout_thread, stream_deadline);
+        outcome.stderr_joined =
+            Self::join_stream_thread_bounded(&self.stderr_thread, stream_deadline);
+        if outcome.exit_confirmed && outcome.stdout_joined && outcome.stderr_joined {
+            outcome.runtime_removed = match fs::remove_dir_all(&self.runtime_dir) {
+                Ok(()) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+                Err(_) => false,
+            };
         }
-        if let Some(handle) = self
-            .stderr_thread
-            .lock()
-            .expect("stderr thread mutex poisoned")
-            .take()
-        {
-            let _ = handle.join();
-        }
-        self.disconnected.store(true, Ordering::Release);
-        let _ = fs::remove_dir_all(&self.runtime_dir);
+        outcome
     }
 }
 
@@ -1649,7 +1890,77 @@ enum TurnNotificationAction {
     Continue,
     InterruptForTool,
     Completed(String, Option<AiTokenUsageView>),
-    Failed(RpcFailure, Option<AiTokenUsageView>),
+    Failed {
+        error: RpcFailure,
+        token_usage: Option<AiTokenUsageView>,
+        completion_confirmed: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TurnStopReason {
+    UserInterrupted,
+    TimedOut,
+    ToolUseBlocked,
+}
+
+impl TurnStopReason {
+    fn diagnostic_code(self) -> &'static str {
+        match self {
+            Self::UserInterrupted => "ai_turn_interrupted",
+            Self::TimedOut => "ai_turn_start_failed",
+            Self::ToolUseBlocked => "ai_tool_use_blocked",
+        }
+    }
+}
+
+fn claim_turn_interrupt(interrupt_requested: &AtomicBool) -> bool {
+    !interrupt_requested.swap(true, Ordering::AcqRel)
+}
+
+#[derive(Debug)]
+enum TurnWaitOutcome {
+    Completed {
+        answer: String,
+        token_usage: Option<AiTokenUsageView>,
+    },
+    Failed {
+        error: RpcFailure,
+        token_usage: Option<AiTokenUsageView>,
+        completion_confirmed: bool,
+    },
+}
+
+fn turn_outcome_requires_connection_reset(outcome: &TurnWaitOutcome) -> bool {
+    matches!(
+        outcome,
+        TurnWaitOutcome::Failed {
+            completion_confirmed: false,
+            ..
+        }
+    )
+}
+
+#[derive(Debug)]
+struct TurnStartFailure {
+    error: RpcFailure,
+    turn_may_have_started: bool,
+}
+
+impl TurnStartFailure {
+    fn before_turn(error: RpcFailure) -> Self {
+        Self {
+            error,
+            turn_may_have_started: false,
+        }
+    }
+
+    fn after_turn_attempt(error: RpcFailure) -> Self {
+        Self {
+            error,
+            turn_may_have_started: true,
+        }
+    }
 }
 
 fn process_turn_notification(
@@ -1658,15 +1969,6 @@ fn process_turn_notification(
     expected_turn: &str,
     state: &mut TurnCollectionState,
 ) -> TurnNotificationAction {
-    if let Some(usage) = token_usage_from_notification(notification) {
-        state.token_usage = Some(usage);
-        return TurnNotificationAction::Continue;
-    }
-    if tool_event_category(notification).is_some() {
-        state.tool_blocked = true;
-        state.answer.clear();
-        return TurnNotificationAction::InterruptForTool;
-    }
     let method = notification
         .get("method")
         .and_then(Value::as_str)
@@ -1679,7 +1981,11 @@ fn process_turn_notification(
         } else {
             "ai_protocol_message_invalid"
         };
-        return TurnNotificationAction::Failed(RpcFailure::new(code), state.token_usage.clone());
+        return TurnNotificationAction::Failed {
+            error: RpcFailure::new(code),
+            token_usage: state.token_usage.clone(),
+            completion_confirmed: false,
+        };
     }
     let event_thread = notification
         .pointer("/params/threadId")
@@ -1692,15 +1998,26 @@ fn process_turn_notification(
     {
         return TurnNotificationAction::Continue;
     }
+    if let Some(usage) = token_usage_from_notification(notification) {
+        state.token_usage = Some(usage);
+        return TurnNotificationAction::Continue;
+    }
+    let global_server_request = method == "__server_request_blocked";
+    if global_server_request || tool_event_category(notification).is_some() {
+        state.tool_blocked = true;
+        state.answer.clear();
+        return TurnNotificationAction::InterruptForTool;
+    }
     if method == "item/agentMessage/delta" && !state.tool_blocked {
         let Some(delta) = notification
             .pointer("/params/delta")
             .and_then(Value::as_str)
         else {
-            return TurnNotificationAction::Failed(
-                RpcFailure::new("ai_protocol_message_invalid"),
-                state.token_usage.clone(),
-            );
+            return TurnNotificationAction::Failed {
+                error: RpcFailure::new("ai_protocol_message_invalid"),
+                token_usage: state.token_usage.clone(),
+                completion_confirmed: false,
+            };
         };
         if state
             .answer
@@ -1709,10 +2026,11 @@ fn process_turn_notification(
             .saturating_add(delta.chars().count())
             > MAX_AGENT_RESPONSE_CHARS
         {
-            return TurnNotificationAction::Failed(
-                RpcFailure::new("ai_response_too_large"),
-                state.token_usage.clone(),
-            );
+            return TurnNotificationAction::Failed {
+                error: RpcFailure::new("ai_response_too_large"),
+                token_usage: state.token_usage.clone(),
+                completion_confirmed: false,
+            };
         }
         state.answer.push_str(delta);
     }
@@ -1731,10 +2049,11 @@ fn process_turn_notification(
             None
         };
         if let Some(code) = failure {
-            return TurnNotificationAction::Failed(
-                RpcFailure::new(code),
-                state.token_usage.clone(),
-            );
+            return TurnNotificationAction::Failed {
+                error: RpcFailure::new(code),
+                token_usage: state.token_usage.clone(),
+                completion_confirmed: true,
+            };
         }
         return TurnNotificationAction::Completed(
             std::mem::take(&mut state.answer),
@@ -1765,10 +2084,28 @@ fn turn_failure(request_id: String, error: AiDiagnostic) -> DesktopAiTurnRespons
 fn clear_pending_turn(store: &CodexAssistantStore, request_id: &str) {
     let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
     if state.active_turn_request_id.as_deref() == Some(request_id) {
-        state.active_turn_id = None;
-        state.active_turn_request_id = None;
-        state.cancel_requested = false;
+        state.clear_active_turn();
     }
+}
+
+/// A turn-start timeout or an unconfirmed interrupt leaves the server-side turn
+/// ambiguous. Detach the current connection before accepting another request so
+/// a late event can never be attributed to a later CONTAM Studio turn.
+fn detach_connection_after_unconfirmed_turn(
+    store: &CodexAssistantStore,
+    expected: &Arc<AppServerConnection>,
+    request_id: &str,
+) -> Option<Arc<AppServerConnection>> {
+    let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+    if state.has_connection(expected) {
+        let connection = state.connection.take();
+        state.clear_connection_catalog();
+        return connection;
+    }
+    if state.active_turn_request_id.as_deref() == Some(request_id) {
+        state.clear_active_turn();
+    }
+    None
 }
 
 #[tauri::command]
@@ -1787,10 +2124,12 @@ pub async fn install_official_codex_cli(
             )),
         };
     }
+    retry_retired_connections_async(&app);
     let store = app.state::<CodexAssistantStore>();
     {
         let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
-        if state.installing || state.active_turn_request_id.is_some() {
+        if state.installing || state.connecting.is_some() || state.active_turn_request_id.is_some()
+        {
             return DesktopCodexInstallResponse {
                 request_id,
                 status: "error".to_string(),
@@ -1961,16 +2300,36 @@ pub async fn connect_codex_app_server(
             )),
         };
     }
+    retry_retired_connections_async(&app);
     let store = app.state::<CodexAssistantStore>();
-    let (existing_view, stale_connection) = {
+    let (existing_view, stale_connection, lease) = {
         let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+        if state.installing {
+            return DesktopCodexConnectionResponse {
+                request_id,
+                connection: None,
+                error: Some(AiDiagnostic::new(
+                    "codex_app_server_start_failed",
+                    "Codex CLI installation is still in progress.",
+                )),
+            };
+        }
         let view = connection_view(&state);
-        let stale_connection = if view.is_none() {
-            state.take_unusable_connection()
+        if view.is_some() {
+            (view, None, None)
         } else {
-            None
-        };
-        (view, stale_connection)
+            let stale_connection = state.take_unusable_connection();
+            match state.reserve_connection(&request_id) {
+                Ok(lease) => (None, stale_connection, Some(lease)),
+                Err(error) => {
+                    return DesktopCodexConnectionResponse {
+                        request_id,
+                        connection: None,
+                        error: Some(error),
+                    }
+                }
+            }
+        }
     };
     if let Some(view) = existing_view {
         return DesktopCodexConnectionResponse {
@@ -1979,12 +2338,18 @@ pub async fn connect_codex_app_server(
             error: None,
         };
     }
+    let lease = lease.expect("connection lease for a new App Server");
     if let Some(connection) = stale_connection {
-        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        let _ = close_connection_for_app(&app, connection).await;
     }
     let runtime_root = match app.path().app_local_data_dir() {
         Ok(path) => path.join("ai").join("codex-runtime"),
         Err(_) => {
+            store
+                .state
+                .lock()
+                .expect("Codex assistant mutex poisoned")
+                .release_connection_lease(&lease);
             return DesktopCodexConnectionResponse {
                 request_id,
                 connection: None,
@@ -1992,44 +2357,57 @@ pub async fn connect_codex_app_server(
                     "codex_app_server_start_failed",
                     "The controlled AI runtime directory is unavailable.",
                 )),
-            }
+            };
         }
     };
     let runtime_dir = match prepare_runtime_dir(&runtime_root, &request_id) {
         Ok(path) => path,
         Err(error) => {
+            store
+                .state
+                .lock()
+                .expect("Codex assistant mutex poisoned")
+                .release_connection_lease(&lease);
             return DesktopCodexConnectionResponse {
                 request_id,
                 connection: None,
                 error: Some(error),
-            }
+            };
         }
     };
     let cleanup_dir = runtime_dir.clone();
     let connected = tauri::async_runtime::spawn_blocking(move || {
-        let executable = probe_codex_executable(&runtime_dir)?;
-        let connection = AppServerConnection::start(&executable, &runtime_dir)
-            .map_err(|error| diagnostic_from_rpc(error, "codex_app_server_start_failed"))?;
+        let executable = probe_codex_executable(&runtime_dir).map_err(|error| (error, None))?;
+        let connection =
+            AppServerConnection::start(&executable, &runtime_dir).map_err(|error| {
+                (
+                    diagnostic_from_rpc(error, "codex_app_server_start_failed"),
+                    None,
+                )
+            })?;
         if let Err(error) = initialize_connection(&connection) {
-            connection.close();
-            return Err(diagnostic_from_rpc(
-                error,
-                "codex_app_server_initialization_failed",
+            return Err((
+                diagnostic_from_rpc(error, "codex_app_server_initialization_failed"),
+                Some(connection),
             ));
         }
         let account = match read_account(&connection) {
             Ok(account) => account,
             Err(error) => {
-                connection.close();
-                return Err(diagnostic_from_rpc(error, "codex_account_read_failed"));
+                return Err((
+                    diagnostic_from_rpc(error, "codex_account_read_failed"),
+                    Some(connection),
+                ));
             }
         };
         let models = if account.authenticated {
             match read_models(&connection) {
                 Ok(models) => models,
                 Err(error) => {
-                    connection.close();
-                    return Err(diagnostic_from_rpc(error, "codex_model_catalog_failed"));
+                    return Err((
+                        diagnostic_from_rpc(error, "codex_model_catalog_failed"),
+                        Some(connection),
+                    ));
                 }
             }
         } else {
@@ -2040,13 +2418,27 @@ pub async fn connect_codex_app_server(
             version: Some(executable.version),
             source: Some(executable.source),
         };
-        Ok::<_, AiDiagnostic>((connection, cli, account, models))
+        Ok::<_, (AiDiagnostic, Option<Arc<AppServerConnection>>)>((
+            connection, cli, account, models,
+        ))
     })
     .await;
     let (connection, cli, account, models) = match connected {
         Ok(Ok(value)) => value,
-        Ok(Err(error)) => {
-            let _ = fs::remove_dir_all(&cleanup_dir);
+        Ok(Err((error, connection))) => {
+            store
+                .state
+                .lock()
+                .expect("Codex assistant mutex poisoned")
+                .release_connection_lease(&lease);
+            if let Some(connection) = connection {
+                let outcome = close_connection_for_app(&app, connection).await;
+                if !outcome.needs_retry() {
+                    let _ = fs::remove_dir_all(&cleanup_dir);
+                }
+            } else {
+                let _ = fs::remove_dir_all(&cleanup_dir);
+            }
             return DesktopCodexConnectionResponse {
                 request_id,
                 connection: None,
@@ -2054,6 +2446,11 @@ pub async fn connect_codex_app_server(
             };
         }
         Err(_) => {
+            store
+                .state
+                .lock()
+                .expect("Codex assistant mutex poisoned")
+                .release_connection_lease(&lease);
             let _ = fs::remove_dir_all(&cleanup_dir);
             return DesktopCodexConnectionResponse {
                 request_id,
@@ -2065,16 +2462,38 @@ pub async fn connect_codex_app_server(
             };
         }
     };
-    let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
-    state.connection = Some(connection);
-    state.cli = Some(cli);
-    state.account = Some(account);
-    state.models = models;
-    let view = connection_view(&state);
-    DesktopCodexConnectionResponse {
-        request_id,
-        connection: view,
-        error: None,
+    let published = {
+        let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+        if state.connection_lease_is_current(&lease) && state.connection.is_none() {
+            state.connection = Some(Arc::clone(&connection));
+            state.cli = Some(cli);
+            state.account = Some(account);
+            state.models = models;
+            state.release_connection_lease(&lease);
+            connection_view(&state)
+        } else {
+            None
+        }
+    };
+    if let Some(view) = published {
+        DesktopCodexConnectionResponse {
+            request_id,
+            connection: Some(view),
+            error: None,
+        }
+    } else {
+        let outcome = close_connection_for_app(&app, connection).await;
+        if !outcome.needs_retry() {
+            let _ = fs::remove_dir_all(&cleanup_dir);
+        }
+        DesktopCodexConnectionResponse {
+            request_id,
+            connection: None,
+            error: Some(AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "The Codex connection was cancelled before it became active.",
+            )),
+        }
     }
 }
 
@@ -2100,7 +2519,7 @@ pub async fn refresh_codex_account(
         (state.connection.clone(), stale_connection)
     };
     if let Some(connection) = stale_connection {
-        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        let _ = close_connection_for_app(&app, connection).await;
         return DesktopCodexConnectionResponse {
             request_id,
             connection: None,
@@ -2120,10 +2539,11 @@ pub async fn refresh_codex_account(
             )),
         };
     };
+    let request_connection = Arc::clone(&connection);
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let account = read_account(&connection)?;
+        let account = read_account(&request_connection)?;
         let models = if account.authenticated {
-            read_models(&connection)?
+            read_models(&request_connection)?
         } else {
             Vec::new()
         };
@@ -2151,6 +2571,16 @@ pub async fn refresh_codex_account(
         }
     };
     let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+    if !state.has_connection(&connection) {
+        return DesktopCodexConnectionResponse {
+            request_id,
+            connection: None,
+            error: Some(AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "The Codex connection changed during the account refresh.",
+            )),
+        };
+    }
     state.account = Some(account);
     state.models = models;
     DesktopCodexConnectionResponse {
@@ -2200,7 +2630,7 @@ pub async fn preview_ai_context(
             .take_unusable_connection()
     };
     if let Some(connection) = stale_connection {
-        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        let _ = close_connection_for_app(&app, connection).await;
         return preview_failure(
             request_id,
             AiDiagnostic::new(
@@ -2209,7 +2639,7 @@ pub async fn preview_ai_context(
             ),
         );
     }
-    {
+    let connection = {
         let state = assistant
             .state
             .lock()
@@ -2254,7 +2684,13 @@ pub async fn preview_ai_context(
                 ),
             );
         }
-    }
+        Arc::clone(
+            state
+                .connection
+                .as_ref()
+                .expect("authenticated Codex connection"),
+        )
+    };
     let project_store = app.state::<DesktopProjectSessionStore>();
     let trusted = match project_store.build_ai_context(
         &project_session_id,
@@ -2294,11 +2730,20 @@ pub async fn preview_ai_context(
             model_request_uses_network: true,
         },
     };
-    assistant
+    let mut state = assistant
         .state
         .lock()
-        .expect("Codex assistant mutex poisoned")
-        .preview = Some(AiPreviewRecord {
+        .expect("Codex assistant mutex poisoned");
+    if !state.has_connection(&connection) {
+        return preview_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "The Codex connection changed during context preview.",
+            ),
+        );
+    }
+    state.preview = Some(AiPreviewRecord {
         view: view.clone(),
         trusted,
         language,
@@ -2354,7 +2799,7 @@ pub async fn start_readonly_ai_turn(
             .take_unusable_connection()
     };
     if let Some(connection) = stale_connection {
-        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        let _ = close_connection_for_app(&app, connection).await;
         return turn_failure(
             request_id,
             AiDiagnostic::new(
@@ -2363,7 +2808,7 @@ pub async fn start_readonly_ai_turn(
             ),
         );
     }
-    let (connection, preview, existing_thread, existing_binding) = {
+    let (connection, preview, existing_thread, existing_binding, context_epoch) = {
         let state = assistant
             .state
             .lock()
@@ -2421,6 +2866,7 @@ pub async fn start_readonly_ai_turn(
             state.preview.clone(),
             state.thread_id.clone(),
             state.thread_binding.clone(),
+            state.context_epoch,
         )
     };
     let Some(connection) = connection else {
@@ -2492,7 +2938,9 @@ pub async fn start_readonly_ai_turn(
     let runtime_dir = connection.runtime_dir.clone();
     let request_for_task = request_id.clone();
     let context_payload = preview.view.payload.clone();
-    {
+    let cancellation = Arc::new(AtomicBool::new(false));
+    let interrupt_requested = Arc::new(AtomicBool::new(false));
+    let turn_epoch = {
         let mut state = assistant
             .state
             .lock()
@@ -2506,17 +2954,45 @@ pub async fn start_readonly_ai_turn(
                 ),
             );
         }
+        if !state.has_connection(&connection) {
+            return turn_failure(
+                request_id,
+                AiDiagnostic::new(
+                    "codex_app_server_disconnected",
+                    "The Codex connection changed before the AI turn started.",
+                ),
+            );
+        }
+        if state.context_epoch != context_epoch
+            || state.preview.as_ref().is_none_or(|current_preview| {
+                current_preview.view.preview_id != preview.view.preview_id
+                    || current_preview.view.context_fingerprint != preview.view.context_fingerprint
+            })
+        {
+            return turn_failure(
+                request_id,
+                AiDiagnostic::new("ai_context_stale", "The AI context preview is stale."),
+            );
+        }
         state.active_turn_request_id = Some(request_id.clone());
+        state.active_turn_epoch = Some(state.context_epoch);
+        state.active_turn_cancel = Some(Arc::clone(&cancellation));
+        state.active_turn_interrupt_requested = Some(Arc::clone(&interrupt_requested));
         state.cancel_requested = false;
-    }
+        state.context_epoch
+    };
+    let connection_for_task = Arc::clone(&connection);
     let task = tauri::async_runtime::spawn_blocking(move || {
         let thread_id = if needs_thread {
-            let response = connection.request(
-                "thread/start",
-                thread_start_params(&model_id, &runtime_dir, &language),
-                RPC_TIMEOUT,
-            )?;
-            validate_readonly_thread_response(&response, &runtime_dir)?
+            let response = connection_for_task
+                .request(
+                    "thread/start",
+                    thread_start_params(&model_id, &runtime_dir, &language),
+                    RPC_TIMEOUT,
+                )
+                .map_err(TurnStartFailure::before_turn)?;
+            validate_readonly_thread_response(&response, &runtime_dir)
+                .map_err(TurnStartFailure::before_turn)?
         } else {
             existing_thread.expect("existing thread when no replacement is needed")
         };
@@ -2525,86 +3001,163 @@ pub async fn start_readonly_ai_turn(
             "context": context_payload,
             "question": question,
         });
-        let user_text = serde_json::to_string(&user_payload)
-            .map_err(|_| RpcFailure::new("ai_turn_start_failed"))?;
-        let response = connection.request(
-            "turn/start",
-            turn_start_params(
-                &thread_id,
-                &request_for_task,
-                &user_text,
-                &model_id,
-                &reasoning_effort,
-            ),
-            RPC_TIMEOUT,
-        )?;
+        let user_text = serde_json::to_string(&user_payload).map_err(|_| {
+            TurnStartFailure::before_turn(RpcFailure::new("ai_turn_start_failed"))
+        })?;
+        let response = connection_for_task
+            .request(
+                "turn/start",
+                turn_start_params(
+                    &thread_id,
+                    &request_for_task,
+                    &user_text,
+                    &model_id,
+                    &reasoning_effort,
+                ),
+                RPC_TIMEOUT,
+            )
+            .map_err(TurnStartFailure::after_turn_attempt)?;
         let turn_id = response
             .pointer("/turn/id")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty() && value.len() <= 128)
-            .ok_or_else(|| RpcFailure::new("ai_turn_start_failed"))?
+            .ok_or_else(|| {
+                TurnStartFailure::after_turn_attempt(RpcFailure::new("ai_turn_start_failed"))
+            })?
             .to_string();
-        Ok::<_, RpcFailure>((connection, thread_id, turn_id))
+        Ok::<_, TurnStartFailure>((thread_id, turn_id))
     })
     .await;
-    let (connection, thread_id, turn_id) = match task {
+    let (thread_id, turn_id) = match task {
         Ok(Ok(value)) => value,
         Ok(Err(error)) => {
+            let cancelled = cancellation.load(Ordering::Acquire);
+            if error.turn_may_have_started {
+                if let Some(detached) =
+                    detach_connection_after_unconfirmed_turn(&assistant, &connection, &request_id)
+                {
+                    let _ = close_connection_for_app(&app, detached).await;
+                }
+                return turn_failure(
+                    request_id,
+                    AiDiagnostic::new(
+                        "codex_app_server_disconnected",
+                        "Codex App Server could not confirm the AI turn state.",
+                    ),
+                );
+            }
             clear_pending_turn(&assistant, &request_id);
+            if cancelled {
+                return turn_failure(
+                    request_id,
+                    AiDiagnostic::new("ai_turn_interrupted", "The AI turn was interrupted."),
+                );
+            }
             return turn_failure(
                 request_id,
-                diagnostic_from_rpc(error, "ai_turn_start_failed"),
+                diagnostic_from_rpc(error.error, "ai_turn_start_failed"),
             );
         }
         Err(_) => {
-            clear_pending_turn(&assistant, &request_id);
+            if let Some(detached) =
+                detach_connection_after_unconfirmed_turn(&assistant, &connection, &request_id)
+            {
+                let _ = close_connection_for_app(&app, detached).await;
+            }
             return turn_failure(
                 request_id,
-                AiDiagnostic::new("ai_turn_start_failed", "AI turn task failed."),
+                AiDiagnostic::new(
+                    "codex_app_server_disconnected",
+                    "Codex App Server could not confirm the AI turn state.",
+                ),
             );
         }
     };
-    let cancel_requested = {
+    let interrupted_before_wait = {
         let mut state = assistant
             .state
             .lock()
             .expect("Codex assistant mutex poisoned");
-        state.thread_id = Some(thread_id.clone());
-        state.thread_binding = Some(binding);
-        state.active_turn_id = Some(turn_id.clone());
-        state.active_turn_request_id = Some(request_id.clone());
-        state.token_usage = None;
-        state.cancel_requested
+        if state.active_turn_request_id.as_deref() != Some(request_id.as_str()) {
+            true
+        } else {
+            state.active_turn_thread_id = Some(thread_id.clone());
+            state.active_turn_id = Some(turn_id.clone());
+            state.token_usage = None;
+            let stale = state.context_epoch != turn_epoch || cancellation.load(Ordering::Acquire);
+            if stale {
+                state.cancel_requested = true;
+                cancellation.store(true, Ordering::Release);
+            } else {
+                state.thread_id = Some(thread_id.clone());
+                state.thread_binding = Some(binding);
+            }
+            stale
+        }
     };
-    if cancel_requested {
-        let _ = connection.request(
-            "turn/interrupt",
-            json!({"threadId": thread_id, "turnId": turn_id}),
-            RPC_TIMEOUT,
-        );
-    }
     let thread_for_wait = thread_id.clone();
     let turn_for_wait = turn_id.clone();
+    let cancellation_for_wait = Arc::clone(&cancellation);
+    let interrupt_requested_for_wait = Arc::clone(&interrupt_requested);
+    let connection_for_wait = Arc::clone(&connection);
     let waited = tauri::async_runtime::spawn_blocking(move || {
-        let deadline = Instant::now() + TURN_TIMEOUT;
+        let turn_deadline = Instant::now() + TURN_TIMEOUT;
         let mut collection = TurnCollectionState::default();
-        let mut interrupt_sent = false;
+        let mut stop_reason = interrupted_before_wait.then_some(TurnStopReason::UserInterrupted);
+        let mut interrupt_sent = interrupt_requested_for_wait.load(Ordering::Acquire);
+        let mut confirmation_deadline = None;
+        if interrupt_sent {
+            confirmation_deadline = Some(Instant::now() + TURN_INTERRUPT_CONFIRM_TIMEOUT);
+        }
         loop {
-            if Instant::now() >= deadline {
-                let _ = connection.request(
-                    "turn/interrupt",
-                    json!({"threadId": thread_for_wait, "turnId": turn_for_wait}),
-                    RPC_TIMEOUT,
-                );
-                return Err((
-                    RpcFailure::new("ai_turn_start_failed"),
-                    collection.token_usage,
-                ));
+            let now = Instant::now();
+            if cancellation_for_wait.load(Ordering::Acquire) && stop_reason.is_none() {
+                stop_reason = Some(TurnStopReason::UserInterrupted);
             }
-            let notification = match connection.next_notification(Duration::from_millis(500)) {
+            if stop_reason.is_none() && now >= turn_deadline {
+                stop_reason = Some(TurnStopReason::TimedOut);
+            }
+            if stop_reason.is_some() {
+                if !interrupt_sent {
+                    if claim_turn_interrupt(&interrupt_requested_for_wait) {
+                        if let Err(error) = connection_for_wait.request(
+                            "turn/interrupt",
+                            json!({"threadId": thread_for_wait, "turnId": turn_for_wait}),
+                            TURN_INTERRUPT_REQUEST_TIMEOUT,
+                        ) {
+                            return TurnWaitOutcome::Failed {
+                                error,
+                                token_usage: collection.token_usage,
+                                completion_confirmed: false,
+                            };
+                        }
+                    }
+                    interrupt_sent = true;
+                    confirmation_deadline = Some(Instant::now() + TURN_INTERRUPT_CONFIRM_TIMEOUT);
+                }
+                if confirmation_deadline.is_some_and(|deadline| now >= deadline) {
+                    return TurnWaitOutcome::Failed {
+                        error: RpcFailure::new("codex_app_server_disconnected"),
+                        token_usage: collection.token_usage,
+                        completion_confirmed: false,
+                    };
+                }
+            }
+            let next_deadline = confirmation_deadline.unwrap_or(turn_deadline);
+            let notification_timeout = next_deadline
+                .checked_duration_since(Instant::now())
+                .unwrap_or(Duration::from_millis(1))
+                .min(Duration::from_millis(500));
+            let notification = match connection_for_wait.next_notification(notification_timeout) {
                 Ok(Some(value)) => value,
                 Ok(None) => continue,
-                Err(error) => return Err((error, collection.token_usage)),
+                Err(error) => {
+                    return TurnWaitOutcome::Failed {
+                        error,
+                        token_usage: collection.token_usage,
+                        completion_confirmed: false,
+                    }
+                }
             };
             match process_turn_notification(
                 &notification,
@@ -2613,35 +3166,106 @@ pub async fn start_readonly_ai_turn(
                 &mut collection,
             ) {
                 TurnNotificationAction::Continue => {}
-                TurnNotificationAction::InterruptForTool if !interrupt_sent => {
-                    eprintln!("CONTAM Studio AI safety event: tool_or_approval");
-                    let _ = connection.request(
-                        "turn/interrupt",
-                        json!({"threadId": thread_for_wait, "turnId": turn_for_wait}),
-                        RPC_TIMEOUT,
-                    );
-                    interrupt_sent = true;
+                TurnNotificationAction::InterruptForTool => {
+                    if stop_reason != Some(TurnStopReason::ToolUseBlocked) {
+                        eprintln!("CONTAM Studio AI safety event: tool_or_approval");
+                    }
+                    stop_reason = Some(TurnStopReason::ToolUseBlocked);
                 }
-                TurnNotificationAction::InterruptForTool => {}
                 TurnNotificationAction::Completed(answer, usage) => {
-                    return Ok((answer, usage));
+                    if let Some(reason) = stop_reason {
+                        return TurnWaitOutcome::Failed {
+                            error: RpcFailure::new(reason.diagnostic_code()),
+                            token_usage: usage,
+                            completion_confirmed: true,
+                        };
+                    }
+                    return TurnWaitOutcome::Completed {
+                        answer,
+                        token_usage: usage,
+                    };
                 }
-                TurnNotificationAction::Failed(error, usage) => {
-                    return Err((error, usage));
+                TurnNotificationAction::Failed {
+                    error,
+                    token_usage,
+                    completion_confirmed,
+                } => {
+                    return TurnWaitOutcome::Failed {
+                        error,
+                        token_usage,
+                        completion_confirmed,
+                    };
                 }
             }
         }
     })
     .await;
-    let mut state = assistant
-        .state
-        .lock()
-        .expect("Codex assistant mutex poisoned");
-    state.active_turn_id = None;
-    state.active_turn_request_id = None;
-    state.cancel_requested = false;
+    // Never reuse a connection after a turn that might still be active. A late
+    // `turn/completed` could otherwise be attributed to a later UI request.
+    let turn_unconfirmed = match &waited {
+        Ok(outcome) => turn_outcome_requires_connection_reset(outcome),
+        Err(_) => true,
+    };
+    let (still_owned, context_invalidated, detached_connection) = {
+        let mut state = assistant
+            .state
+            .lock()
+            .expect("Codex assistant mutex poisoned");
+        let still_owned = state.active_turn_request_id.as_deref() == Some(request_id.as_str());
+        let context_invalidated =
+            cancellation.load(Ordering::Acquire) || state.context_epoch != turn_epoch;
+        let detached_connection = if turn_unconfirmed && state.has_connection(&connection) {
+            let detached = state.connection.take();
+            state.clear_connection_catalog();
+            detached
+        } else {
+            if still_owned {
+                state.clear_active_turn();
+                if context_invalidated {
+                    state.thread_id = None;
+                    state.thread_binding = None;
+                    state.token_usage = None;
+                }
+            }
+            None
+        };
+        if turn_unconfirmed && detached_connection.is_none() && still_owned {
+            state.clear_active_turn();
+        }
+        (still_owned, context_invalidated, detached_connection)
+    };
+    if let Some(detached) = detached_connection {
+        let _ = close_connection_for_app(&app, detached).await;
+    }
+    if turn_unconfirmed {
+        return turn_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Codex App Server could not confirm the AI turn state.",
+            ),
+        );
+    }
+    if !still_owned {
+        return turn_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "The Codex connection changed during the AI turn.",
+            ),
+        );
+    }
+    if context_invalidated {
+        return turn_failure(
+            request_id,
+            AiDiagnostic::new("ai_turn_interrupted", "The AI turn was interrupted."),
+        );
+    }
     match waited {
-        Ok(Ok((answer, token_usage))) => {
+        Ok(TurnWaitOutcome::Completed {
+            answer,
+            token_usage,
+        }) => {
             let parsed = serde_json::from_str::<StructuredAiAnswer>(&answer)
                 .map_err(|_| {
                     AiDiagnostic::new(
@@ -2652,7 +3276,11 @@ pub async fn start_readonly_ai_turn(
                 .and_then(validate_answer);
             match parsed {
                 Ok(answer) => {
-                    state.token_usage = token_usage.clone();
+                    assistant
+                        .state
+                        .lock()
+                        .expect("Codex assistant mutex poisoned")
+                        .token_usage = token_usage.clone();
                     DesktopAiTurnResponse {
                         request_id,
                         status: "completed".to_string(),
@@ -2664,18 +3292,33 @@ pub async fn start_readonly_ai_turn(
                 Err(error) => turn_failure(request_id, error),
             }
         }
-        Ok(Err((error, usage))) => {
-            state.token_usage = usage.clone();
+        Ok(TurnWaitOutcome::Failed {
+            error,
+            token_usage,
+            completion_confirmed: true,
+        }) => {
+            assistant
+                .state
+                .lock()
+                .expect("Codex assistant mutex poisoned")
+                .token_usage = token_usage.clone();
             let mut response = turn_failure(
                 request_id,
                 diagnostic_from_rpc(error, "ai_turn_start_failed"),
             );
-            response.token_usage = usage;
+            response.token_usage = token_usage;
             response
         }
-        Err(_) => turn_failure(
+        Ok(TurnWaitOutcome::Failed {
+            completion_confirmed: false,
+            ..
+        })
+        | Err(_) => turn_failure(
             request_id,
-            AiDiagnostic::new("ai_turn_start_failed", "AI turn task failed."),
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Codex App Server could not confirm the AI turn state.",
+            ),
         ),
     }
 }
@@ -2696,17 +3339,25 @@ pub async fn interrupt_readonly_ai_turn(
         };
     }
     let store = app.state::<CodexAssistantStore>();
-    let (connection, thread_id, turn_id, pending_start) = {
+    let (connection, thread_id, turn_id, pending_start, should_send_interrupt) = {
         let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
         let pending_start = state.active_turn_request_id.is_some();
+        let mut should_send_interrupt = false;
         if pending_start {
             state.cancel_requested = true;
+            if let Some(cancel) = &state.active_turn_cancel {
+                cancel.store(true, Ordering::Release);
+            }
+            if let Some(interrupt_requested) = &state.active_turn_interrupt_requested {
+                should_send_interrupt = claim_turn_interrupt(interrupt_requested);
+            }
         }
         (
             state.connection.clone(),
-            state.thread_id.clone(),
+            state.active_turn_thread_id.clone(),
             state.active_turn_id.clone(),
             pending_start,
+            should_send_interrupt,
         )
     };
     if pending_start && turn_id.is_none() {
@@ -2724,6 +3375,13 @@ pub async fn interrupt_readonly_ai_turn(
             error: None,
         };
     };
+    if !should_send_interrupt {
+        return DesktopAiActionResponse {
+            request_id,
+            status: "interrupting".to_string(),
+            error: None,
+        };
+    }
     let result = tauri::async_runtime::spawn_blocking(move || {
         connection.request(
             "turn/interrupt",
@@ -2776,6 +3434,7 @@ pub async fn clear_readonly_ai_session(
             )),
         };
     }
+    state.context_epoch = state.context_epoch.wrapping_add(1);
     state.preview = None;
     state.thread_id = None;
     state.thread_binding = None;
@@ -2805,12 +3464,14 @@ pub async fn disconnect_codex_app_server(
     let store = app.state::<CodexAssistantStore>();
     let connection = {
         let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+        state.invalidate_connection_attempt();
         let connection = state.connection.take();
-        *state = AssistantState::default();
+        state.clear_connection_catalog();
+        state.installing = false;
         connection
     };
     if let Some(connection) = connection {
-        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        let _ = close_connection_for_app(&app, connection).await;
     }
     DesktopAiActionResponse {
         request_id,
@@ -2849,7 +3510,7 @@ mod tests {
                     TurnNotificationAction::Completed(answer, _) => {
                         return (Ok(answer), interrupts)
                     }
-                    TurnNotificationAction::Failed(error, _) => {
+                    TurnNotificationAction::Failed { error, .. } => {
                         return (Err(error.code), interrupts)
                     }
                 }
@@ -2955,6 +3616,8 @@ mod tests {
         assert!(MAX_RPC_TOTAL_BYTES <= 8 * 1024 * 1024);
         assert!(RPC_TIMEOUT <= Duration::from_secs(10));
         assert!(TURN_TIMEOUT <= Duration::from_secs(90));
+        assert!(TURN_INTERRUPT_REQUEST_TIMEOUT <= Duration::from_secs(3));
+        assert!(TURN_INTERRUPT_CONFIRM_TIMEOUT <= Duration::from_secs(5));
         assert!(PROBE_TIMEOUT <= Duration::from_secs(5));
         assert!(PROCESS_STOP_TIMEOUT <= Duration::from_secs(3));
     }
@@ -3177,6 +3840,98 @@ mod tests {
     }
 
     #[test]
+    fn close_keeps_runtime_until_blocked_stream_threads_are_joined() {
+        let root = test_root("bounded-close");
+        let (release_sender, release_receiver) = mpsc::channel();
+        let blocked_stdout = thread::spawn(move || {
+            let _ = release_receiver.recv();
+        });
+        let (_sender, receiver) = mpsc::channel();
+        let connection = AppServerConnection {
+            child: Mutex::new(None),
+            stdin: Mutex::new(None),
+            pending: Mutex::new(HashMap::new()),
+            notifications: Mutex::new(receiver),
+            next_id: AtomicU64::new(1),
+            disconnected: AtomicBool::new(false),
+            stdout_thread: Mutex::new(Some(blocked_stdout)),
+            stderr_thread: Mutex::new(None),
+            stderr_capture: Arc::new(Mutex::new(Vec::new())),
+            stderr_truncated: Arc::new(AtomicBool::new(false)),
+            runtime_dir: root.clone(),
+        };
+
+        let started = Instant::now();
+        let first = connection.close();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(first.exit_confirmed);
+        assert!(!first.stdout_joined);
+        assert!(first.stderr_joined);
+        assert!(!first.runtime_removed);
+        assert!(root.exists());
+
+        release_sender.send(()).unwrap();
+        let second = connection.close();
+        assert!(second.stdout_joined);
+        assert!(second.stderr_joined);
+        assert!(second.runtime_removed);
+        assert!(!root.exists());
+    }
+
+    #[test]
+    fn close_outcome_requires_runtime_cleanup_before_it_is_final() {
+        let fully_closed = ConnectionCloseOutcome {
+            exit_confirmed: true,
+            stdin_closed: true,
+            kill_requested: false,
+            stdout_joined: true,
+            stderr_joined: true,
+            runtime_removed: true,
+        };
+        assert!(!fully_closed.needs_retry());
+
+        let runtime_left_behind = ConnectionCloseOutcome {
+            runtime_removed: false,
+            ..fully_closed
+        };
+        assert!(runtime_left_behind.needs_retry());
+    }
+
+    #[test]
+    fn incomplete_close_is_retained_until_a_later_retry_finishes() {
+        let root = test_root("retired-close");
+        let (release_sender, release_receiver) = mpsc::channel();
+        let blocked_stdout = thread::spawn(move || {
+            let _ = release_receiver.recv();
+        });
+        let (_sender, receiver) = mpsc::channel();
+        let connection = Arc::new(AppServerConnection {
+            child: Mutex::new(None),
+            stdin: Mutex::new(None),
+            pending: Mutex::new(HashMap::new()),
+            notifications: Mutex::new(receiver),
+            next_id: AtomicU64::new(1),
+            disconnected: AtomicBool::new(false),
+            stdout_thread: Mutex::new(Some(blocked_stdout)),
+            stderr_thread: Mutex::new(None),
+            stderr_capture: Arc::new(Mutex::new(Vec::new())),
+            stderr_truncated: Arc::new(AtomicBool::new(false)),
+            runtime_dir: root.clone(),
+        });
+        let store = CodexAssistantStore::default();
+
+        let first = store.close_or_retain(Arc::clone(&connection));
+        assert!(first.needs_retry());
+        assert_eq!(store.retired_connections.lock().unwrap().len(), 1);
+        assert!(root.exists());
+
+        release_sender.send(()).unwrap();
+        store.retry_retired_connections();
+        assert!(store.retired_connections.lock().unwrap().is_empty());
+        assert!(!root.exists());
+    }
+
+    #[test]
     fn stale_connection_is_cleared_before_a_catalog_can_be_reused() {
         let root = test_root("stale-connection");
         let (_sender, receiver) = mpsc::channel();
@@ -3227,10 +3982,77 @@ mod tests {
     }
 
     #[test]
+    fn connection_leases_block_parallel_connects_and_reject_stale_publishers() {
+        let mut state = AssistantState::default();
+        let first = state.reserve_connection("request-first").unwrap();
+        assert!(state.connection_lease_is_current(&first));
+        assert_eq!(
+            state.reserve_connection("request-second").unwrap_err().code,
+            "codex_app_server_start_failed"
+        );
+
+        state.invalidate_connection_attempt();
+        assert!(!state.connection_lease_is_current(&first));
+
+        let second = state.reserve_connection("request-second").unwrap();
+        assert_ne!(first.generation, second.generation);
+        assert!(state.connection_lease_is_current(&second));
+        state.release_connection_lease(&first);
+        assert!(state.connection_lease_is_current(&second));
+        state.release_connection_lease(&second);
+        assert!(state.connecting.is_none());
+    }
+
+    #[test]
+    fn replaced_connection_cannot_be_used_to_start_a_turn() {
+        let first_root = test_root("turn-connection-first");
+        let second_root = test_root("turn-connection-second");
+        let (_first_sender, first_receiver) = mpsc::channel();
+        let (_second_sender, second_receiver) = mpsc::channel();
+        let first = Arc::new(AppServerConnection {
+            child: Mutex::new(None),
+            stdin: Mutex::new(None),
+            pending: Mutex::new(HashMap::new()),
+            notifications: Mutex::new(first_receiver),
+            next_id: AtomicU64::new(1),
+            disconnected: AtomicBool::new(false),
+            stdout_thread: Mutex::new(None),
+            stderr_thread: Mutex::new(None),
+            stderr_capture: Arc::new(Mutex::new(Vec::new())),
+            stderr_truncated: Arc::new(AtomicBool::new(false)),
+            runtime_dir: first_root,
+        });
+        let second = Arc::new(AppServerConnection {
+            child: Mutex::new(None),
+            stdin: Mutex::new(None),
+            pending: Mutex::new(HashMap::new()),
+            notifications: Mutex::new(second_receiver),
+            next_id: AtomicU64::new(1),
+            disconnected: AtomicBool::new(false),
+            stdout_thread: Mutex::new(None),
+            stderr_thread: Mutex::new(None),
+            stderr_capture: Arc::new(Mutex::new(Vec::new())),
+            stderr_truncated: Arc::new(AtomicBool::new(false)),
+            runtime_dir: second_root,
+        });
+        let mut state = AssistantState {
+            connection: Some(Arc::clone(&first)),
+            ..AssistantState::default()
+        };
+        assert!(state.has_connection(&first));
+        state.connection = Some(Arc::clone(&second));
+        assert!(!state.has_connection(&first));
+        assert!(state.has_connection(&second));
+        first.close();
+        second.close();
+    }
+
+    #[test]
     fn fake_app_server_collects_agent_deltas_and_ignores_old_turns() {
         let server = FakeAppServer {
             notifications: vec![
                 json!({"method":"item/agentMessage/delta","params":{"threadId":"old","turnId":"old","delta":"secret"}}),
+                json!({"method":"item/started","params":{"threadId":"old","turnId":"old","item":{"type":"commandExecution","command":"stale"}}}),
                 json!({"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","delta":"{\"deterministic_facts\":[],"}}),
                 json!({"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","delta":"\"interpretation\":\"ok\",\"limitations\":[],\"suggested_questions\":[]}"}}),
                 json!({"method":"turn/completed","params":{"threadId":"thread-1","turnId":"turn-1","turn":{"status":"completed"}}}),
@@ -3258,6 +4080,84 @@ mod tests {
             assert_eq!(answer.unwrap_err(), "ai_tool_use_blocked");
             assert_eq!(interrupts, 1);
         }
+    }
+
+    #[test]
+    fn tool_blocked_turn_requires_matching_terminal_confirmation() {
+        let mut state = TurnCollectionState::default();
+        let tool = json!({
+            "method": "item/started",
+            "params": {
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "item": {"type": "commandExecution"}
+            }
+        });
+        assert!(matches!(
+            process_turn_notification(&tool, "thread-1", "turn-1", &mut state),
+            TurnNotificationAction::InterruptForTool
+        ));
+        let completed = json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "turn": {"status": "interrupted"}
+            }
+        });
+        match process_turn_notification(&completed, "thread-1", "turn-1", &mut state) {
+            TurnNotificationAction::Failed {
+                error,
+                completion_confirmed,
+                ..
+            } => {
+                assert_eq!(error.code, "ai_tool_use_blocked");
+                assert!(completion_confirmed);
+            }
+            _ => panic!("expected a confirmed blocked-turn completion"),
+        }
+    }
+
+    #[test]
+    fn unconfirmed_turn_outcome_requires_connection_reset() {
+        let unconfirmed = TurnWaitOutcome::Failed {
+            error: RpcFailure::new("codex_app_server_disconnected"),
+            token_usage: None,
+            completion_confirmed: false,
+        };
+        assert!(turn_outcome_requires_connection_reset(&unconfirmed));
+
+        let confirmed = TurnWaitOutcome::Failed {
+            error: RpcFailure::new("ai_turn_interrupted"),
+            token_usage: None,
+            completion_confirmed: true,
+        };
+        assert!(!turn_outcome_requires_connection_reset(&confirmed));
+        let completed = TurnWaitOutcome::Completed {
+            answer: "{}".to_string(),
+            token_usage: None,
+        };
+        assert!(!turn_outcome_requires_connection_reset(&completed));
+    }
+
+    #[test]
+    fn active_turn_interrupt_is_claimed_once_across_callers() {
+        let requested = AtomicBool::new(false);
+        assert!(claim_turn_interrupt(&requested));
+        assert!(requested.load(Ordering::Acquire));
+        assert!(!claim_turn_interrupt(&requested));
+    }
+
+    #[test]
+    fn turn_start_failure_marks_ambiguous_submission_for_connection_reset() {
+        assert!(
+            !TurnStartFailure::before_turn(RpcFailure::new("ai_turn_start_failed"))
+                .turn_may_have_started
+        );
+        assert!(
+            TurnStartFailure::after_turn_attempt(RpcFailure::new("ai_turn_start_failed"))
+                .turn_may_have_started
+        );
     }
 
     #[test]
@@ -3499,8 +4399,10 @@ mod tests {
     }
 
     #[test]
-    fn context_invalidation_discards_thread_and_turn_but_keeps_connection_catalog() {
+    fn context_invalidation_cancels_active_turn_and_keeps_connection_catalog() {
         let store = CodexAssistantStore::default();
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let interrupt_requested = Arc::new(AtomicBool::new(false));
         {
             let mut state = store.state.lock().unwrap();
             state.cli = Some(CodexCliProbeView {
@@ -3526,16 +4428,26 @@ mod tests {
                 default_reasoning_effort: "low".into(),
             });
             state.thread_id = Some("thread-private".into());
+            state.active_turn_thread_id = Some("thread-private".into());
             state.active_turn_id = Some("turn-private".into());
             state.active_turn_request_id = Some("request-private".into());
-            state.cancel_requested = true;
+            state.active_turn_epoch = Some(0);
+            state.active_turn_cancel = Some(Arc::clone(&cancellation));
+            state.active_turn_interrupt_requested = Some(Arc::clone(&interrupt_requested));
+            state.cancel_requested = false;
         }
         store.invalidate_context();
         let state = store.state.lock().unwrap();
         assert!(state.thread_id.is_none());
-        assert!(state.active_turn_id.is_none());
-        assert!(state.active_turn_request_id.is_none());
-        assert!(!state.cancel_requested);
+        assert_eq!(state.active_turn_id.as_deref(), Some("turn-private"));
+        assert_eq!(
+            state.active_turn_request_id.as_deref(),
+            Some("request-private")
+        );
+        assert!(state.cancel_requested);
+        assert!(cancellation.load(Ordering::Acquire));
+        assert!(!interrupt_requested.load(Ordering::Acquire));
+        assert_eq!(state.context_epoch, 1);
         assert_eq!(state.models.len(), 1);
         assert!(state
             .account

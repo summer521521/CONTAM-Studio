@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [Phase 6A App Server生命周期与并发安全收口](records/phase-6a-app-server-lifecycle-hardening.md) | Phase 6A | completed | live |
 | [Phase 6A首屏黑屏收口](records/phase-6a-first-paint-black-screen.md) | Phase 6A | completed | live |
 | [Phase 6A启动与CLI探测性能收口](records/phase-6a-startup-probe-performance.md) | Phase 6A | completed | live |
 | [Phase 6A Codex CLI启动检测](records/phase-6a-cli-startup-probe.md) | Phase 6A | completed | live |
