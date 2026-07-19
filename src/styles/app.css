@@ -1931,6 +1931,14 @@ input:focus-visible,
   aspect-ratio: 16 / 10;
 }
 
+.results-chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
 .results-table-wrap {
   max-height: 390px;
   margin-top: 14px;

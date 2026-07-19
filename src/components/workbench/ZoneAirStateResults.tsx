@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -22,7 +22,12 @@ import {
   formatResultNumber,
   type ZoneAirStateAnalysis,
 } from "../../app/zone-air-state-analysis";
-import { ZoneAirStateChart, type ZoneAirStateChartHandle } from "./ZoneAirStateChart";
+import type { ZoneAirStateChartHandle } from "./ZoneAirStateChart";
+
+const ZoneAirStateChart = lazy(async () => {
+  const module = await import("./ZoneAirStateChart");
+  return { default: module.ZoneAirStateChart };
+});
 
 interface ZoneAirStateResultsProps {
   state: ResultState;
@@ -286,7 +291,9 @@ export function ZoneAirStateResults({
       {view === "charts" ? (
         <div role="tabpanel" className="results-chart-panel">
           <p className="results-chart-description">{t("results.chart.description")}</p>
-          <ZoneAirStateChart ref={chartRef} result={result} theme={theme} />
+          <Suspense fallback={<div className="zone-air-state-chart results-chart-loading" role="status"><span className="loading-indicator" aria-hidden="true" />{t("results.chart.loading")}</div>}>
+            <ZoneAirStateChart ref={chartRef} result={result} theme={theme} />
+          </Suspense>
         </div>
       ) : (
         <ZoneAirStateDataTable result={result} />

@@ -300,7 +300,8 @@
       "temperature": "温度",
       "pressure": "参考压力",
       "density": "空气密度",
-      "resetZoom": "重置缩放"
+      "resetZoom": "重置缩放",
+      "loading": "正在准备交互图表…"
     },
     "export": {
       "action": "导出当前结果CSV",

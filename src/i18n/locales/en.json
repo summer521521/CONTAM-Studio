@@ -300,7 +300,8 @@
       "temperature": "Temperature",
       "pressure": "Reference pressure",
       "density": "Air density",
-      "resetZoom": "Reset zoom"
+      "resetZoom": "Reset zoom",
+      "loading": "Preparing interactive charts…"
     },
     "export": {
       "action": "Export current result CSV",
