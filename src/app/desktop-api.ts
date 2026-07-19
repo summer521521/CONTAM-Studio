@@ -8,6 +8,14 @@ import type { DesktopDraftExportResponse, DesktopDraftTransitionResponse } from 
 import type { DesktopZoneAirStateResponse } from "./result-state";
 import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state";
 import type { DesktopRunResponse } from "./run-state";
+import type {
+  AiContextScope,
+  DesktopAiActionResponse,
+  DesktopAiContextPreviewResponse,
+  DesktopAiTurnResponse,
+  DesktopCodexConnectionResponse,
+  DesktopCodexProbeResponse,
+} from "./ai-state";
 
 export async function selectAndReadPrjZones(
   requestId: string,
@@ -115,4 +123,76 @@ export async function runActiveContamProject(
     requestId,
     projectSessionId,
   });
+}
+
+export async function probeCodexAppServer(requestId: string): Promise<DesktopCodexProbeResponse> {
+  return invoke<DesktopCodexProbeResponse>("probe_codex_app_server", { requestId });
+}
+
+export async function connectCodexAppServer(requestId: string): Promise<DesktopCodexConnectionResponse> {
+  return invoke<DesktopCodexConnectionResponse>("connect_codex_app_server", { requestId });
+}
+
+export async function refreshCodexAccount(requestId: string): Promise<DesktopCodexConnectionResponse> {
+  return invoke<DesktopCodexConnectionResponse>("refresh_codex_account", { requestId });
+}
+
+export async function previewAiContext(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  zoneId: string,
+  scopes: AiContextScope[],
+  language: string,
+  modelId: string,
+  reasoningEffort: string,
+): Promise<DesktopAiContextPreviewResponse> {
+  return invoke<DesktopAiContextPreviewResponse>("preview_ai_context", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    zoneId,
+    scopes,
+    language,
+    modelId,
+    reasoningEffort,
+  });
+}
+
+export async function startReadonlyAiTurn(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  zoneId: string,
+  previewId: string,
+  question: string,
+  scopes: AiContextScope[],
+  language: string,
+  modelId: string,
+  reasoningEffort: string,
+): Promise<DesktopAiTurnResponse> {
+  return invoke<DesktopAiTurnResponse>("start_readonly_ai_turn", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    zoneId,
+    previewId,
+    question,
+    scopes,
+    language,
+    modelId,
+    reasoningEffort,
+  });
+}
+
+export async function interruptReadonlyAiTurn(requestId: string): Promise<DesktopAiActionResponse> {
+  return invoke<DesktopAiActionResponse>("interrupt_readonly_ai_turn", { requestId });
+}
+
+export async function clearReadonlyAiSession(requestId: string): Promise<DesktopAiActionResponse> {
+  return invoke<DesktopAiActionResponse>("clear_readonly_ai_session", { requestId });
+}
+
+export async function disconnectCodexAppServer(requestId: string): Promise<DesktopAiActionResponse> {
+  return invoke<DesktopAiActionResponse>("disconnect_codex_app_server", { requestId });
 }

@@ -2,13 +2,22 @@
 
 记录日期：2026-07-19。
 
+## Phase 6A Codex只读AI助手
+
+- 当前开发切片以用户主动连接的本地`codex app-server`作为首个AI后端，使用用户现有ChatGPT订阅身份；CONTAM Studio不读取Codex认证文件、不收集API Key，也不管理登录或退出。
+- Rust在应用本地数据目录中的空AI运行目录启动App Server，通过有界stdio JSON-RPC执行初始化、账号读取、模型目录、只读Thread、Turn和中断。App Server进程在本机运行，但模型推理需要联网；无AI时全部项目、草稿、运行和结果能力保持可用。
+- AI上下文只由Rust从当前可信项目session、Revision、稳定Zone UUID、活动运行和活动结果生成。默认仅披露当前Zone和草稿摘要；用户发送前必须查看Rust生成的结构化预览，预览后上下文变化会使其失效。
+- Thread固定使用只读沙箱和`never`审批，不启用MCP、动态工具、能力根或项目工作目录。命令执行、文件变更、网络搜索、MCP、动态工具、审批或权限请求等事件会触发中断并丢弃回答。
+- 回答必须满足封闭Schema，并在界面分成确定性事实复述、AI解释和限制。Phase 6A不实现AI Patch、AI运行、项目搜索、完整结果序列分析、其他AI后端或跨重启聊天历史。
+- 自动测试与生产构建已覆盖受控协议和UI状态；当前机器仅能发现Microsoft Store应用包内Codex入口，普通进程执行该WindowsApps文件时被ACL拒绝，因此真实账号、模型和Turn联调尚未完成，不能把Fake App Server测试写成真实订阅验证通过。
+
 ## Phase 3C不可变草稿与撤销工作流
 
 - 当前切片把原始PRJ固定为Revision 0基线，并由Rust在应用本地数据目录管理Revision 1及以后的不可变草稿快照。每次用户批准的`volume_m3` Patch只创建新快照，不覆盖源文件或已有快照。
 - Zone获得由基线SHA-256、对象类型、CONTAM编号、基线源行号和名称生成的确定性UUID v5。该`zone_id`在同一基线的全部草稿、撤销、重做、运行和结果中稳定；不同字节基线不会复用身份。
 - Rust线性历史支持撤销、重做、Undo后新修改截断Redo链，以及将当前Revision复制为用户明确选择且不存在的新PRJ。草稿不跨应用重启恢复，另存副本不自动切换项目。
 - 活动ContamX运行、SimRead结果、统计图表和CSV导出均绑定当前Revision；Revision改变后旧运行、结果和导出上下文失效。当前仍只允许修改`Zone.volume_m3`，不是完整PRJ编辑器。
-- 首轮真实GUI验收除草稿另存外均通过；另存复核发现并修复SHA-256十六进制大小写比较缺陷，修改后Revision的真实严格重读回归通过，当前仅待用户聚焦复核另存成功、拒绝覆盖和取消路径。ContamX状态在当前会话首次实际probe前显示待验证、运行成功后显示已验证版本，属于预期行为。
+- 草稿另存复核发现并修复SHA-256十六进制大小写比较缺陷。用户随后完成另存成功、拒绝覆盖和取消路径复核，全部31项真实GUI验收通过；证据见[PR #14最终验收评论](https://github.com/summer521521/CONTAM-Studio/pull/14#issuecomment-5013736336)。ContamX状态在当前会话首次实际probe前显示待验证、运行成功后显示已验证版本，属于预期行为。Phase 3C已完成。
 
 ## Phase 5C Zone空气状态分析工作区
 
@@ -176,7 +185,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、AI调用、网络服务或Python打包分发；Phase 3C和Phase 5C不得解释为完整编辑或结果分析系统。
+桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。Phase 6A正在接入用户主动启用、只读取Rust披露上下文的Codex助手。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、AI写入、其他AI后端、网络服务或Python打包分发；Phase 3C、Phase 5C和Phase 6A不得解释为完整编辑、完整结果分析或自主Agent系统。
 
 ## 待验证问题
 

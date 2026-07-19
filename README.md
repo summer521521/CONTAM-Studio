@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目当前进入**Phase 3C：不可变草稿Revision与撤销**。原始PRJ固定为Revision 0，批准的单Zone体积Patch在Rust控制的应用本地数据目录创建新Revision；稳定Zone UUID贯穿修改、Undo/Redo、运行和结果。另存当前草稿只创建用户选择的新PRJ，不覆盖源文件，也不自动切换项目。当前仍只支持`Zone.volume_m3`。
+项目当前进入**Phase 6A：Codex只读AI助手**。用户主动连接本地`codex app-server`后，可以在发送前查看Rust从当前可信Revision和Zone生成的结构化上下文，并获得严格区分事实复述、AI解释和限制的回答。App Server在本机运行，但模型推理需要联网并使用用户现有ChatGPT订阅；无需单独API Key。AI不能读取PRJ或项目目录、运行命令、修改项目、启动ContamX或应用Patch，无AI时全部核心工作流保持可用。
 
 ## 架构方向
 
@@ -29,6 +29,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 React GUI
 ↓
 Tauri桌面宿主
+├─受控stdio JSON-RPC→本地Codex App Server→ChatGPT订阅
 ↓
 受控通信接口
 ↓
@@ -38,6 +39,8 @@ Python CONTAM领域核心
 ```
 
 Phase 1实现React前端与最小Tauri桌面宿主；Phase 2建立严格Zone纯文档读取器和桌面只读闭环；Phase 3A-0建立哈希绑定、仅写副本的Python Patch，Phase 3B接入Diff审阅。Phase 3C复用同一Patch领域函数，把批准修改提交为不可变内部Revision，并由Rust管理稳定Zone UUID、线性Undo/Redo、安全另存和当前Revision的运行/结果绑定。React只取得路径无关的安全视图；contamxpy隔离检查没有接入GUI。
+
+Phase 6A的AI侧栏只接受Rust生成的结构化披露快照。默认发送当前Zone和草稿摘要，不发送绝对路径、PRJ正文、内部快照、manifest、SIM、原始日志或完整577条结果；上下文变化后必须重新预览。Codex Thread固定为只读沙箱和禁止审批，工具或权限事件会被中断并丢弃回答。详见[Codex只读助手架构](docs/architecture/codex-readonly-assistant.md)。
 
 ## 开发启动
 
@@ -116,6 +119,8 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [Tauri-Python Zone桥](docs/architecture/tauri-python-zone-bridge.md)
 - [Zone体积副本Patch](docs/architecture/zone-volume-patch.md)
 - [不可变项目草稿Revision](docs/architecture/draft-project-revisions.md)
+- [Codex只读助手与上下文披露](docs/architecture/codex-readonly-assistant.md)
+- [Phase 6A验证记录](docs/development/phase-6a-codex-readonly-assistant-verification.md)
 - [Phase 3C自动与非GUI验证](docs/development/phase-3c-draft-snapshots-undo-verification.md)
 - [ContamX运行工作区](docs/architecture/contamx-run-workspace.md)
 - [Phase 4B-1受控桌面运行](docs/architecture/phase-4b-desktop-contamx-run.md)

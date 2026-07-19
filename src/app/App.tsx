@@ -22,8 +22,22 @@ import {
   selectAndReadPrjZones,
   selectAndExtractZoneAirState,
   runActiveContamProject,
+  connectCodexAppServer,
+  refreshCodexAccount,
+  previewAiContext,
+  startReadonlyAiTurn,
+  interruptReadonlyAiTurn,
+  clearReadonlyAiSession,
+  disconnectCodexAppServer,
   undoProjectDraft,
 } from "./desktop-api";
+import {
+  aiReducer,
+  INITIAL_AI_STATE,
+  isSafeAiPreview,
+  isStructuredAiAnswer,
+  type AiContextScope,
+} from "./ai-state";
 import {
   applyResponseIssue,
   INITIAL_PATCH_STATE,
@@ -76,12 +90,14 @@ function App() {
   const [resultState, dispatchResult] = useReducer(resultReducer, INITIAL_RESULT_STATE);
   const [resultExportState, dispatchResultExport] = useReducer(resultExportReducer, INITIAL_RESULT_EXPORT_STATE);
   const [runState, dispatchRun] = useReducer(runReducer, INITIAL_RUN_STATE);
+  const [aiState, dispatchAi] = useReducer(aiReducer, INITIAL_AI_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   const requestSequence = useRef(0);
   const resultSequence = useRef(0);
   const resultExportSequence = useRef(0);
   const runSequence = useRef(0);
+  const aiSequence = useRef(0);
   const mounted = useRef(true);
   const initialMainLayout = useRef(getMainLayout(workbench)).current;
   const initialCenterLayout = useRef(getCenterLayout(workbench)).current;
@@ -101,6 +117,7 @@ function App() {
       resultSequence.current += 1;
       resultExportSequence.current += 1;
       runSequence.current += 1;
+      aiSequence.current += 1;
     };
   }, []);
 
@@ -222,6 +239,7 @@ function App() {
       dispatchResult({ type: "project_or_zone_changed" });
       dispatchResultExport({ type: "result_changed" });
       dispatchRun({ type: "project_changed" });
+      dispatchAi({ type: "context_changed" });
     } catch {
       if (!mounted.current || sequence !== requestSequence.current) return;
       dispatchProject({
@@ -298,6 +316,7 @@ function App() {
         result: response.result,
       });
       dispatchResultExport({ type: "result_changed" });
+      dispatchAi({ type: "context_changed" });
     } catch {
       if (!mounted.current || sequence !== resultSequence.current) return;
       dispatchResult({
@@ -453,6 +472,7 @@ function App() {
         projectSessionId: projectState.projectSessionId,
         summary: response.summary,
       });
+      dispatchAi({ type: "context_changed" });
     } catch {
       if (!mounted.current || sequence !== runSequence.current) return;
       dispatchRun({
@@ -564,6 +584,7 @@ function App() {
       dispatchResultExport({ type: "result_changed" });
       dispatchRun({ type: "project_changed" });
       dispatchPatch({ type: "apply_succeeded", requestId });
+      dispatchAi({ type: "context_changed" });
       setPlaceholderNotice(t("patch.draftAppliedSuccess", { revision: response.draft.revision_number }));
     } catch {
       if (!mounted.current) return;
@@ -604,6 +625,7 @@ function App() {
       dispatchRun({ type: "project_changed" });
       dispatchResult({ type: "project_or_zone_changed" });
       dispatchResultExport({ type: "result_changed" });
+      dispatchAi({ type: "context_changed" });
       setPlaceholderNotice(t(direction === "undo" ? "draft.undoSuccess" : "draft.redoSuccess", { revision: response.draft.revision_number }));
     } catch {
       if (mounted.current) dispatchProject({ type: "issue_reported", issue: { code: "desktop_bridge_invoke_failed", message: "Draft transition failed", source_line_number: null, context: {} } });
@@ -634,6 +656,147 @@ function App() {
       if (mounted.current) setDraftBusy(false);
     }
   }, [draftBusy, projectState.draft, projectState.projectSessionId, t]);
+
+  const clearAiSession = useCallback(async () => {
+    aiSequence.current += 1;
+    dispatchAi({ type: "session_cleared" });
+    try {
+      await clearReadonlyAiSession(crypto.randomUUID());
+    } catch {
+      // The trusted Rust context still invalidates on project and revision changes.
+    }
+  }, []);
+
+  const updateAiConnection = useCallback(async (refresh = false) => {
+    const sequence = ++aiSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchAi({ type: "connect_started", requestId });
+    try {
+      const response = await (refresh ? refreshCodexAccount : connectCodexAppServer)(requestId);
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      if (response.request_id !== requestId || response.error || !response.connection) {
+        dispatchAi({
+          type: "operation_failed",
+          requestId,
+          issue: response.error ?? { code: "codex_app_server_initialization_failed", message: "Codex connection response invalid." },
+        });
+        return;
+      }
+      dispatchAi({ type: "connect_succeeded", requestId, connection: response.connection });
+    } catch {
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_app_server_start_failed", message: "Codex connection failed." } });
+    }
+  }, []);
+
+  const disconnectAi = useCallback(async () => {
+    aiSequence.current += 1;
+    try {
+      await disconnectCodexAppServer(crypto.randomUUID());
+    } finally {
+      if (mounted.current) dispatchAi({ type: "disconnected" });
+    }
+  }, []);
+
+  const toggleAiScope = useCallback((scope: AiContextScope) => {
+    dispatchAi({ type: "scope_toggled", scope });
+    void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
+  }, []);
+
+  const changeAiModel = useCallback((modelId: string) => {
+    const model = aiState.connection?.models.find((item) => item.id === modelId && item.available);
+    if (!model) return;
+    dispatchAi({ type: "model_changed", modelId, effort: model.default_reasoning_effort });
+    void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
+  }, [aiState.connection?.models]);
+
+  const changeAiEffort = useCallback((effort: string) => {
+    const model = aiState.connection?.models.find((item) => item.id === aiState.modelId);
+    if (!model?.reasoning_efforts.some((item) => item.id === effort)) return;
+    dispatchAi({ type: "effort_changed", effort });
+    void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
+  }, [aiState.connection?.models, aiState.modelId]);
+
+  const previewContext = useCallback(async () => {
+    if (!projectState.projectSessionId || !projectState.draft || !currentZone || !aiState.modelId || !aiState.reasoningEffort) return;
+    const sequence = ++aiSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchAi({ type: "preview_started", requestId });
+    try {
+      const response = await previewAiContext(
+        requestId,
+        projectState.projectSessionId,
+        projectState.draft.revision_id,
+        currentZone.zone_id,
+        aiState.scopes,
+        workbench.language,
+        aiState.modelId,
+        aiState.reasoningEffort,
+      );
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      if (
+        response.request_id !== requestId
+        || response.error
+        || !response.preview
+        || response.preview.project_session_id !== projectState.projectSessionId
+        || response.preview.revision_id !== projectState.draft.revision_id
+        || response.preview.zone_id !== currentZone.zone_id
+        || !isSafeAiPreview(response.preview)
+      ) {
+        dispatchAi({ type: "operation_failed", requestId, issue: response.error ?? { code: "ai_context_unavailable", message: "AI context preview invalid." } });
+        return;
+      }
+      dispatchAi({ type: "preview_succeeded", requestId, preview: response.preview });
+    } catch {
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      dispatchAi({ type: "operation_failed", requestId, issue: { code: "ai_context_unavailable", message: "AI context preview failed." } });
+    }
+  }, [aiState.modelId, aiState.reasoningEffort, aiState.scopes, currentZone, projectState.draft, projectState.projectSessionId, workbench.language]);
+
+  const sendAiQuestion = useCallback(async () => {
+    if (!projectState.projectSessionId || !projectState.draft || !currentZone || !aiState.preview || !aiState.question.trim()) return;
+    const sequence = ++aiSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchAi({ type: "turn_started", requestId });
+    try {
+      const response = await startReadonlyAiTurn(
+        requestId,
+        projectState.projectSessionId,
+        projectState.draft.revision_id,
+        currentZone.zone_id,
+        aiState.preview.preview_id,
+        aiState.question,
+        aiState.scopes,
+        workbench.language,
+        aiState.modelId,
+        aiState.reasoningEffort,
+      );
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      if (response.request_id === requestId && response.error?.code === "ai_turn_interrupted") {
+        dispatchAi({ type: "turn_interrupted" });
+        return;
+      }
+      if (response.request_id !== requestId || response.error || response.status !== "completed" || !response.answer || !isStructuredAiAnswer(response.answer)) {
+        dispatchAi({ type: "operation_failed", requestId, issue: response.error ?? { code: "ai_response_contract_invalid", message: "AI answer contract invalid." } });
+        return;
+      }
+      dispatchAi({ type: "turn_succeeded", requestId, answer: response.answer, tokenUsage: response.token_usage });
+    } catch {
+      if (!mounted.current || sequence !== aiSequence.current) return;
+      dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_app_server_disconnected", message: "AI turn failed." } });
+    }
+  }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, currentZone, projectState.draft, projectState.projectSessionId, workbench.language]);
+
+  const stopAiTurn = useCallback(async () => {
+    dispatchAi({ type: "interrupt_started" });
+    try {
+      const response = await interruptReadonlyAiTurn(crypto.randomUUID());
+      if (mounted.current && response.error) dispatchAi({ type: "operation_failed", requestId: null, issue: response.error });
+    } catch {
+      if (mounted.current) dispatchAi({ type: "operation_failed", requestId: null, issue: { code: "codex_app_server_disconnected", message: "AI interrupt failed." } });
+    }
+  }, []);
+
   const openDisabled =
     projectState.status === "selecting" ||
     projectState.status === "loading" ||
@@ -727,7 +890,11 @@ function App() {
       <TopBar
         language={workbench.language}
         theme={workbench.theme}
-        onLanguageChange={(language: AppLanguage) => updateWorkbench({ language })}
+        onLanguageChange={(language: AppLanguage) => {
+          updateWorkbench({ language });
+          dispatchAi({ type: "context_changed" });
+          void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
+        }}
         onThemeToggle={() =>
           updateWorkbench({ theme: workbench.theme === "light" ? "dark" : "light" })
         }
@@ -780,6 +947,8 @@ function App() {
                   dispatchPatch({ type: "project_or_zone_changed" });
                   dispatchResult({ type: "project_or_zone_changed" });
                   dispatchResultExport({ type: "result_changed" });
+                  dispatchAi({ type: "context_changed" });
+                  void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
                 })()
               }
               onCollapse={toggleProject}
@@ -856,12 +1025,25 @@ function App() {
               onCancelVolumeEdit={() => dispatchPatch({ type: "cancel" })}
               onTabChange={(contextTab) => updateWorkbench({ contextTab })}
               onCollapse={toggleContext}
+              aiState={aiState}
+              aiContextAvailable={Boolean(projectState.projectSessionId && projectState.draft && currentZone)}
+              onAiConnect={() => void updateAiConnection(false)}
+              onAiRefresh={() => void updateAiConnection(true)}
+              onAiDisconnect={() => void disconnectAi()}
+              onAiScopeToggle={toggleAiScope}
+              onAiModelChange={changeAiModel}
+              onAiEffortChange={changeAiEffort}
+              onAiPreview={() => void previewContext()}
+              onAiQuestionChange={(question) => dispatchAi({ type: "question_changed", question })}
+              onAiSend={() => void sendAiQuestion()}
+              onAiStop={() => void stopAiTurn()}
+              onAiClear={() => void clearAiSession()}
             />
           </Panel>
         </Group>
       </div>
 
-      <StatusBar theme={workbench.theme} projectState={projectState} runState={runState} />
+      <StatusBar theme={workbench.theme} projectState={projectState} runState={runState} aiState={aiState} />
 
       {placeholderNotice ? (
         <div className="placeholder-toast" role="status" aria-live="polite">

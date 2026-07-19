@@ -176,7 +176,7 @@ impl Sha256 {
     }
 }
 
-fn sha256_file(path: &Path) -> std::io::Result<(String, u64)> {
+pub(crate) fn sha256_file(path: &Path) -> std::io::Result<(String, u64)> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
@@ -204,10 +204,10 @@ struct RawReaderDiagnostic {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ReaderDiagnostic {
-    code: String,
-    message: String,
-    source_line_number: Option<u64>,
-    context: BTreeMap<String, Value>,
+    pub(crate) code: String,
+    pub(crate) message: String,
+    pub(crate) source_line_number: Option<u64>,
+    pub(crate) context: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -813,6 +813,7 @@ struct ActiveRunContext {
     run_id: String,
     manifest_path: PathBuf,
     succeeded: bool,
+    summary: ContamXRunSummaryView,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1054,6 +1055,189 @@ impl DesktopProjectSessionStore {
         state.active_result = Some(context);
         Ok(())
     }
+
+    pub(crate) fn build_ai_context(
+        &self,
+        project_session_id: &str,
+        revision_id: &str,
+        zone_id: &str,
+        scopes: &[String],
+    ) -> Result<AiTrustedContext, ReaderDiagnostic> {
+        let state = self.state.lock().expect("desktop session mutex poisoned");
+        let active = state.active_project.as_ref().ok_or_else(|| {
+            host_diagnostic(
+                "ai_context_unavailable",
+                "No active project is available for AI context.",
+                BTreeMap::new(),
+            )
+        })?;
+        if active.project_session_id != project_session_id
+            || active.active_revision().revision_id != revision_id
+        {
+            return Err(host_diagnostic(
+                "ai_context_stale",
+                "The project revision changed after the AI context request.",
+                BTreeMap::new(),
+            ));
+        }
+        let zone = active.zone_by_id(zone_id).ok_or_else(|| {
+            host_diagnostic(
+                "ai_context_stale",
+                "The selected Zone changed after the AI context request.",
+                BTreeMap::new(),
+            )
+        })?;
+        let mut payload = serde_json::Map::new();
+        for scope in scopes {
+            match scope.as_str() {
+                "project_summary" => {
+                    payload.insert(
+                        scope.clone(),
+                        json!({
+                            "file_name": safe_project_file_name(&active.baseline_source_path),
+                            "zone_count": active.zones.len(),
+                            "reader_mode": active.reader_mode,
+                            "header_version": active.header_version,
+                            "revision_number": active.active_revision().revision_number,
+                        }),
+                    );
+                }
+                "selected_zone" => {
+                    payload.insert(
+                        scope.clone(),
+                        json!({
+                            "zone_id": zone.zone_id,
+                            "contam_number": zone.contam_number,
+                            "name": zone.name,
+                            "flags": zone.flags,
+                            "level_number": zone.level_number,
+                            "relative_height": zone.relative_height,
+                            "volume_m3": zone.volume_m3,
+                            "source_line_number": zone.source_line_number,
+                            "units": {"relative_height": "m", "volume": "m3"},
+                        }),
+                    );
+                }
+                "draft_summary" => {
+                    let draft = active.draft_summary();
+                    payload.insert(
+                        scope.clone(),
+                        json!({
+                            "revision_number": draft.revision_number,
+                            "revision_id": draft.revision_id,
+                            "dirty": draft.dirty,
+                            "exported": draft.exported,
+                            "can_undo": draft.can_undo,
+                            "can_redo": draft.can_redo,
+                        }),
+                    );
+                }
+                "run_summary" => {
+                    let run = state
+                        .active_run
+                        .as_ref()
+                        .filter(|run| run.is_bound_to(active));
+                    payload.insert(
+                        scope.clone(),
+                        match run {
+                            Some(run) => json!({
+                                "available": true,
+                                "run_id": run.run_id,
+                                "succeeded": run.succeeded,
+                                "solver_name": run.summary.solver_name,
+                                "solver_version": run.summary.solver_version,
+                                "exit_code": run.summary.exit_code,
+                                "timed_out": run.summary.timed_out,
+                                "sim_artifact_count": run.summary.sim_artifact_count,
+                                "source_unchanged": run.summary.source_unchanged,
+                                "duration_ms": run.summary.duration_ms,
+                            }),
+                            None => json!({"available": false}),
+                        },
+                    );
+                }
+                "result_summary" => {
+                    let result = state.active_result.as_ref().filter(|result| {
+                        result.project_session_id == active.project_session_id
+                            && result.revision_id == active.active_revision().revision_id
+                            && result.source_sha256 == active.source_sha256
+                            && result.zone_id == zone.zone_id
+                            && result.sample_count as usize == result.result.samples.len()
+                    });
+                    payload.insert(
+                        scope.clone(),
+                        match result {
+                            Some(result) => {
+                                let first = result.result.samples.first();
+                                let last = result.result.samples.last();
+                                json!({
+                                    "available": true,
+                                    "result_type": result.result.result_type,
+                                    "zone_id": result.zone_id,
+                                    "zone_number": result.zone_number,
+                                    "zone_name": result.zone_name,
+                                    "run_id": result.run_id,
+                                    "extraction_id": result.extraction_id,
+                                    "sample_count": result.sample_count,
+                                    "unit_system": result.unit_system,
+                                    "first_sample": first,
+                                    "last_sample": last,
+                                    "time_range_seconds": [
+                                        first.map(|sample| sample.sim_time_seconds),
+                                        last.map(|sample| sample.sim_time_seconds)
+                                    ],
+                                    "full_series_disclosed": false,
+                                    "disclosure_note": "The complete result series was not sent.",
+                                })
+                            }
+                            None => json!({"available": false}),
+                        },
+                    );
+                }
+                "diagnostics" => {
+                    let diagnostics: Vec<Value> = active
+                        .active_revision()
+                        .project
+                        .diagnostics
+                        .iter()
+                        .map(|diagnostic| {
+                            json!({
+                                "code": diagnostic.code,
+                                "message": diagnostic.message,
+                                "source_line_number": diagnostic.source_line_number,
+                            })
+                        })
+                        .collect();
+                    payload.insert(scope.clone(), Value::Array(diagnostics));
+                }
+                _ => {
+                    return Err(host_diagnostic(
+                        "ai_context_scope_invalid",
+                        "The requested AI context scope is not supported.",
+                        BTreeMap::new(),
+                    ))
+                }
+            }
+        }
+        Ok(AiTrustedContext {
+            project_session_id: active.project_session_id.clone(),
+            revision_id: active.active_revision().revision_id.clone(),
+            revision_number: active.active_revision().revision_number,
+            zone_id: zone.zone_id.clone(),
+            zone_name: zone.name.clone(),
+            payload: Value::Object(payload),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct AiTrustedContext {
+    pub(crate) project_session_id: String,
+    pub(crate) revision_id: String,
+    pub(crate) revision_number: u64,
+    pub(crate) zone_id: String,
+    pub(crate) zone_name: String,
+    pub(crate) payload: Value,
 }
 
 impl Drop for DesktopProjectSessionStore {
@@ -2325,6 +2509,7 @@ fn validate_contamx_run_result(
         run_id: run.run_id,
         manifest_path,
         succeeded: true,
+        summary: summary.clone(),
     };
     Ok((summary, context))
 }
@@ -2659,6 +2844,10 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
                 };
             }
         }
+    }
+    if project_session_id.is_some() {
+        app.state::<crate::codex_app_server::CodexAssistantStore>()
+            .invalidate_context();
     }
     DesktopOpenResponse {
         request_id,
@@ -3824,6 +4013,8 @@ pub async fn apply_zone_volume_patch_to_draft(
             let _ = std::fs::remove_file(old.source_path);
         }
     }
+    app.state::<crate::codex_app_server::CodexAssistantStore>()
+        .invalidate_context();
     DesktopApplyResponse {
         request_id,
         cancelled: false,
@@ -4089,6 +4280,9 @@ async fn switch_project_draft(
     state.planned_patch = None;
     state.active_run = None;
     state.active_result = None;
+    drop(state);
+    app.state::<crate::codex_app_server::CodexAssistantStore>()
+        .invalidate_context();
     DesktopDraftTransitionResponse {
         request_id,
         project_session_id: Some(project_session_id),
@@ -4451,6 +4645,21 @@ mod tests {
 
     fn test_draft_root(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("contam-studio-{label}-{}", std::process::id()))
+    }
+
+    fn test_run_summary(run_id: &str) -> ContamXRunSummaryView {
+        ContamXRunSummaryView {
+            status: "succeeded".into(),
+            run_id: run_id.into(),
+            solver_name: "contamx3.exe".into(),
+            solver_version: "3.4.0.3".into(),
+            started_at_utc: "2026-07-19T00:00:00Z".into(),
+            duration_ms: 72,
+            exit_code: 0,
+            timed_out: false,
+            sim_artifact_count: 1,
+            source_unchanged: true,
+        }
     }
 
     fn active_context(
@@ -5166,6 +5375,7 @@ mod tests {
             run_id: "run-1".into(),
             manifest_path: manifest,
             succeeded: true,
+            summary: test_run_summary("run-1"),
         };
         store.state.lock().unwrap().active_run = Some(retained.clone());
         let _failure = run_failure(
@@ -5212,6 +5422,7 @@ mod tests {
             run_id: "20260718T120000Z-abcdef12".into(),
             manifest_path: manifest,
             succeeded: true,
+            summary: test_run_summary("20260718T120000Z-abcdef12"),
         };
         assert_eq!(
             validate_active_run_context(&context, &active, &root).unwrap(),
@@ -5416,6 +5627,7 @@ mod tests {
             run_id: "new-run".into(),
             manifest_path: fixture,
             succeeded: true,
+            summary: test_run_summary("new-run"),
         });
         assert_eq!(
             store
@@ -5427,6 +5639,79 @@ mod tests {
                 .unwrap()
                 .run_id,
             "run-1"
+        );
+    }
+
+    #[test]
+    fn ai_context_is_built_from_bound_state_without_paths_or_full_series() {
+        let store = DesktopProjectSessionStore::default();
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "read-ai-context").result.unwrap();
+        store.activate_project(
+            "session-ai".into(),
+            fixture.clone(),
+            test_draft_root("ai-context"),
+            &project,
+        );
+        let active = store.state.lock().unwrap().active_project.clone().unwrap();
+        let zone = active.zones[0].clone();
+        let result =
+            validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
+        store
+            .retain_result(&active, ActiveResultSource::SelectedManifest, &result)
+            .unwrap();
+        store.state.lock().unwrap().active_run = Some(ActiveRunContext {
+            project_session_id: active.project_session_id.clone(),
+            source_sha256: active.source_sha256.clone(),
+            revision_id: active.active_revision().revision_id.clone(),
+            run_id: "run-1".into(),
+            manifest_path: fixture,
+            succeeded: true,
+            summary: test_run_summary("run-1"),
+        });
+        let context = store
+            .build_ai_context(
+                &active.project_session_id,
+                &active.active_revision().revision_id,
+                &zone.zone_id,
+                &[
+                    "project_summary".into(),
+                    "selected_zone".into(),
+                    "draft_summary".into(),
+                    "run_summary".into(),
+                    "result_summary".into(),
+                    "diagnostics".into(),
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            context.payload.pointer("/run_summary/solver_name"),
+            Some(&json!("contamx3.exe"))
+        );
+        assert_eq!(
+            context
+                .payload
+                .pointer("/result_summary/full_series_disclosed"),
+            Some(&Value::Bool(false))
+        );
+        assert!(context.payload.pointer("/result_summary/samples").is_none());
+        let serialized = serde_json::to_string(&context).unwrap();
+        assert!(!serialized.contains("source_path"));
+        assert!(!serialized.contains("manifest_path"));
+        assert!(!serialized.contains(active.source_path.to_string_lossy().as_ref()));
+        assert!(!serialized.contains(&active.source_sha256));
+
+        assert_eq!(
+            store
+                .build_ai_context(
+                    &active.project_session_id,
+                    &Uuid::from_u128(1).to_string(),
+                    &zone.zone_id,
+                    &["selected_zone".into()],
+                )
+                .unwrap_err()
+                .code,
+            "ai_context_stale"
         );
     }
 
@@ -5826,10 +6111,18 @@ mod tests {
             "extract_active_run_zone_air_state",
             "export_active_zone_air_state_csv",
             "run_active_contam_project",
+            "probe_codex_app_server",
+            "connect_codex_app_server",
+            "refresh_codex_account",
+            "preview_ai_context",
+            "start_readonly_ai_turn",
+            "interrupt_readonly_ai_turn",
+            "clear_readonly_ai_session",
+            "disconnect_codex_app_server",
         ] {
             assert!(build_script.contains(command));
         }
-        assert_eq!(capability["permissions"].as_array().unwrap().len(), 11);
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 19);
         let forbidden = [
             "sourcePath",
             "outputPath",
@@ -5846,6 +6139,9 @@ mod tests {
         assert!(desktop_api.contains("undoProjectDraft"));
         assert!(desktop_api.contains("redoProjectDraft"));
         assert!(desktop_api.contains("exportActiveProjectDraftCopy"));
+        assert!(desktop_api.contains("connectCodexAppServer"));
+        assert!(desktop_api.contains("previewAiContext"));
+        assert!(desktop_api.contains("startReadonlyAiTurn"));
         assert!(desktop_api.contains("requestId"));
         assert!(desktop_api.contains("projectSessionId"));
         assert!(!package_json.contains("@tauri-apps/plugin-dialog"));
@@ -5854,6 +6150,30 @@ mod tests {
         assert!(
             export_permission.contains("commands.allow = [\"export_active_zone_air_state_csv\"]")
         );
+        for (permission, command) in [
+            (
+                include_str!("../permissions/autogenerated/probe_codex_app_server.toml"),
+                "probe_codex_app_server",
+            ),
+            (
+                include_str!("../permissions/autogenerated/connect_codex_app_server.toml"),
+                "connect_codex_app_server",
+            ),
+            (
+                include_str!("../permissions/autogenerated/preview_ai_context.toml"),
+                "preview_ai_context",
+            ),
+            (
+                include_str!("../permissions/autogenerated/start_readonly_ai_turn.toml"),
+                "start_readonly_ai_turn",
+            ),
+            (
+                include_str!("../permissions/autogenerated/interrupt_readonly_ai_turn.toml"),
+                "interrupt_readonly_ai_turn",
+            ),
+        ] {
+            assert!(permission.contains(&format!("commands.allow = [\"{command}\"]")));
+        }
         let export_start = source
             .find("pub async fn export_active_zone_air_state_csv")
             .unwrap();

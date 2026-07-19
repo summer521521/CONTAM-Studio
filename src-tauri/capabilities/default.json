@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal capability for controlled PRJ open, reversible volume drafts, copy export, result extraction, and active revision runs.",
+  "description": "Minimal capability for controlled PRJ workflows and the read-only Codex App Server assistant.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -14,6 +14,14 @@
     "allow-select-and-extract-zone-air-state",
     "allow-extract-active-run-zone-air-state",
     "allow-export-active-zone-air-state-csv",
-    "allow-run-active-contam-project"
+    "allow-run-active-contam-project",
+    "allow-probe-codex-app-server",
+    "allow-connect-codex-app-server",
+    "allow-refresh-codex-account",
+    "allow-preview-ai-context",
+    "allow-start-readonly-ai-turn",
+    "allow-interrupt-readonly-ai-turn",
+    "allow-clear-readonly-ai-session",
+    "allow-disconnect-codex-app-server"
   ]
 }

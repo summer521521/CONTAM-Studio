@@ -1150,6 +1150,196 @@ input:focus-visible,
   border-top: 1px solid var(--border);
 }
 
+.codex-assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.assistant-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.assistant-heading > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.assistant-heading h2,
+.assistant-preview h3,
+.assistant-answer h3 {
+  margin: 0;
+}
+
+.assistant-heading h2 {
+  font-size: 15px;
+}
+
+.assistant-heading p,
+.assistant-status span,
+.assistant-boundary p,
+.assistant-safe-note,
+.assistant-login-note,
+.assistant-progress {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-status {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  background: var(--bg-surface-subtle);
+  border-left: 3px solid var(--border-strong);
+}
+
+.assistant-status-available {
+  border-left-color: var(--success);
+}
+
+.assistant-status-error,
+.assistant-status-not_authenticated {
+  border-left-color: var(--warning);
+}
+
+.assistant-status code {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.assistant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assistant-actions .primary-action,
+.assistant-actions .secondary-action,
+.assistant-wide-action {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 11px;
+}
+
+.assistant-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.assistant-field select,
+.assistant-field textarea {
+  width: 100%;
+  color: var(--text-primary);
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.assistant-field select {
+  height: 34px;
+  padding: 0 8px;
+}
+
+.assistant-field textarea {
+  min-height: 94px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.assistant-scopes {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+}
+
+.assistant-scopes legend {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.assistant-scopes label {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.assistant-preview,
+.assistant-answer {
+  padding: 10px;
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border);
+}
+
+.assistant-preview h3,
+.assistant-answer h3 {
+  font-size: 12px;
+}
+
+.assistant-preview dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.assistant-preview dl > div {
+  min-width: 0;
+}
+
+.assistant-preview dt,
+.assistant-preview p {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.assistant-preview dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.assistant-preview pre {
+  max-height: 240px;
+  padding: 8px;
+  overflow: auto;
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-answer {
+  display: grid;
+  gap: 12px;
+}
+
+.assistant-answer p,
+.assistant-answer ul {
+  margin: 6px 0 0;
+  padding-left: 17px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.assistant-answer p {
+  padding-left: 0;
+}
+
 .bottom-tabs {
   flex-basis: 34px;
 }

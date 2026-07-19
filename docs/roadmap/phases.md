@@ -30,7 +30,7 @@
 - **主要交付物**：稳定UUID、结构化Patch、Diff、验证、确认、快照和撤销入口。
 - **退出条件**：修改只作用于副本或草稿，保存前后检查可重复，原始PRJ默认不覆盖。
 - **不包含**：复杂引用、全格式无损回写和批量编辑。
-- **当前进展**：Phase 3A-0实现哈希绑定的单Zone `volume_m3` Patch，Phase 3B建立Rust内存Patch保管和安全Diff审阅。当前Phase 3C把批准的Patch应用到Rust控制的不可变内部Revision，建立确定性Zone UUID、线性Undo/Redo和安全另存当前草稿；运行和结果绑定当前Revision。仍不支持其他字段、多Patch事务、复杂历史、跨重启恢复或完整PRJ保存。
+- **当前进展**：Phase 3A-0实现哈希绑定的单Zone `volume_m3` Patch，Phase 3B建立Rust内存Patch保管和安全Diff审阅，Phase 3C完成不可变内部Revision、确定性Zone UUID、线性Undo/Redo、安全另存当前草稿和当前Revision的运行/结果绑定；全部31项真实GUI验收通过。仍不支持其他字段、多Patch事务、复杂历史、跨重启恢复或完整PRJ保存。
 
 ## Phase 4：第一次真实ContamX运行
 
@@ -53,6 +53,7 @@
 - **主要交付物**：提供方配置、上下文预览、只读工具、推测与确定性结果标识。
 - **退出条件**：AI无法写入项目或启动求解，用户能看见其读取范围和联网状态。
 - **不包含**：Patch应用、自动运行和完全自主Agent。
+- **当前进展**：Phase 6A以用户主动连接的Codex App Server为首个后端，建立账号与模型目录读取、Rust可信上下文披露、只读Thread、结构化回答、停止和工具事件拦截。当前不支持AI Patch、完整结果发送、项目搜索、其他AI后端或跨重启聊天历史。
 
 ## Phase 7：AI Patch与审批
 

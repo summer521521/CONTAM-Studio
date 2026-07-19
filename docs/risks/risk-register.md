@@ -42,3 +42,8 @@
 | R-3C-2 | UUID跨项目误复用或Revision间身份漂移 | 极高 | UUID v5绑定基线SHA-256、对象类型、基线编号、源行和名称；每次新Revision、Undo/Redo都严格重读并验证映射 | Phase 3C |
 | R-3C-3 | Undo/Redo失败移动cursor或旧运行结果跨Revision复用 | 极高 | 切换前验证目标哈希、大小和Zone身份；失败保持cursor及可靠上下文；成功后清除Patch、运行、结果和导出状态 | Phase 3C-5 |
 | R-3C-4 | 崩溃残留草稿被错误恢复为可信项目 | 高 | 草稿仅限当前应用会话；正常切换/退出尽可能清理；启动时不扫描、不恢复、不信任残留目录 | Phase 3C、Beta |
+| R-6A-1 | AI上下文泄露路径、PRJ正文、日志或完整结果 | 极高 | 上下文仅由Rust可信状态构造；发送前披露；安全范围白名单；预览指纹和session/Revision/Zone绑定；WebView不能提交领域对象或路径 | Phase 6A |
+| R-6A-2 | Codex工具事件越过只读边界 | 极高 | 只读沙箱、`never`审批、空MCP/动态工具/能力根；监视命令、文件、工具、搜索和审批事件并立即中断、丢弃回答 | Phase 6A |
+| R-6A-3 | Codex App Server协议或模型目录漂移 | 高 | 严格JSONL子集、ID/方法/schema/大小/超时校验；模型与推理强度只接受实时目录；不兼容时结构化拒绝 | Phase 6A、Beta |
+| R-6A-4 | 用户误以为本地App Server是离线模型 | 高 | 连接前明确联网与订阅额度；用户主动连接；无AI时核心功能继续；文档和UI均区分本地进程与联网模型 | Phase 6A |
+| R-6A-5 | Codex CLI安装或权限导致桌面无法启动App Server | 中高 | 环境变量绝对路径优先、PATH受控发现、有界probe和安全诊断；不自动安装、不提权；安装包阶段验证Windows ACL | Phase 6A、Beta |

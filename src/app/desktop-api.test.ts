@@ -10,6 +10,10 @@ import {
   selectAndReadPrjZones,
   runActiveContamProject,
   undoProjectDraft,
+  connectCodexAppServer,
+  previewAiContext,
+  startReadonlyAiTurn,
+  interruptReadonlyAiTurn,
 } from "./desktop-api";
 
 describe("desktop API boundary", () => {
@@ -66,6 +70,19 @@ describe("desktop API boundary", () => {
     const source = runActiveContamProject.toString();
     for (const forbidden of ["sourcePath", "solverPath", "runRoot", "manifestPath", "environment"]) {
       expect(source).not.toContain(forbidden);
+    }
+  });
+
+  it("keeps Codex process and paths behind the Rust boundary", () => {
+    expect(connectCodexAppServer).toHaveLength(1);
+    expect(interruptReadonlyAiTurn).toHaveLength(1);
+    expect(previewAiContext).toHaveLength(8);
+    expect(startReadonlyAiTurn).toHaveLength(10);
+    for (const api of [connectCodexAppServer, previewAiContext, startReadonlyAiTurn, interruptReadonlyAiTurn]) {
+      const source = api.toString();
+      for (const forbidden of ["codexPath", "sourcePath", "draftRoot", "manifestPath", "simPath", "prjText", "projectJson", "runJson", "resultJson", "shellCommand"]) {
+        expect(source).not.toContain(forbidden);
+      }
     }
   });
 });

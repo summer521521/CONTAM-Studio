@@ -2,7 +2,7 @@
 
 ## 决策状态
 
-Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Python冻结、安装包路径及长期进程形式仍未定型。
+Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Phase 6A增加用户主动启用的本地Codex App Server适配器，AI只读取Rust披露的结构化上下文。Python冻结、安装包路径及长期进程形式仍未定型。
 
 ## 概念架构
 
@@ -17,6 +17,20 @@ Python CONTAM领域核心
 ↓
 官方ContamX
 ```
+
+可选AI路径独立于核心领域链路：
+
+```text
+React AI侧栏
+↓ 显式Tauri命令
+Rust可信上下文快照
+↓ stdio JSON-RPC，只读Thread
+本地codex app-server
+↓ 联网
+用户ChatGPT订阅
+```
+
+Codex不能读取项目目录、PRJ、草稿、运行或结果文件，也不能调用工具、运行ContamX或生成可应用Patch。详见[Codex只读AI助手](codex-readonly-assistant.md)。
 
 Phase 2C当前实际读取路径为：
 
@@ -67,12 +81,12 @@ Phase 4B-1将同一运行核心接入受控桌面命令：React只提交request�
 | 层 | 主要职责 | 不承担的职责 |
 |---|---|---|
 | React GUI | 双语交互、领域对象呈现、Diff与审批界面 | 直接编辑原始PRJ、直接调用求解器 |
-| Tauri桌面宿主 | 窗口、文件选择、能力控制、进程生命周期和桌面打包 | CONTAM领域规则和数值求解 |
+| Tauri桌面宿主 | 窗口、文件选择、能力控制、进程生命周期、可信AI上下文和桌面打包 | CONTAM领域规则和数值求解 |
 | 受控通信接口 | 暴露有限、结构化、可验证的领域操作 | 任意Shell或任意文件写入 |
 | Python领域核心 | 领域模型、文件处理、验证、快照、运行清单和结果边界 | 重写CONTAM数值算法 |
 | 官方ContamX | 数值求解 | Studio交互、AI审批和项目版本管理 |
 
-## GUI与AI共用接口
+## GUI与AI边界
 
 ```text
 GUI操作
@@ -82,7 +96,7 @@ GUI操作
 AI操作
 ```
 
-GUI和AI不能各自建立文件写入路径。所有变更必须转换为领域级操作并经过相同的结构检查、引用检查、Patch/Diff、快照和运行追踪机制。AI默认只读或建议，不能绕过用户确认。
+GUI和AI不能各自建立文件写入路径。Phase 6A AI严格只读，只能解释Rust披露快照；它没有领域写入接口。未来若允许AI建议变更，仍必须转换为领域级操作并经过相同的结构检查、引用检查、Patch/Diff、快照和用户确认。
 
 ## 文件与运行边界
 

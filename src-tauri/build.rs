@@ -10,6 +10,14 @@ fn main() {
         "extract_active_run_zone_air_state",
         "export_active_zone_air_state_csv",
         "run_active_contam_project",
+        "probe_codex_app_server",
+        "connect_codex_app_server",
+        "refresh_codex_account",
+        "preview_ai_context",
+        "start_readonly_ai_turn",
+        "interrupt_readonly_ai_turn",
+        "clear_readonly_ai_session",
+        "disconnect_codex_app_server",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
         .expect("failed to build CONTAM Studio application manifest");

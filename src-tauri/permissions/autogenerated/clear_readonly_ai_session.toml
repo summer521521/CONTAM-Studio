@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-readonly-ai-session"
+description = "Enables the clear_readonly_ai_session command without any pre-configured scope."
+commands.allow = ["clear_readonly_ai_session"]
+
+[[permission]]
+identifier = "deny-clear-readonly-ai-session"
+description = "Denies the clear_readonly_ai_session command without any pre-configured scope."
+commands.deny = ["clear_readonly_ai_session"]

@@ -45,4 +45,6 @@
 
 用户于2026-07-19完成首轮真实GUI验收：Patch审阅、Revision 1/2、Undo/Redo、Redo链截断、快捷键、当前草稿运行、结果、统计、CSV、双语和双主题均正常；项目切换会清除旧草稿历史。ContamX在本次桌面会话首次运行前显示“状态待验证”，运行成功后显示已验证的`contamx3.exe 3.4.0.3`，符合按实际probe结果更新状态的契约。
 
-首轮验收发现“另存当前草稿”在字节复制成功后误报`draft_export_verification_failed`并删除输出。原因是Python项目SHA-256使用小写十六进制，Rust本地复核使用大写十六进制，而导出路径曾使用区分大小写的字符串比较。修复后导出复核按SHA-256语义进行大小写无关比较，并在严格重读前规范化已创建的输出路径；聚焦真实Python桥测试验证修改后Revision的字节、大小、Zone UUID和Zone视图全部一致。当前手动GUI状态：`pending_user_recheck`，只需复核另存成功、同名拒绝和取消保留草稿，不重复已通过项目。
+首轮验收发现“另存当前草稿”在字节复制成功后误报`draft_export_verification_failed`并删除输出。原因是Python项目SHA-256使用小写十六进制，Rust本地复核使用大写十六进制，而导出路径曾使用区分大小写的字符串比较。修复后导出复核按SHA-256语义进行大小写无关比较，并在严格重读前规范化已创建的输出路径；聚焦真实Python桥测试验证修改后Revision的字节、大小、Zone UUID和Zone视图全部一致。
+
+用户随后完成另存成功、同名拒绝、取消保留草稿及其余全部项目复核。Phase 3C共31项真实GUI验收全部通过，状态为`passed`；证据见[PR #14最终验收评论](https://github.com/summer521521/CONTAM-Studio/pull/14#issuecomment-5013736336)。

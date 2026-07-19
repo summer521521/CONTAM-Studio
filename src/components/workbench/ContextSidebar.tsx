@@ -1,8 +1,10 @@
-import { Bot, Eye, Info, PanelRightClose, Pencil, SlidersHorizontal, X } from "lucide-react";
+import { Eye, Info, PanelRightClose, Pencil, SlidersHorizontal, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { PatchState } from "../../app/patch-state";
 import type { ContextTab } from "../../app/workbench-state";
 import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
+import { INITIAL_AI_STATE, type AiContextScope, type AiState } from "../../app/ai-state";
+import { CodexAssistantPanel } from "./CodexAssistantPanel";
 
 interface ContextSidebarProps {
   activeTab: ContextTab;
@@ -16,6 +18,19 @@ interface ContextSidebarProps {
   onCancelVolumeEdit: () => void;
   onTabChange: (tab: ContextTab) => void;
   onCollapse: () => void;
+  aiState?: AiState;
+  aiContextAvailable?: boolean;
+  onAiConnect?: () => void;
+  onAiRefresh?: () => void;
+  onAiDisconnect?: () => void;
+  onAiScopeToggle?: (scope: AiContextScope) => void;
+  onAiModelChange?: (modelId: string) => void;
+  onAiEffortChange?: (effort: string) => void;
+  onAiPreview?: () => void;
+  onAiQuestionChange?: (question: string) => void;
+  onAiSend?: () => void;
+  onAiStop?: () => void;
+  onAiClear?: () => void;
 }
 
 export function ContextSidebar({
@@ -30,6 +45,19 @@ export function ContextSidebar({
   onCancelVolumeEdit,
   onTabChange,
   onCollapse,
+  aiState = INITIAL_AI_STATE,
+  aiContextAvailable = false,
+  onAiConnect = () => undefined,
+  onAiRefresh = () => undefined,
+  onAiDisconnect = () => undefined,
+  onAiScopeToggle = () => undefined,
+  onAiModelChange = () => undefined,
+  onAiEffortChange = () => undefined,
+  onAiPreview = () => undefined,
+  onAiQuestionChange = () => undefined,
+  onAiSend = () => undefined,
+  onAiStop = () => undefined,
+  onAiClear = () => undefined,
 }: ContextSidebarProps) {
   const { t } = useTranslation();
 
@@ -170,15 +198,21 @@ export function ContextSidebar({
           </div>
         </div>
       ) : (
-        <div className="context-content assistant-placeholder" role="tabpanel">
-          <Bot size={32} strokeWidth={1.5} aria-hidden="true" />
-          <h2>{t("assistant.title")}</h2>
-          <p>{t("assistant.noContext")}</p>
-          <div className="assistant-boundary">
-            <p>{t("assistant.future")}</p>
-            <p>{t("assistant.optIn")}</p>
-          </div>
-        </div>
+        <CodexAssistantPanel
+          state={aiState}
+          contextAvailable={aiContextAvailable}
+          onConnect={onAiConnect}
+          onRefresh={onAiRefresh}
+          onDisconnect={onAiDisconnect}
+          onScopeToggle={onAiScopeToggle}
+          onModelChange={onAiModelChange}
+          onEffortChange={onAiEffortChange}
+          onPreview={onAiPreview}
+          onQuestionChange={onAiQuestionChange}
+          onSend={onAiSend}
+          onStop={onAiStop}
+          onClear={onAiClear}
+        />
       )}
     </aside>
   );

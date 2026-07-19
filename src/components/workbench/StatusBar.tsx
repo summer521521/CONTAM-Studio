@@ -1,17 +1,19 @@
-import { BotOff, CircleOff, Languages, MonitorCog, Palette } from "lucide-react";
+import { Bot, BotOff, CircleOff, Languages, MonitorCog, Palette } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AppTheme } from "../../app/workbench-state";
 import type { ProjectState } from "../../app/project-state";
 import { projectFileName } from "../../app/project-state";
 import type { RunState } from "../../app/run-state";
+import type { AiState } from "../../app/ai-state";
 
 interface StatusBarProps {
   theme: AppTheme;
   projectState: ProjectState;
   runState: RunState;
+  aiState?: AiState;
 }
 
-export function StatusBar({ theme, projectState, runState }: StatusBarProps) {
+export function StatusBar({ theme, projectState, runState, aiState }: StatusBarProps) {
   const { t } = useTranslation();
   const contamXStatus = runState.summary
     ? `${runState.summary.solver_name} ${runState.summary.solver_version}`
@@ -53,8 +55,8 @@ export function StatusBar({ theme, projectState, runState }: StatusBarProps) {
         {contamXStatus}
       </span>
       <span className="status-item">
-        <BotOff size={13} aria-hidden="true" />
-        {t("status.ai")}
+        {aiState?.status === "available" ? <Bot size={13} aria-hidden="true" /> : <BotOff size={13} aria-hidden="true" />}
+        {aiState ? t(`assistant.status.${aiState.status}`) : t("status.ai")}
       </span>
       <span className="status-phase">{t("app.phase")}</span>
     </footer>

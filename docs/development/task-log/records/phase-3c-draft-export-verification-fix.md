@@ -28,7 +28,7 @@ validation:
   - 前端Vitest 10个文件、99项通过；生产构建通过
   - 57个已跟踪Markdown文件相对链接和git diff检查通过
 dependencies: 无新增依赖
-manual_gui_validation_status: pending_user_recheck
+manual_gui_validation_status: passed
 delivery_status: pushed_draft_pr
 pull_request: https://github.com/summer521521/CONTAM-Studio/pull/14
 token_usage:
@@ -37,5 +37,5 @@ token_usage:
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: 根因是Python项目哈希使用小写十六进制、Rust本地哈希使用大写十六进制，而导出复核曾进行区分大小写比较；现按SHA-256语义比较并规范化输出路径后严格重读。用户确认除草稿副本导出外的手动步骤均正常；ContamX在首次运行前显示待验证、运行成功后显示已验证版本符合当前桌面会话契约。客户端未提供精确逐任务Token数据。
+notes: 根因是Python项目哈希使用小写十六进制、Rust本地哈希使用大写十六进制，而导出复核曾进行区分大小写比较；现按SHA-256语义比较并规范化输出路径后严格重读。用户随后完成草稿另存成功、同名拒绝、取消保留草稿及全部31项Phase 3C GUI验收，证据：https://github.com/summer521521/CONTAM-Studio/pull/14#issuecomment-5013736336。ContamX在首次运行前显示待验证、运行成功后显示已验证版本符合当前桌面会话契约。客户端未提供精确逐任务Token数据。
 ```
