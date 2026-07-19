@@ -118,6 +118,7 @@
     "installCancel": "Cancel",
     "installConfirm": "Confirm and install",
     "installComplete": "Codex CLI is installed and passed its version probe. The local App Server and online model start only after you click Connect Codex.",
+    "probingProgress": "Checking the locally installed Codex CLI. This does not start the App Server or contact a model.",
     "connecting": "Connecting",
     "refresh": "Refresh status",
     "disconnect": "Disconnect",
@@ -155,7 +156,8 @@
     "suggestedQuestions": "Suggested questions",
     "factsCaveat": "These facts are the model's restatement of disclosed data and do not replace the application's deterministic panels.",
     "status": {
-      "disabled": "AI not connected",
+      "probing": "Checking Codex CLI",
+      "disabled": "Codex CLI not detected, AI not connected",
       "installed": "Codex CLI installed, AI not connected",
       "installing": "Installing Codex CLI",
       "connecting": "Connecting Codex",

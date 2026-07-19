@@ -49,18 +49,51 @@ beforeAll(async () => {
 });
 
 describe("read-only AI state", () => {
-  it("does not connect until the user explicitly starts a connection", () => {
-    expect(INITIAL_AI_STATE.status).toBe("disabled");
+  it("checks the local CLI before an explicit App Server connection", () => {
+    expect(INITIAL_AI_STATE.status).toBe("probing");
     expect(INITIAL_AI_STATE.connection).toBeNull();
+    const probing = aiReducer(INITIAL_AI_STATE, { type: "probe_started", requestId: "probe-1" });
+    expect(probing.status).toBe("probing");
+    expect(probing.connection).toBeNull();
+    expect(aiReducer(probing, { type: "probe_succeeded", requestId: "old", probe: connection.cli })).toEqual(probing);
+    const installed = aiReducer(probing, { type: "probe_succeeded", requestId: "probe-1", probe: connection.cli });
+    expect(installed.status).toBe("installed");
+    expect(installed.cliProbe).toEqual(connection.cli);
+    expect(installed.connection).toBeNull();
   });
 
   it("tracks a confirmed installation separately from connection", () => {
     const installing = aiReducer(INITIAL_AI_STATE, { type: "install_started", requestId: "install-1" });
     expect(installing.status).toBe("installing");
-    expect(aiReducer(installing, { type: "install_succeeded", requestId: "old" })).toEqual(installing);
-    const installed = aiReducer(installing, { type: "install_succeeded", requestId: "install-1" });
+    expect(aiReducer(installing, { type: "install_succeeded", requestId: "old", probe: connection.cli })).toEqual(installing);
+    const installed = aiReducer(installing, { type: "install_succeeded", requestId: "install-1", probe: connection.cli });
     expect(installed.status).toBe("installed");
+    expect(installed.cliProbe).toEqual(connection.cli);
     expect(installed.connection).toBeNull();
+  });
+
+  it("renders a local-only CLI checking state without an App Server connection", () => {
+    const html = renderToStaticMarkup(
+      <CodexAssistantPanel
+        state={{ ...INITIAL_AI_STATE, status: "probing", activeRequestId: "probe-1" }}
+        contextAvailable={false}
+        onConnect={() => undefined}
+        onInstall={() => undefined}
+        onRefresh={() => undefined}
+        onDisconnect={() => undefined}
+        onScopeToggle={() => undefined}
+        onModelChange={() => undefined}
+        onEffortChange={() => undefined}
+        onPreview={() => undefined}
+        onQuestionChange={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+        onClear={() => undefined}
+      />,
+    );
+    expect(html).toContain("Checking Codex CLI");
+    expect(html).toContain("This does not start the App Server or contact a model.");
+    expect(html).not.toContain("Starting the local Codex App Server");
   });
 
   it("shows a bounded explanation while the local App Server is connecting", () => {
@@ -347,7 +380,7 @@ describe("read-only AI state", () => {
     expect(interrupted.preview).toEqual(preview);
     expect(interrupted.answer).toBeNull();
     const disconnected = aiReducer(interrupted, { type: "disconnected" });
-    expect(disconnected).toEqual({ ...INITIAL_AI_STATE, status: "installed" });
+    expect(disconnected).toEqual({ ...INITIAL_AI_STATE, status: "installed", cliProbe: connection.cli });
   });
 
   it("renders the Chinese network and context disclosure labels", async () => {
@@ -379,7 +412,7 @@ describe("read-only AI state", () => {
   it("renders an install reminder without exposing a configurable command", () => {
     const html = renderToStaticMarkup(
       <CodexAssistantPanel
-        state={{ ...INITIAL_AI_STATE, issue: { code: "codex_cli_not_found", message: "hidden" } }}
+        state={{ ...INITIAL_AI_STATE, status: "disabled", issue: { code: "codex_cli_not_found", message: "hidden" } }}
         contextAvailable={false}
         onConnect={() => undefined}
         onInstall={() => undefined}

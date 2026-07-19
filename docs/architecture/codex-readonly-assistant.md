@@ -28,6 +28,8 @@ Rust按以下顺序发现Codex：
 
 不扫描磁盘、注册表、其他用户目录或`.codex`，也不修改`PATH`。探测使用参数数组执行`codex --version`，限制时间与输出，WebView只收到版本和来源，不收到路径或stderr。显式环境变量仍高于官方用户安装位置和`PATH`，因此管理员或开发环境可以保持确定的受控覆盖。
 
+桌面工作台首次绘制后会进行一次仅本地的有界CLI版本探测，用于把“Codex CLI已安装，AI未连接”与“未检测到Codex CLI”区分开。此探测不启动`codex app-server`，不读取账号或模型目录，不修改认证，也不发送项目上下文或模型请求；只有用户随后明确点击“连接Codex”才会开始App Server与联网阶段。
+
 CLI缺失时，AI侧栏显示安装提醒、联网和落盘影响、哈希锁定策略以及官方手动命令。一键安装只在用户点击确认后执行，React只发送`request_id`。Rust使用固定的OpenAI官方`https://chatgpt.com/codex/install.ps1`入口、固定Windows PowerShell路径和固定参数；当前审阅脚本大小为30133字节，SHA-256为`95923C2AC60B963C95435AAEAEFEAAB3CBC01559E21FCE1FA501EE1F9793AC0E`。下载超过128 KiB、哈希变化、运行超过180秒、非零退出或安装后`codex --version`复核失败均整体拒绝。上游脚本变化必须先由新版本Studio重新审阅并更新锁定值，不能静默接受。
 
 该入口是Rust内部固定操作，不是通用命令执行能力。它不接受用户URL、参数或目标目录，不向WebView开放Shell、文件系统或HTTP插件权限，不自动登录、不读取认证文件、不提权，也不修改项目。安装使用当前Windows用户范围并由Codex维护独立程序包缓存；已经存在可探测CLI时不会重复安装。安装临时目录位于应用本地数据，完成后尽力清理。

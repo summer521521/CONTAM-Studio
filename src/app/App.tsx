@@ -23,6 +23,7 @@ import {
   selectAndExtractZoneAirState,
   runActiveContamProject,
   connectCodexAppServer,
+  probeCodexAppServer,
   refreshCodexAccount,
   previewAiContext,
   startReadonlyAiTurn,
@@ -99,6 +100,7 @@ function App() {
   const resultExportSequence = useRef(0);
   const runSequence = useRef(0);
   const aiSequence = useRef(0);
+  const cliProbeStarted = useRef(false);
   const mounted = useRef(true);
   const initialMainLayout = useRef(getMainLayout(workbench)).current;
   const initialCenterLayout = useRef(getCenterLayout(workbench)).current;
@@ -668,6 +670,50 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      if (cliProbeStarted.current) return;
+      cliProbeStarted.current = true;
+      const sequence = ++aiSequence.current;
+      const requestId = crypto.randomUUID();
+      dispatchAi({ type: "probe_started", requestId });
+      void probeCodexAppServer(requestId)
+        .then((response) => {
+          if (disposed || !mounted.current || sequence !== aiSequence.current) return;
+          if (response.request_id !== requestId) {
+            dispatchAi({
+              type: "operation_failed",
+              requestId,
+              issue: { code: "codex_cli_probe_failed", message: "Codex CLI probe response invalid." },
+            });
+          } else if (response.probe?.found && response.probe.version) {
+            dispatchAi({ type: "probe_succeeded", requestId, probe: response.probe });
+          } else if (response.error?.code === "codex_cli_not_found") {
+            dispatchAi({ type: "probe_unavailable", requestId });
+          } else {
+            dispatchAi({
+              type: "operation_failed",
+              requestId,
+              issue: response.error ?? { code: "codex_cli_probe_failed", message: "Codex CLI probe response invalid." },
+            });
+          }
+        })
+        .catch(() => {
+          if (disposed || !mounted.current || sequence !== aiSequence.current) return;
+          dispatchAi({
+            type: "operation_failed",
+            requestId,
+            issue: { code: "codex_cli_probe_failed", message: "Codex CLI probe failed." },
+          });
+        });
+    }, 0);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   const updateAiConnection = useCallback(async (refresh = false) => {
     const sequence = ++aiSequence.current;
     const requestId = crypto.randomUUID();
@@ -711,7 +757,7 @@ function App() {
         });
         return;
       }
-      dispatchAi({ type: "install_succeeded", requestId });
+      dispatchAi({ type: "install_succeeded", requestId, probe: response.probe });
     } catch {
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_cli_install_failed", message: "Codex CLI installation failed." } });

@@ -1,4 +1,5 @@
 export type AiConnectionStatus =
+  | "probing"
   | "disabled"
   | "installed"
   | "installing"
@@ -131,6 +132,7 @@ export interface DesktopAiActionResponse {
 
 export interface AiState {
   status: AiConnectionStatus;
+  cliProbe: CodexCliProbeView | null;
   connection: CodexConnectionView | null;
   scopes: AiContextScope[];
   modelId: string;
@@ -147,7 +149,8 @@ export interface AiState {
 export const DEFAULT_AI_SCOPES: AiContextScope[] = ["selected_zone", "draft_summary"];
 
 export const INITIAL_AI_STATE: AiState = {
-  status: "disabled",
+  status: "probing",
+  cliProbe: null,
   connection: null,
   scopes: DEFAULT_AI_SCOPES,
   modelId: "",
@@ -162,8 +165,11 @@ export const INITIAL_AI_STATE: AiState = {
 };
 
 export type AiAction =
+  | { type: "probe_started"; requestId: string }
+  | { type: "probe_succeeded"; requestId: string; probe: CodexCliProbeView }
+  | { type: "probe_unavailable"; requestId: string }
   | { type: "install_started"; requestId: string }
-  | { type: "install_succeeded"; requestId: string }
+  | { type: "install_succeeded"; requestId: string; probe: CodexCliProbeView }
   | { type: "connect_started"; requestId: string }
   | { type: "connect_succeeded"; requestId: string; connection: CodexConnectionView }
   | { type: "operation_failed"; requestId: string | null; issue: AiDiagnostic }
@@ -190,11 +196,25 @@ function selectValidModel(connection: CodexConnectionView) {
 
 export function aiReducer(state: AiState, action: AiAction): AiState {
   switch (action.type) {
+    case "probe_started":
+      return { ...state, status: "probing", activeRequestId: action.requestId, issue: null };
+    case "probe_succeeded":
+      if (state.activeRequestId !== action.requestId) return state;
+      return {
+        ...state,
+        status: "installed",
+        cliProbe: action.probe,
+        activeRequestId: null,
+        issue: null,
+      };
+    case "probe_unavailable":
+      if (state.activeRequestId !== action.requestId) return state;
+      return { ...state, status: "disabled", cliProbe: null, activeRequestId: null, issue: null };
     case "install_started":
       return { ...state, status: "installing", activeRequestId: action.requestId, issue: null };
     case "install_succeeded":
       if (state.activeRequestId !== action.requestId) return state;
-      return { ...state, status: "installed", activeRequestId: null, issue: null };
+      return { ...state, status: "installed", cliProbe: action.probe, activeRequestId: null, issue: null };
     case "connect_started":
       return { ...state, status: "connecting", activeRequestId: action.requestId, issue: null };
     case "connect_succeeded": {
@@ -207,6 +227,7 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
       return {
         ...state,
         status: action.connection.account.authenticated ? "available" : "not_authenticated",
+        cliProbe: action.connection.cli,
         connection: action.connection,
         modelId: model?.id ?? "",
         reasoningEffort: effort,
@@ -216,10 +237,15 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
     }
     case "operation_failed":
       if (action.requestId && action.requestId !== state.activeRequestId) return state;
+      if (action.issue.code === "codex_cli_not_found") {
+        return { ...state, status: "disabled", cliProbe: null, activeRequestId: null, issue: null };
+      }
       if (action.issue.code === "codex_app_server_disconnected") {
+        const cliProbe = state.connection?.cli ?? state.cliProbe;
         return {
           ...INITIAL_AI_STATE,
-          status: state.connection?.cli.found ? "installed" : "disabled",
+          status: cliProbe?.found ? "installed" : "disabled",
+          cliProbe,
           scopes: state.scopes,
           issue: action.issue,
         };
@@ -257,11 +283,14 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
       return { ...state, preview: null, previewExpanded: false, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
     case "session_cleared":
       return { ...state, preview: null, previewExpanded: false, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
-    case "disconnected":
+    case "disconnected": {
+      const cliProbe = state.connection?.cli ?? state.cliProbe;
       return {
         ...INITIAL_AI_STATE,
-        status: state.connection?.cli.found ? "installed" : "disabled",
+        status: cliProbe?.found ? "installed" : "disabled",
+        cliProbe,
       };
+    }
     default:
       return state;
   }

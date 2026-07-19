@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [Phase 6A Codex CLI启动检测](records/phase-6a-cli-startup-probe.md) | Phase 6A | completed | live |
 | [Phase 6A Codex连接体验收口](records/phase-6a-codex-connection-ux.md) | Phase 6A | completed | live |
 | [Phase 6A Assistant协议修复](records/phase-6a-assistant-protocol-fix.md) | Phase 6A | completed | live |
 | [Phase 6A Codex CLI受控安装](records/phase-6a-codex-cli-install.md) | Phase 6A | completed | live |

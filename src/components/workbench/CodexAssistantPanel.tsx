@@ -51,9 +51,10 @@ export function CodexAssistantPanel({
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
   const installDialogRef = useRef<HTMLElement>(null);
   const model = state.connection?.models.find((item) => item.id === state.modelId) ?? null;
+  const cliProbe = state.connection?.cli ?? state.cliProbe;
   const connected = Boolean(state.connection);
   const ready = state.status === "available";
-  const busy = state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
+  const busy = state.status === "probing" || state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
 
   useEffect(() => {
     if (!installDialogOpen) return undefined;
@@ -79,7 +80,7 @@ export function CodexAssistantPanel({
 
       <div className={`assistant-status assistant-status-${state.status}`} role="status" aria-live="polite">
         <strong>{t(`assistant.status.${state.status}`)}</strong>
-        {state.connection?.cli.version ? <span>{t("assistant.cliVersion", { version: state.connection.cli.version })}</span> : null}
+        {cliProbe?.version ? <span>{t("assistant.cliVersion", { version: cliProbe.version })}</span> : null}
         {state.connection?.account.authenticated ? (
           <span>{t("assistant.planConnected", { plan: state.connection.account.plan_type ?? t("assistant.planUnknown") })}</span>
         ) : connected ? <code>codex login</code> : null}
@@ -108,6 +109,7 @@ export function CodexAssistantPanel({
           </>
         )}
       </div>
+      {state.status === "probing" ? <p className="assistant-progress" role="status">{t("assistant.probingProgress")}</p> : null}
       {state.status === "connecting" ? <p className="assistant-progress" role="status">{t("assistant.connectingProgress")}</p> : null}
 
       {!connected && state.status === "installed" ? (
@@ -115,7 +117,7 @@ export function CodexAssistantPanel({
           <ShieldCheck size={16} aria-hidden="true" />
           <p>{t("assistant.installComplete")}</p>
         </div>
-      ) : !connected ? (
+      ) : !connected && state.status !== "probing" ? (
         <div className="assistant-install-reminder">
           <ShieldCheck size={16} aria-hidden="true" />
           <p>{t("assistant.installReminder")}</p>

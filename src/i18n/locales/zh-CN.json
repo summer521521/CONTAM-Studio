@@ -118,6 +118,7 @@
     "installCancel": "取消",
     "installConfirm": "确认并安装",
     "installComplete": "Codex CLI已安装并通过版本检测。点击“连接Codex”后才会启动本地App Server并使用联网模型。",
+    "probingProgress": "正在检查本机Codex CLI；不会启动App Server或连接模型。",
     "connecting": "正在连接",
     "refresh": "重新检测",
     "disconnect": "断开",
@@ -155,7 +156,8 @@
     "suggestedQuestions": "后续问题",
     "factsCaveat": "这里的确定性事实是模型对已披露数据的复述，不能替代应用的确定性面板。",
     "status": {
-      "disabled": "AI未连接",
+      "probing": "正在检查Codex CLI",
+      "disabled": "未检测到Codex CLI，AI未连接",
       "installed": "Codex CLI已安装，AI未连接",
       "installing": "正在安装Codex CLI",
       "connecting": "正在连接Codex",

@@ -5,6 +5,7 @@
 ## 实现边界
 
 - 用户点击连接前不发现账号、不启动App Server，也不发起模型请求。
+- 工作台首次绘制后仅执行一次有界本地`codex --version`探测，以显示CLI已安装或缺失；该探测不启动App Server、不读取账号或模型目录、不修改认证，也不发送项目上下文或模型请求。
 - Rust通过显式路径、精确的官方用户安装位置或当前`PATH`发现Codex，以参数数组执行`--version`和`app-server --stdio`；不扫描`.codex`，不读取认证文件。
 - CLI缺失时只显示提醒；用户二次确认后，Rust才以固定PowerShell路径和参数下载固定OpenAI官方安装脚本，校验大小和SHA-256并执行。React不能提供URL、命令、参数或路径，Tauri没有通用Shell、文件系统或HTTP权限。
 - App Server工作目录位于应用本地数据的空AI目录，不是项目、草稿、运行、结果或仓库目录。
@@ -15,7 +16,7 @@
 ## 自动验证
 
 - Rust：`58 passed, 1 ignored`；`cargo fmt --check`和`cargo check`通过。新增覆盖环境变量、官方用户安装位置和PATH优先级、固定安装入口与脚本哈希、超时和错误映射、安装响应路径隔离、显式ACL，以及继承指令来源和受控运行根的只读Thread响应；原有账号、模型、JSONL、只读Thread/Turn、上下文绑定、工具拦截和连接清理回归保持。
-- 前端：Vitest `11 files, 117 tests passed`；TypeScript和Vite生产构建通过。新增覆盖安装状态、缺失提醒、双语确认文案、已确认预览的收起/展开及收起后仍可发送；原有模型、范围、Rust预览、生成/停止和结构化回答回归保持。
+- 前端：Vitest和TypeScript/Vite生产构建通过。新增覆盖启动后的本地CLI检查状态、已安装但未连接状态、无App Server连接的探测边界、安装状态、缺失提醒、双语确认文案、已确认预览的收起/展开及收起后仍可发送；原有模型、范围、Rust预览、生成/停止和结构化回答回归保持。
 - Python：`266 passed`；Ruff通过。AI没有增加Python文件读取接口，既有Zone、Patch、ContamX、SimRead和结果回归保持通过。
 - 通用：63个Markdown文件相对链接、8个已跟踪JSON、pnpm冻结锁校验、Cargo锁元数据、依赖清单和`git diff --check`通过。Phase 6A没有新增依赖。
 
