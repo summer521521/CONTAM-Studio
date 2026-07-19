@@ -140,6 +140,8 @@
     "previewBoundary": "不包含绝对路径、PRJ正文或完整结果序列。上下文变化后必须重新预览。",
     "previewRequired": "请先查看已披露的上下文，再发送问题。",
     "previewConfirmed": "上下文已确认；可收起预览后发送问题。",
+    "sendPreviewGate": "请先点击“查看将发送的上下文”，确认本次结构化上下文后才能发送。",
+    "connectingProgress": "正在启动本地Codex App Server并读取账号和模型目录；首次连接可能需要数秒。",
     "question": "问题",
     "questionPlaceholder": "请只根据已披露的结构化数据解释当前Zone。",
     "send": "发送",

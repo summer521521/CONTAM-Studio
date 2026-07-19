@@ -215,7 +215,15 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
       };
     }
     case "operation_failed":
-      if (action.requestId && state.activeRequestId && action.requestId !== state.activeRequestId) return state;
+      if (action.requestId && action.requestId !== state.activeRequestId) return state;
+      if (action.issue.code === "codex_app_server_disconnected") {
+        return {
+          ...INITIAL_AI_STATE,
+          status: state.connection?.cli.found ? "installed" : "disabled",
+          scopes: state.scopes,
+          issue: action.issue,
+        };
+      }
       return { ...state, status: "error", activeRequestId: null, issue: action.issue };
     case "scope_toggled": {
       const scopes = state.scopes.includes(action.scope)

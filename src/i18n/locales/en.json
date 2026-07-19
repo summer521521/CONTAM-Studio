@@ -140,6 +140,8 @@
     "previewBoundary": "No absolute paths, PRJ text, or complete result series are included. Context changes require a new preview.",
     "previewRequired": "Preview the disclosed context before sending a question.",
     "previewConfirmed": "This context is confirmed. You can hide the preview and send your question.",
+    "sendPreviewGate": "Preview and confirm the disclosed context before sending this question.",
+    "connectingProgress": "Starting the local Codex App Server and reading the account and model catalog. The first connection can take several seconds.",
     "question": "Question",
     "questionPlaceholder": "Explain the current Zone using only the disclosed structured data.",
     "send": "Send",

@@ -108,6 +108,7 @@ export function CodexAssistantPanel({
           </>
         )}
       </div>
+      {state.status === "connecting" ? <p className="assistant-progress" role="status">{t("assistant.connectingProgress")}</p> : null}
 
       {!connected && state.status === "installed" ? (
         <div className="assistant-install-reminder success">
@@ -205,6 +206,7 @@ export function CodexAssistantPanel({
               placeholder={t("assistant.questionPlaceholder")}
             />
           </label>
+          {!state.preview && state.question.trim() ? <p id="ai-send-preview-gate" className="assistant-safe-note">{t("assistant.sendPreviewGate")}</p> : null}
           <div className="assistant-actions">
             {state.status === "generating" || state.status === "interrupting" ? (
               <button type="button" className="secondary-action" onClick={onStop} disabled={state.status === "interrupting"}>
@@ -216,6 +218,7 @@ export function CodexAssistantPanel({
                 className="primary-action"
                 onClick={onSend}
                 disabled={!ready || !state.preview || !state.question.trim()}
+                aria-describedby={!state.preview && state.question.trim() ? "ai-send-preview-gate" : undefined}
               >
                 <Send size={15} />{t("assistant.send")}
               </button>

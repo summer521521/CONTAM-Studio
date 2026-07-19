@@ -14,6 +14,7 @@
       {
         "label": "main",
         "title": "CONTAM Studio",
+        "backgroundColor": "#20262e",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,

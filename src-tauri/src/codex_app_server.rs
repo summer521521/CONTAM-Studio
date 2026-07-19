@@ -240,6 +240,32 @@ struct AssistantState {
     installing: bool,
 }
 
+impl AssistantState {
+    /// Drop a dead or incomplete connection before its stale catalog can be reused.
+    fn take_unusable_connection(&mut self) -> Option<Arc<AppServerConnection>> {
+        let unusable = self
+            .connection
+            .as_ref()
+            .is_some_and(|connection| !connection.is_healthy())
+            || (self.connection.is_some() && (self.cli.is_none() || self.account.is_none()));
+        if !unusable {
+            return None;
+        }
+        let connection = self.connection.take();
+        self.cli = None;
+        self.account = None;
+        self.models.clear();
+        self.preview = None;
+        self.thread_id = None;
+        self.thread_binding = None;
+        self.active_turn_id = None;
+        self.active_turn_request_id = None;
+        self.cancel_requested = false;
+        self.token_usage = None;
+        connection
+    }
+}
+
 #[derive(Default)]
 pub struct CodexAssistantStore {
     state: Mutex<AssistantState>,
@@ -477,8 +503,24 @@ impl AppServerConnection {
             .map_err(|_| RpcFailure::new("codex_app_server_disconnected"))
     }
 
-    fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, RpcFailure> {
+    fn is_healthy(&self) -> bool {
         if self.disconnected.load(Ordering::Acquire) {
+            return false;
+        }
+        let healthy = self
+            .child
+            .lock()
+            .expect("Codex child mutex poisoned")
+            .as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(None)));
+        if !healthy {
+            self.disconnected.store(true, Ordering::Release);
+        }
+        healthy
+    }
+
+    fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, RpcFailure> {
+        if !self.is_healthy() {
             return Err(RpcFailure::new("codex_app_server_disconnected"));
         }
         let id = self.next_id.fetch_add(1, Ordering::AcqRel);
@@ -1328,12 +1370,14 @@ fn preview_matches_turn(
 }
 
 fn connection_view(state: &AssistantState) -> Option<CodexConnectionView> {
+    let connection = state.connection.as_ref()?;
+    if !connection.is_healthy() {
+        return None;
+    }
     let cli = state.cli.clone()?;
     let account = state.account.clone()?;
     Some(CodexConnectionView {
-        status: if state.connection.is_none() {
-            "stopped"
-        } else if account.authenticated {
+        status: if account.authenticated {
             "available"
         } else {
             "not_authenticated"
@@ -1866,14 +1910,25 @@ pub async fn connect_codex_app_server(
         };
     }
     let store = app.state::<CodexAssistantStore>();
-    if let Some(view) =
-        connection_view(&store.state.lock().expect("Codex assistant mutex poisoned"))
-    {
+    let (existing_view, stale_connection) = {
+        let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+        let view = connection_view(&state);
+        let stale_connection = if view.is_none() {
+            state.take_unusable_connection()
+        } else {
+            None
+        };
+        (view, stale_connection)
+    };
+    if let Some(view) = existing_view {
         return DesktopCodexConnectionResponse {
             request_id,
             connection: Some(view),
             error: None,
         };
+    }
+    if let Some(connection) = stale_connection {
+        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
     }
     let runtime_root = match app.path().app_local_data_dir() {
         Ok(path) => path.join("ai").join("codex-runtime"),
@@ -1987,12 +2042,22 @@ pub async fn refresh_codex_account(
         };
     }
     let store = app.state::<CodexAssistantStore>();
-    let connection = store
-        .state
-        .lock()
-        .expect("Codex assistant mutex poisoned")
-        .connection
-        .clone();
+    let (connection, stale_connection) = {
+        let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+        let stale_connection = state.take_unusable_connection();
+        (state.connection.clone(), stale_connection)
+    };
+    if let Some(connection) = stale_connection {
+        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        return DesktopCodexConnectionResponse {
+            request_id,
+            connection: None,
+            error: Some(AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Codex App Server disconnected before the account refresh.",
+            )),
+        };
+    }
     let Some(connection) = connection else {
         return DesktopCodexConnectionResponse {
             request_id,
@@ -2075,6 +2140,23 @@ pub async fn preview_ai_context(
         Err(error) => return preview_failure(request_id, error),
     };
     let assistant = app.state::<CodexAssistantStore>();
+    let stale_connection = {
+        assistant
+            .state
+            .lock()
+            .expect("Codex assistant mutex poisoned")
+            .take_unusable_connection()
+    };
+    if let Some(connection) = stale_connection {
+        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        return preview_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Codex App Server disconnected before context preview.",
+            ),
+        );
+    }
     {
         let state = assistant
             .state
@@ -2212,6 +2294,23 @@ pub async fn start_readonly_ai_turn(
         Err(error) => return turn_failure(request_id, error),
     };
     let assistant = app.state::<CodexAssistantStore>();
+    let stale_connection = {
+        assistant
+            .state
+            .lock()
+            .expect("Codex assistant mutex poisoned")
+            .take_unusable_connection()
+    };
+    if let Some(connection) = stale_connection {
+        let _ = tauri::async_runtime::spawn_blocking(move || connection.close()).await;
+        return turn_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Codex App Server disconnected before the turn started.",
+            ),
+        );
+    }
     let (connection, preview, existing_thread, existing_binding) = {
         let state = assistant
             .state
@@ -2970,6 +3069,56 @@ mod tests {
             None
         );
         connection.close();
+    }
+
+    #[test]
+    fn stale_connection_is_cleared_before_a_catalog_can_be_reused() {
+        let root = test_root("stale-connection");
+        let (_sender, receiver) = mpsc::channel();
+        let connection = Arc::new(AppServerConnection {
+            child: Mutex::new(None),
+            stdin: Mutex::new(None),
+            pending: Mutex::new(HashMap::new()),
+            notifications: Mutex::new(receiver),
+            next_id: AtomicU64::new(1),
+            disconnected: AtomicBool::new(false),
+            stdout_thread: Mutex::new(None),
+            stderr_thread: Mutex::new(None),
+            stderr_capture: Arc::new(Mutex::new(Vec::new())),
+            stderr_truncated: Arc::new(AtomicBool::new(false)),
+            runtime_dir: root,
+        });
+        let mut state = AssistantState {
+            connection: Some(Arc::clone(&connection)),
+            cli: Some(CodexCliProbeView {
+                found: true,
+                version: Some("0.144.6".into()),
+                source: Some("official_install".into()),
+            }),
+            account: Some(CodexAccountView {
+                authenticated: true,
+                auth_mode: Some("chatgpt".into()),
+                plan_type: Some("plus".into()),
+                requires_login: false,
+            }),
+            models: vec![CodexModelView {
+                id: "model-a".into(),
+                display_name: "Model A".into(),
+                is_default: true,
+                available: true,
+                reasoning_efforts: Vec::new(),
+                default_reasoning_effort: "".into(),
+            }],
+            ..AssistantState::default()
+        };
+        assert!(connection_view(&state).is_none());
+        let stale = state.take_unusable_connection().expect("stale connection");
+        assert!(Arc::ptr_eq(&stale, &connection));
+        assert!(state.connection.is_none());
+        assert!(state.cli.is_none());
+        assert!(state.account.is_none());
+        assert!(state.models.is_empty());
+        stale.close();
     }
 
     #[test]
