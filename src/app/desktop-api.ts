@@ -4,6 +4,7 @@ import type {
   DesktopPlanResponse,
 } from "./patch-state";
 import type { DesktopOpenResponse } from "./project-state";
+import type { DesktopDraftExportResponse, DesktopDraftTransitionResponse } from "./project-state";
 import type { DesktopZoneAirStateResponse } from "./result-state";
 import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state";
 import type { DesktopRunResponse } from "./run-state";
@@ -17,23 +18,23 @@ export async function selectAndReadPrjZones(
 export async function planZoneVolumePatch(
   requestId: string,
   projectSessionId: string,
-  contamNumber: number,
+  zoneId: string,
   newVolumeToken: string,
 ): Promise<DesktopPlanResponse> {
   return invoke<DesktopPlanResponse>("plan_zone_volume_patch", {
     requestId,
     projectSessionId,
-    contamNumber,
+    zoneId,
     newVolumeToken,
   });
 }
 
-export async function applyZoneVolumePatchToCopy(
+export async function applyZoneVolumePatchToDraft(
   requestId: string,
   projectSessionId: string,
   patchId: string,
 ): Promise<DesktopApplyResponse> {
-  return invoke<DesktopApplyResponse>("apply_zone_volume_patch_to_copy", {
+  return invoke<DesktopApplyResponse>("apply_zone_volume_patch_to_draft", {
     requestId,
     projectSessionId,
     patchId,
@@ -43,40 +44,66 @@ export async function applyZoneVolumePatchToCopy(
 export async function selectAndExtractZoneAirState(
   requestId: string,
   projectSessionId: string,
-  zoneNumber: number,
+  zoneId: string,
 ): Promise<DesktopZoneAirStateResponse> {
   return invoke<DesktopZoneAirStateResponse>("select_and_extract_zone_air_state", {
     requestId,
     projectSessionId,
-    zoneNumber,
+    zoneId,
   });
 }
 
 export async function extractActiveRunZoneAirState(
   requestId: string,
   projectSessionId: string,
-  zoneNumber: number,
+  zoneId: string,
 ): Promise<DesktopZoneAirStateResponse> {
   return invoke<DesktopZoneAirStateResponse>("extract_active_run_zone_air_state", {
     requestId,
     projectSessionId,
-    zoneNumber,
+    zoneId,
   });
 }
 
 export async function exportActiveZoneAirStateCsv(
   requestId: string,
   projectSessionId: string,
-  zoneNumber: number,
+  zoneId: string,
   runId: string,
   extractionId: string,
 ): Promise<DesktopZoneAirStateCsvExportResponse> {
   return invoke<DesktopZoneAirStateCsvExportResponse>("export_active_zone_air_state_csv", {
     requestId,
     projectSessionId,
-    zoneNumber,
+    zoneId,
     runId,
     extractionId,
+  });
+}
+
+export async function undoProjectDraft(
+  requestId: string,
+  projectSessionId: string,
+): Promise<DesktopDraftTransitionResponse> {
+  return invoke<DesktopDraftTransitionResponse>("undo_project_draft", { requestId, projectSessionId });
+}
+
+export async function redoProjectDraft(
+  requestId: string,
+  projectSessionId: string,
+): Promise<DesktopDraftTransitionResponse> {
+  return invoke<DesktopDraftTransitionResponse>("redo_project_draft", { requestId, projectSessionId });
+}
+
+export async function exportActiveProjectDraftCopy(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+): Promise<DesktopDraftExportResponse> {
+  return invoke<DesktopDraftExportResponse>("export_active_project_draft_copy", {
+    requestId,
+    projectSessionId,
+    revisionId,
   });
 }
 

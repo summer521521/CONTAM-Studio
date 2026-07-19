@@ -3,9 +3,11 @@ import {
   Moon,
   Play,
   Plus,
-  Save,
+  Download,
   Settings,
   Sun,
+  Undo2,
+  Redo2,
   Wind,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -20,6 +22,12 @@ interface TopBarProps {
   openDisabled: boolean;
   onRunProject: () => void;
   runDisabled: boolean;
+  onUndoDraft: () => void;
+  undoDisabled: boolean;
+  onRedoDraft: () => void;
+  redoDisabled: boolean;
+  onExportDraft: () => void;
+  exportDraftDisabled: boolean;
   onPlaceholder: (action: string) => void;
 }
 
@@ -32,13 +40,18 @@ export function TopBar({
   openDisabled,
   onRunProject,
   runDisabled,
+  onUndoDraft,
+  undoDisabled,
+  onRedoDraft,
+  redoDisabled,
+  onExportDraft,
+  exportDraftDisabled,
   onPlaceholder,
 }: TopBarProps) {
   const { t } = useTranslation();
   const actions = [
     { key: "newProject", icon: Plus, onClick: () => onPlaceholder(t("toolbar.newProject")) },
     { key: "openProject", icon: FolderOpen, onClick: onOpenProject },
-    { key: "save", icon: Save, onClick: () => onPlaceholder(t("toolbar.save")) },
     { key: "run", icon: Play, onClick: onRunProject },
   ] as const;
 
@@ -64,6 +77,12 @@ export function TopBar({
             <span>{t(`toolbar.${key}`)}</span>
           </button>
         ))}
+      </div>
+
+      <div className="toolbar-actions draft-toolbar-actions" role="toolbar" aria-label={t("draft.toolbarLabel")}>
+        <button className="tool-button" type="button" disabled={undoDisabled} onClick={onUndoDraft} title={t("draft.undo")} aria-label={t("draft.undo")}><Undo2 size={16} /><span>{t("draft.undo")}</span></button>
+        <button className="tool-button" type="button" disabled={redoDisabled} onClick={onRedoDraft} title={t("draft.redo")} aria-label={t("draft.redo")}><Redo2 size={16} /><span>{t("draft.redo")}</span></button>
+        <button className="tool-button" type="button" disabled={exportDraftDisabled} onClick={onExportDraft} title={t("draft.export")} aria-label={t("draft.export")}><Download size={16} /><span>{t("draft.export")}</span></button>
       </div>
 
       <div className="toolbar-spacer" />

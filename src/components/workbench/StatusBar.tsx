@@ -27,6 +27,16 @@ export function StatusBar({ theme, projectState, runState }: StatusBarProps) {
         <Languages size={13} aria-hidden="true" />
         {t("status.language")}
       </span>
+      {projectState.draft ? (
+        <span className="status-item" title={t("draft.statusTitle")}>
+          {projectState.draft.revision_number === 0
+            ? t("draft.original")
+            : t("draft.revision", { revision: projectState.draft.revision_number })}
+          {projectState.draft.dirty
+            ? ` · ${t(projectState.draft.exported ? "draft.exported" : "draft.notExported")}`
+            : ""}
+        </span>
+      ) : null}
       <span className="status-item">
         <Palette size={13} aria-hidden="true" />
         {t(`status.${theme}`)}

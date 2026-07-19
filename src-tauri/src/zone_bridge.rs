@@ -12,6 +12,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+use uuid::Uuid;
 
 const PROTOCOL_VERSION: &str = "1.2";
 const RESULT_SCHEMA_VERSION: &str = "1.0";
@@ -37,6 +38,8 @@ const MAX_STDOUT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 16 * 1024;
 const MAX_REQUEST_BYTES: usize = 128 * 1024;
 const MAX_VOLUME_TOKEN_BYTES: usize = 80;
+const MAX_DRAFT_REVISIONS: usize = 32;
+const ZONE_UUID_NAMESPACE: Uuid = Uuid::from_u128(0x0c6dfd5d_98c2_5fb3_a9f3_a72ee89a4471);
 const MAX_PREVIEW_LINE_CHARS: usize = 4096;
 const MAX_DIFF_CHARS: usize = 16 * 1024;
 const MAX_DIAGNOSTIC_CODE_BYTES: usize = 80;
@@ -209,6 +212,8 @@ pub struct ReaderDiagnostic {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ZoneRecord {
+    #[serde(default)]
+    zone_id: String,
     contam_number: i64,
     name: String,
     flags: i64,
@@ -281,6 +286,91 @@ pub struct DesktopOpenResponse {
     cancelled: bool,
     project_session_id: Option<String>,
     envelope: Option<BridgeEnvelope>,
+    draft: Option<DraftSummary>,
+}
+
+fn unix_time_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+}
+
+fn zone_uuid(
+    baseline_sha256: &str,
+    object_type: &str,
+    contam_number: i64,
+    source_line_number: u64,
+    name: &str,
+) -> String {
+    let identity = format!(
+        "{}|{}|{}|{}|{}",
+        baseline_sha256.to_ascii_uppercase(),
+        object_type,
+        contam_number,
+        source_line_number,
+        name
+    );
+    Uuid::new_v5(&ZONE_UUID_NAMESPACE, identity.as_bytes()).to_string()
+}
+
+fn assign_baseline_zone_ids(zones: &mut [ZoneRecord], baseline_sha256: &str) {
+    for zone in zones {
+        zone.zone_id = zone_uuid(
+            baseline_sha256,
+            "zone",
+            zone.contam_number,
+            zone.source_line_number,
+            &zone.name,
+        );
+    }
+}
+
+fn bind_revision_zone_ids(
+    project: &mut ProjectInspection,
+    baseline_zones: &[ZoneRecord],
+) -> Result<(), ReaderDiagnostic> {
+    if project.zones.len() != baseline_zones.len() {
+        return Err(host_diagnostic(
+            "draft_identity_mismatch",
+            "Draft Zone identities did not match the baseline.",
+            BTreeMap::new(),
+        ));
+    }
+    for zone in &mut project.zones {
+        let Some(baseline) = baseline_zones.iter().find(|candidate| {
+            candidate.contam_number == zone.contam_number
+                && candidate.source_line_number == zone.source_line_number
+                && candidate.name == zone.name
+        }) else {
+            return Err(host_diagnostic(
+                "draft_identity_mismatch",
+                "Draft Zone identities did not match the baseline.",
+                BTreeMap::new(),
+            ));
+        };
+        zone.zone_id = baseline.zone_id.clone();
+    }
+    project.first_zone = project.zones.first().cloned();
+    Ok(())
+}
+
+fn safe_project_file_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("project.prj")
+        .to_string()
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DraftSummary {
+    revision_id: String,
+    revision_number: u64,
+    history_tip: u64,
+    dirty: bool,
+    exported: bool,
+    can_undo: bool,
+    can_redo: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -377,6 +467,7 @@ struct RawPatchApplicationResult {
 pub struct PatchReviewView {
     project_session_id: String,
     patch_id: String,
+    zone_id: String,
     zone_number: i64,
     zone_name: String,
     field: String,
@@ -404,6 +495,36 @@ pub struct DesktopApplyResponse {
     project_session_id: Option<String>,
     project: Option<ProjectInspection>,
     target_zone_number: Option<i64>,
+    target_zone_id: Option<String>,
+    draft: Option<DraftSummary>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopDraftTransitionResponse {
+    request_id: String,
+    project_session_id: Option<String>,
+    project: Option<ProjectInspection>,
+    draft: Option<DraftSummary>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DraftExportSummary {
+    file_name: String,
+    sha256: String,
+    size_bytes: u64,
+    zone_count: u64,
+    revision_number: u64,
+    matches_active_revision: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopDraftExportResponse {
+    request_id: String,
+    cancelled: bool,
+    project_session_id: Option<String>,
+    export: Option<DraftExportSummary>,
     error: Option<ReaderDiagnostic>,
 }
 
@@ -465,6 +586,7 @@ pub struct ZoneAirStateResultView {
     result_type: String,
     run_id: String,
     extraction_id: String,
+    zone_id: String,
     zone_number: i64,
     zone_name: String,
     source_line_number: u64,
@@ -491,6 +613,7 @@ pub struct ZoneAirStateCsvExportSummary {
     byte_count: u64,
     run_id: String,
     extraction_id: String,
+    zone_id: String,
     zone_number: i64,
 }
 
@@ -594,6 +717,28 @@ struct ResultExportStageEvent {
 }
 
 #[derive(Clone, Debug)]
+struct DraftPatchSummary {
+    zone_id: String,
+    contam_number: i64,
+    old_token: String,
+    new_token: String,
+}
+
+#[derive(Clone, Debug)]
+struct DraftRevision {
+    revision_id: String,
+    revision_number: u64,
+    parent_revision_id: Option<String>,
+    source_path: PathBuf,
+    source_sha256: String,
+    source_size_bytes: u64,
+    project: ProjectInspection,
+    patch: Option<DraftPatchSummary>,
+    created_at_unix_ms: u128,
+    application_owned: bool,
+}
+
+#[derive(Clone, Debug)]
 struct ActiveProjectContext {
     project_session_id: String,
     source_path: PathBuf,
@@ -602,6 +747,50 @@ struct ActiveProjectContext {
     reader_mode: String,
     header_version: String,
     zones: Vec<ZoneRecord>,
+    baseline_source_path: PathBuf,
+    baseline_source_sha256: String,
+    baseline_source_size_bytes: u64,
+    draft_root: PathBuf,
+    revisions: Vec<DraftRevision>,
+    revision_cursor: usize,
+    exported_revisions: Vec<String>,
+}
+
+impl ActiveProjectContext {
+    fn active_revision(&self) -> &DraftRevision {
+        &self.revisions[self.revision_cursor]
+    }
+
+    fn draft_summary(&self) -> DraftSummary {
+        let revision = self.active_revision();
+        DraftSummary {
+            revision_id: revision.revision_id.clone(),
+            revision_number: revision.revision_number,
+            history_tip: self
+                .revisions
+                .last()
+                .map_or(0, |value| value.revision_number),
+            dirty: revision.revision_number > 0,
+            exported: self.exported_revisions.contains(&revision.revision_id),
+            can_undo: self.revision_cursor > 0,
+            can_redo: self.revision_cursor + 1 < self.revisions.len(),
+        }
+    }
+
+    fn zone_by_id(&self, zone_id: &str) -> Option<&ZoneRecord> {
+        self.zones.iter().find(|zone| zone.zone_id == zone_id)
+    }
+
+    fn sync_to_revision(&mut self, cursor: usize) {
+        let revision = &self.revisions[cursor];
+        self.source_path = revision.source_path.clone();
+        self.source_sha256 = revision.source_sha256.clone();
+        self.source_size_bytes = revision.source_size_bytes;
+        self.reader_mode = revision.project.reader_mode.clone();
+        self.header_version = revision.project.header_version.clone();
+        self.zones = revision.project.zones.clone();
+        self.revision_cursor = cursor;
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -610,14 +799,17 @@ struct PlannedPatchContext {
     project_session_id: String,
     patch: ZoneVolumePatch,
     target_zone_number: i64,
+    target_zone_id: String,
     new_volume_token: String,
     source_sha256: String,
+    revision_id: String,
 }
 
 #[derive(Clone, Debug)]
 struct ActiveRunContext {
     project_session_id: String,
     source_sha256: String,
+    revision_id: String,
     run_id: String,
     manifest_path: PathBuf,
     succeeded: bool,
@@ -633,6 +825,8 @@ enum ActiveResultSource {
 struct ActiveResultContext {
     project_session_id: String,
     source_sha256: String,
+    revision_id: String,
+    zone_id: String,
     zone_number: i64,
     zone_name: String,
     source_line_number: u64,
@@ -669,6 +863,8 @@ impl ActiveResultContext {
         Ok(Self {
             project_session_id: active.project_session_id.clone(),
             source_sha256: active.source_sha256.clone(),
+            revision_id: active.active_revision().revision_id.clone(),
+            zone_id: selected.expect("validated Zone").zone_id.clone(),
             zone_number: result.zone_number,
             zone_name: result.zone_name.clone(),
             source_line_number: result.source_line_number,
@@ -684,12 +880,13 @@ impl ActiveResultContext {
     fn validate_export_identity(
         &self,
         active: &ActiveProjectContext,
-        zone_number: i64,
+        zone_id: &str,
         run_id: &str,
         extraction_id: &str,
     ) -> Result<(), ReaderDiagnostic> {
         if self.project_session_id != active.project_session_id
             || self.source_sha256 != active.source_sha256
+            || self.revision_id != active.active_revision().revision_id
         {
             return Err(host_diagnostic(
                 "active_result_project_mismatch",
@@ -697,13 +894,12 @@ impl ActiveResultContext {
                 BTreeMap::new(),
             ));
         }
-        let zone = active
-            .zones
-            .iter()
-            .find(|zone| zone.contam_number == zone_number);
-        if self.zone_number != zone_number
+        let zone = active.zones.iter().find(|zone| zone.zone_id == zone_id);
+        if self.zone_id != zone_id
             || zone.is_none_or(|zone| {
-                zone.name != self.zone_name || zone.source_line_number != self.source_line_number
+                zone.contam_number != self.zone_number
+                    || zone.name != self.zone_name
+                    || zone.source_line_number != self.source_line_number
             })
         {
             return Err(host_diagnostic(
@@ -747,6 +943,7 @@ impl ActiveRunContext {
         self.succeeded
             && self.project_session_id == project.project_session_id
             && self.source_sha256 == project.source_sha256
+            && self.revision_id == project.active_revision().revision_id
             && !self.run_id.is_empty()
             && self.manifest_path.is_file()
     }
@@ -790,22 +987,47 @@ impl DesktopProjectSessionStore {
         &self,
         project_session_id: String,
         source_path: PathBuf,
+        draft_root: PathBuf,
         project: &ProjectInspection,
     ) {
+        let baseline_revision_id = zone_uuid(&project.source_sha256, "revision", 0, 0, "baseline");
+        let revision = DraftRevision {
+            revision_id: baseline_revision_id,
+            revision_number: 0,
+            parent_revision_id: None,
+            source_path: source_path.clone(),
+            source_sha256: project.source_sha256.clone(),
+            source_size_bytes: project.source_size_bytes,
+            project: project.clone(),
+            patch: None,
+            created_at_unix_ms: unix_time_ms(),
+            application_owned: false,
+        };
         let context = ActiveProjectContext {
             project_session_id,
-            source_path,
+            source_path: source_path.clone(),
             source_sha256: project.source_sha256.clone(),
             source_size_bytes: project.source_size_bytes,
             reader_mode: project.reader_mode.clone(),
             header_version: project.header_version.clone(),
             zones: project.zones.clone(),
+            baseline_source_path: source_path,
+            baseline_source_sha256: project.source_sha256.clone(),
+            baseline_source_size_bytes: project.source_size_bytes,
+            draft_root,
+            revisions: vec![revision],
+            revision_cursor: 0,
+            exported_revisions: Vec::new(),
         };
         let mut state = self.state.lock().expect("desktop session mutex poisoned");
-        state.active_project = Some(context);
+        let previous = state.active_project.replace(context);
         state.planned_patch = None;
         state.active_run = None;
         state.active_result = None;
+        drop(state);
+        if let Some(previous) = previous {
+            let _ = remove_owned_draft_root(&previous);
+        }
     }
 
     fn retain_result(
@@ -820,6 +1042,7 @@ impl DesktopProjectSessionStore {
             project.project_session_id == active.project_session_id
                 && project.source_sha256 == active.source_sha256
                 && project.source_path == active.source_path
+                && project.active_revision().revision_id == active.active_revision().revision_id
         });
         if !still_active {
             return Err(host_diagnostic(
@@ -830,6 +1053,16 @@ impl DesktopProjectSessionStore {
         }
         state.active_result = Some(context);
         Ok(())
+    }
+}
+
+impl Drop for DesktopProjectSessionStore {
+    fn drop(&mut self) {
+        if let Ok(state) = self.state.get_mut() {
+            if let Some(active) = state.active_project.as_ref() {
+                let _ = remove_owned_draft_root(active);
+            }
+        }
     }
 }
 
@@ -983,35 +1216,132 @@ fn canonicalize_selected_path(path: &Path) -> Result<PathBuf, &'static str> {
     Ok(canonical)
 }
 
-fn validate_output_path(source: &Path, selected: &Path) -> Result<PathBuf, &'static str> {
-    let mut candidate = selected.to_path_buf();
-    match candidate.extension().and_then(|value| value.to_str()) {
-        None => {
-            candidate.set_extension("prj");
-        }
-        Some(extension) if extension.eq_ignore_ascii_case("prj") => {}
-        _ => return Err("selected_output_path_invalid"),
+fn projected_canonical_path(path: &Path) -> std::io::Result<PathBuf> {
+    let mut existing = path;
+    let mut suffix = Vec::new();
+    while !existing.exists() {
+        let name = existing
+            .file_name()
+            .ok_or_else(|| std::io::Error::other("path has no existing ancestor"))?;
+        suffix.push(name.to_os_string());
+        existing = existing
+            .parent()
+            .ok_or_else(|| std::io::Error::other("path has no existing ancestor"))?;
     }
-    if candidate.exists() {
-        if std::fs::canonicalize(&candidate).ok().as_deref() == Some(source) {
-            return Err("selected_output_path_invalid");
-        }
-        return Err("patch_output_exists");
+    let mut projected = std::fs::canonicalize(existing)?;
+    for component in suffix.into_iter().rev() {
+        projected.push(component);
     }
-    let Some(file_name) = candidate.file_name() else {
-        return Err("selected_output_path_invalid");
-    };
-    let parent = candidate.parent().ok_or("selected_output_path_invalid")?;
-    let canonical_parent =
-        std::fs::canonicalize(parent).map_err(|_| "selected_output_path_invalid")?;
-    if !canonical_parent.is_dir() {
-        return Err("selected_output_path_invalid");
+    Ok(projected)
+}
+
+fn create_controlled_draft_root(
+    app: &AppHandle,
+    project_session_id: &str,
+    source_path: &Path,
+) -> Result<PathBuf, ReaderDiagnostic> {
+    let app_data = app.path().app_local_data_dir().map_err(|_| {
+        host_diagnostic(
+            "draft_apply_failed",
+            "The controlled draft workspace is unavailable.",
+            BTreeMap::new(),
+        )
+    })?;
+    let projected_app_data = projected_canonical_path(&app_data).map_err(|_| {
+        host_diagnostic(
+            "draft_apply_failed",
+            "The application data directory is unavailable.",
+            BTreeMap::new(),
+        )
+    })?;
+    let source_parent = source_path.parent().ok_or_else(|| {
+        host_diagnostic(
+            "draft_apply_failed",
+            "The source project directory is invalid.",
+            BTreeMap::new(),
+        )
+    })?;
+    let projected_base =
+        projected_canonical_path(&app_data.join("project-drafts")).map_err(|_| {
+            host_diagnostic(
+                "draft_apply_failed",
+                "The controlled draft workspace is unavailable.",
+                BTreeMap::new(),
+            )
+        })?;
+    if projected_app_data == source_parent
+        || projected_app_data.starts_with(source_parent)
+        || projected_base == source_parent
+        || projected_base.starts_with(source_parent)
+    {
+        return Err(host_diagnostic(
+            "draft_apply_failed",
+            "The controlled draft workspace conflicts with the source project.",
+            BTreeMap::new(),
+        ));
     }
-    let output = canonical_parent.join(file_name);
-    if output.to_str().is_none() || output == source {
-        return Err("selected_output_path_invalid");
+    let base = app_data.join("project-drafts");
+    std::fs::create_dir_all(&base).map_err(|_| {
+        host_diagnostic(
+            "draft_apply_failed",
+            "The controlled draft workspace could not be created.",
+            BTreeMap::new(),
+        )
+    })?;
+    let canonical_base = std::fs::canonicalize(&base).map_err(|_| {
+        host_diagnostic(
+            "draft_apply_failed",
+            "The controlled draft workspace is unavailable.",
+            BTreeMap::new(),
+        )
+    })?;
+    if canonical_base == source_parent || canonical_base.starts_with(source_parent) {
+        return Err(host_diagnostic(
+            "draft_apply_failed",
+            "The controlled draft workspace conflicts with the source project.",
+            BTreeMap::new(),
+        ));
     }
-    Ok(output)
+    let session_root = canonical_base.join(project_session_id);
+    std::fs::create_dir(&session_root).map_err(|_| {
+        host_diagnostic(
+            "draft_apply_failed",
+            "A fresh draft session workspace could not be created.",
+            BTreeMap::new(),
+        )
+    })?;
+    let snapshots = session_root.join("snapshots");
+    if let Err(error) = std::fs::create_dir(&snapshots) {
+        let _ = std::fs::remove_dir(&session_root);
+        return Err(host_diagnostic(
+            "draft_apply_failed",
+            &format!("The draft snapshot directory could not be created: {error}"),
+            BTreeMap::new(),
+        ));
+    }
+    Ok(session_root)
+}
+
+fn remove_owned_draft_root(active: &ActiveProjectContext) -> std::io::Result<()> {
+    if !active.draft_root.exists() {
+        return Ok(());
+    }
+    let root = std::fs::canonicalize(&active.draft_root)?;
+    let source_parent = active
+        .baseline_source_path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("source parent missing"))?;
+    if root == source_parent || root.starts_with(source_parent) {
+        return Err(std::io::Error::other("draft root conflicts with source"));
+    }
+    if active.revisions.iter().any(|revision| {
+        revision.application_owned
+            && std::fs::canonicalize(&revision.source_path)
+                .is_ok_and(|path| !path.starts_with(&root))
+    }) {
+        return Err(std::io::Error::other("draft revision escaped session root"));
+    }
+    std::fs::remove_dir_all(root)
 }
 
 fn read_limited<R: Read>(mut reader: R, limit: usize) -> Capture {
@@ -1249,7 +1579,7 @@ fn sanitize_python_error(
 }
 
 fn validate_raw_project(
-    raw: RawProjectInspection,
+    mut raw: RawProjectInspection,
     expected_path: &Path,
 ) -> Result<ProjectInspection, ReaderDiagnostic> {
     let valid = raw.schema_version == RESULT_SCHEMA_VERSION
@@ -1295,10 +1625,12 @@ fn validate_raw_project(
                 BTreeMap::new(),
             )
         })?;
+    assign_baseline_zone_ids(&mut raw.zones, &raw.source_sha256);
+    raw.first_zone = raw.zones.first().cloned();
     Ok(ProjectInspection {
         schema_version: raw.schema_version,
         reader_mode: raw.reader_mode,
-        source_path: expected_path.to_string_lossy().into_owned(),
+        source_path: safe_project_file_name(expected_path),
         source_sha256: raw.source_sha256,
         source_size_bytes: raw.source_size_bytes,
         source_unchanged: raw.source_unchanged,
@@ -1379,6 +1711,7 @@ fn validate_plan_result(
     raw: RawPatchPlanResult,
     active: &ActiveProjectContext,
     request_id: &str,
+    zone_id: &str,
     contam_number: i64,
     new_volume_token: &str,
 ) -> Result<(PlannedPatchContext, PatchReviewView), ReaderDiagnostic> {
@@ -1432,6 +1765,7 @@ fn validate_plan_result(
     let review = PatchReviewView {
         project_session_id: active.project_session_id.clone(),
         patch_id: patch_id.clone(),
+        zone_id: zone_id.to_string(),
         zone_number: patch.target.contam_number,
         zone_name: patch.target.zone_name.clone(),
         field: patch.target.field.clone(),
@@ -1448,8 +1782,10 @@ fn validate_plan_result(
         patch_id,
         project_session_id: active.project_session_id.clone(),
         target_zone_number: patch.target.contam_number,
+        target_zone_id: zone_id.to_string(),
         new_volume_token: patch.replacement.new_token.clone(),
         source_sha256: patch.source_sha256.clone(),
+        revision_id: active.active_revision().revision_id.clone(),
         patch,
     };
     Ok((context, review))
@@ -1523,7 +1859,8 @@ fn validate_application_result(
             )
         })?;
     }
-    let project = validate_raw_project(raw.project, output)?;
+    let mut project = validate_raw_project(raw.project, output)?;
+    bind_revision_zone_ids(&mut project, &active.revisions[0].project.zones)?;
     let target = project
         .zones
         .iter()
@@ -1538,7 +1875,58 @@ fn validate_application_result(
             BTreeMap::new(),
         ));
     }
+    validate_revision_delta(active, &project, planned)?;
     Ok(project)
+}
+
+fn validate_revision_delta(
+    active: &ActiveProjectContext,
+    project: &ProjectInspection,
+    planned: &PlannedPatchContext,
+) -> Result<(), ReaderDiagnostic> {
+    if active.zones.len() != project.zones.len()
+        || active.reader_mode != project.reader_mode
+        || active.header_version != project.header_version
+    {
+        return Err(host_diagnostic(
+            "draft_identity_mismatch",
+            "The draft revision did not preserve the active project contract.",
+            BTreeMap::new(),
+        ));
+    }
+    for before in &active.zones {
+        let Some(after) = project
+            .zones
+            .iter()
+            .find(|zone| zone.zone_id == before.zone_id)
+        else {
+            return Err(host_diagnostic(
+                "draft_identity_mismatch",
+                "The draft revision did not preserve Zone identities.",
+                BTreeMap::new(),
+            ));
+        };
+        let identity_unchanged = before.contam_number == after.contam_number
+            && before.name == after.name
+            && before.flags == after.flags
+            && before.level_number == after.level_number
+            && before.relative_height == after.relative_height
+            && before.source_line_number == after.source_line_number;
+        let volume_valid = if before.zone_id == planned.target_zone_id {
+            after.volume_m3 == planned.patch.replacement.new_value
+                && after.volume_m3 != before.volume_m3
+        } else {
+            after.volume_m3 == before.volume_m3
+        };
+        if !identity_unchanged || !volume_valid {
+            return Err(host_diagnostic(
+                "draft_identity_mismatch",
+                "The draft revision changed data outside the approved Zone volume.",
+                BTreeMap::new(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 impl DesktopOpenResponse {
@@ -1548,6 +1936,7 @@ impl DesktopOpenResponse {
             cancelled: true,
             project_session_id: None,
             envelope: None,
+            draft: None,
         }
     }
 }
@@ -1567,6 +1956,8 @@ fn apply_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopApplyRespo
         project_session_id: None,
         project: None,
         target_zone_number: None,
+        target_zone_id: None,
+        draft: None,
         error: Some(error),
     }
 }
@@ -1930,6 +2321,7 @@ fn validate_contamx_run_result(
     let context = ActiveRunContext {
         project_session_id: active.project_session_id.clone(),
         source_sha256: active.source_sha256.clone(),
+        revision_id: active.active_revision().revision_id.clone(),
         run_id: run.run_id,
         manifest_path,
         succeeded: true,
@@ -2023,6 +2415,7 @@ fn validate_zone_air_state_result(
         result_type: raw.parsed_result.result_type,
         run_id: raw.run_id,
         extraction_id: raw.extraction_id,
+        zone_id: selected.zone_id.clone(),
         zone_number,
         zone_name: selected.name.clone(),
         source_line_number: selected.source_line_number,
@@ -2141,7 +2534,7 @@ async fn extract_zone_air_state_with_manifest(
 #[tauri::command]
 pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> DesktopOpenResponse {
     let store = app.state::<DesktopProjectSessionStore>();
-    if !request_id_is_valid(&request_id) {
+    if !request_id_is_valid(&request_id) || Uuid::parse_str(&request_id).is_err() {
         return DesktopOpenResponse {
             request_id: String::new(),
             cancelled: false,
@@ -2151,6 +2544,7 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
                 "bridge_request_invalid",
                 "request_id is invalid.",
             )),
+            draft: None,
         };
     }
     let Some(_operation) = store.try_operation() else {
@@ -2163,6 +2557,7 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
                 "project_operation_busy",
                 "Another project operation is in progress.",
             )),
+            draft: None,
         };
     };
     let dialog_app = app.clone();
@@ -2186,6 +2581,7 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
                     "desktop_dialog_failed",
                     "The native open dialog failed.",
                 )),
+                draft: None,
             }
         }
     };
@@ -2204,6 +2600,7 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
                     "selected_path_invalid",
                     "The selected item was not a local path.",
                 )),
+                draft: None,
             }
         }
     };
@@ -2219,30 +2616,56 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
                     code,
                     "The selected item was not a supported PRJ.",
                 )),
+                draft: None,
             }
         }
     };
     let bridge_id = request_id.clone();
     let source = canonical_path.clone();
-    let envelope = tauri::async_runtime::spawn_blocking(move || execute_read(&source, &bridge_id))
-        .await
-        .unwrap_or_else(|_| {
-            host_error(
-                &request_id,
-                "bridge_task_failed",
-                "The read task ended unexpectedly.",
-            )
-        });
+    let mut envelope =
+        tauri::async_runtime::spawn_blocking(move || execute_read(&source, &bridge_id))
+            .await
+            .unwrap_or_else(|_| {
+                host_error(
+                    &request_id,
+                    "bridge_task_failed",
+                    "The read task ended unexpectedly.",
+                )
+            });
     let mut project_session_id = None;
-    if let Some(project) = envelope.result.as_ref() {
-        store.activate_project(request_id.clone(), canonical_path, project);
-        project_session_id = Some(request_id.clone());
+    let mut draft = None;
+    if let Some(project) = envelope.result.clone() {
+        match create_controlled_draft_root(&app, &request_id, &canonical_path) {
+            Ok(draft_root) => {
+                store.activate_project(request_id.clone(), canonical_path, draft_root, &project);
+                project_session_id = Some(request_id.clone());
+                draft = Some(DraftSummary {
+                    revision_id: zone_uuid(&project.source_sha256, "revision", 0, 0, "baseline"),
+                    revision_number: 0,
+                    history_tip: 0,
+                    dirty: false,
+                    exported: false,
+                    can_undo: false,
+                    can_redo: false,
+                });
+            }
+            Err(error) => {
+                envelope = BridgeEnvelope {
+                    protocol_version: PROTOCOL_VERSION.into(),
+                    request_id: request_id.clone(),
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                };
+            }
+        }
     }
     DesktopOpenResponse {
         request_id,
         cancelled: false,
         project_session_id,
         envelope: Some(envelope),
+        draft,
     }
 }
 
@@ -2251,12 +2674,12 @@ pub async fn select_and_extract_zone_air_state(
     app: AppHandle,
     request_id: String,
     project_session_id: String,
-    zone_number: i64,
+    zone_id: String,
 ) -> DesktopZoneAirStateResponse {
     let store = app.state::<DesktopProjectSessionStore>();
     if !request_id_is_valid(&request_id)
         || !request_id_is_valid(&project_session_id)
-        || zone_number <= 0
+        || Uuid::parse_str(&zone_id).is_err()
     {
         return result_failure(
             &request_id,
@@ -2277,7 +2700,7 @@ pub async fn select_and_extract_zone_air_state(
             ),
         );
     };
-    let active = {
+    let (active, zone_number) = {
         let state = store.state.lock().expect("desktop session mutex poisoned");
         let Some(active) = state.active_project.clone() else {
             return result_failure(
@@ -2299,11 +2722,7 @@ pub async fn select_and_extract_zone_air_state(
                 ),
             );
         }
-        if !active
-            .zones
-            .iter()
-            .any(|zone| zone.contam_number == zone_number)
-        {
+        let Some(zone) = active.zone_by_id(&zone_id) else {
             return result_failure(
                 &request_id,
                 host_diagnostic(
@@ -2312,8 +2731,9 @@ pub async fn select_and_extract_zone_air_state(
                     BTreeMap::new(),
                 ),
             );
-        }
-        active
+        };
+        let zone_number = zone.contam_number;
+        (active, zone_number)
     };
     let dialog_app = app.clone();
     let selected = match tauri::async_runtime::spawn_blocking(move || {
@@ -2423,12 +2843,12 @@ pub async fn extract_active_run_zone_air_state(
     app: AppHandle,
     request_id: String,
     project_session_id: String,
-    zone_number: i64,
+    zone_id: String,
 ) -> DesktopZoneAirStateResponse {
     let store = app.state::<DesktopProjectSessionStore>();
     if !request_id_is_valid(&request_id)
         || !request_id_is_valid(&project_session_id)
-        || zone_number <= 0
+        || Uuid::parse_str(&zone_id).is_err()
     {
         return result_failure(
             &request_id,
@@ -2449,7 +2869,7 @@ pub async fn extract_active_run_zone_air_state(
             ),
         );
     };
-    let (active, active_run) = {
+    let (active, active_run, zone_number) = {
         let state = store.state.lock().expect("desktop session mutex poisoned");
         let Some(active) = state.active_project.clone() else {
             return result_failure(
@@ -2471,11 +2891,7 @@ pub async fn extract_active_run_zone_air_state(
                 ),
             );
         }
-        if !active
-            .zones
-            .iter()
-            .any(|zone| zone.contam_number == zone_number)
-        {
+        let Some(zone) = active.zone_by_id(&zone_id) else {
             return result_failure(
                 &request_id,
                 host_diagnostic(
@@ -2484,7 +2900,8 @@ pub async fn extract_active_run_zone_air_state(
                     BTreeMap::new(),
                 ),
             );
-        }
+        };
+        let zone_number = zone.contam_number;
         let Some(active_run) = state.active_run.clone() else {
             return result_failure(
                 &request_id,
@@ -2495,7 +2912,7 @@ pub async fn extract_active_run_zone_air_state(
                 ),
             );
         };
-        (active, active_run)
+        (active, active_run, zone_number)
     };
     let run_root = match app.path().app_local_data_dir() {
         Ok(path) => path.join("runs"),
@@ -2531,11 +2948,13 @@ pub async fn extract_active_run_zone_air_state(
     let project_still_current = state.active_project.as_ref().is_some_and(|project| {
         project.project_session_id == active.project_session_id
             && project.source_sha256 == active.source_sha256
+            && project.active_revision().revision_id == active.active_revision().revision_id
     });
     let run_still_current = state.active_run.as_ref().is_some_and(|run| {
         run.succeeded
             && run.project_session_id == active.project_session_id
             && run.source_sha256 == active.source_sha256
+            && run.revision_id == active.active_revision().revision_id
             && run.run_id == active_run.run_id
             && run.manifest_path == manifest_path
     });
@@ -2567,7 +2986,7 @@ pub async fn export_active_zone_air_state_csv(
     app: AppHandle,
     request_id: String,
     project_session_id: String,
-    zone_number: i64,
+    zone_id: String,
     run_id: String,
     extraction_id: String,
 ) -> DesktopZoneAirStateCsvExportResponse {
@@ -2576,7 +2995,7 @@ pub async fn export_active_zone_air_state_csv(
         || !request_id_is_valid(&project_session_id)
         || !request_id_is_valid(&run_id)
         || !request_id_is_valid(&extraction_id)
-        || zone_number <= 0
+        || Uuid::parse_str(&zone_id).is_err()
     {
         return export_failure(
             &request_id,
@@ -2597,7 +3016,7 @@ pub async fn export_active_zone_air_state_csv(
             ),
         );
     };
-    let (active, active_result) = {
+    let (active, active_result, zone_number) = {
         let state = store.state.lock().expect("desktop session mutex poisoned");
         let Some(active) = state.active_project.clone() else {
             return export_failure(
@@ -2629,12 +3048,23 @@ pub async fn export_active_zone_air_state_csv(
                 ),
             );
         };
+        let Some(zone) = active.zone_by_id(&zone_id) else {
+            return export_failure(
+                &request_id,
+                host_diagnostic(
+                    "active_result_zone_mismatch",
+                    "The selected Zone is not part of the active draft.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        let zone_number = zone.contam_number;
         if let Err(error) =
-            active_result.validate_export_identity(&active, zone_number, &run_id, &extraction_id)
+            active_result.validate_export_identity(&active, &zone_id, &run_id, &extraction_id)
         {
             return export_failure(&request_id, error);
         }
-        (active, active_result)
+        (active, active_result, zone_number)
     };
     let source_for_check = active.clone();
     let source_matches = tauri::async_runtime::spawn_blocking(move || {
@@ -2817,6 +3247,7 @@ pub async fn export_active_zone_air_state_csv(
             byte_count,
             run_id,
             extraction_id,
+            zone_id,
             zone_number,
         }),
         error: None,
@@ -2951,12 +3382,17 @@ pub async fn run_active_contam_project(
         );
     }
     let mut state = store.state.lock().expect("desktop session mutex poisoned");
-    if state
-        .active_project
-        .as_ref()
-        .map(|project| (&project.project_session_id, &project.source_sha256))
-        != Some((&project_session_id, &active.source_sha256))
-    {
+    if state.active_project.as_ref().map(|project| {
+        (
+            &project.project_session_id,
+            &project.source_sha256,
+            &project.active_revision().revision_id,
+        )
+    }) != Some((
+        &project_session_id,
+        &active.source_sha256,
+        &active.active_revision().revision_id,
+    )) {
         return run_failure(
             &request_id,
             host_diagnostic(
@@ -2980,11 +3416,14 @@ pub async fn plan_zone_volume_patch(
     app: AppHandle,
     request_id: String,
     project_session_id: String,
-    contam_number: i64,
+    zone_id: String,
     new_volume_token: String,
 ) -> DesktopPlanResponse {
     let store = app.state::<DesktopProjectSessionStore>();
-    if !request_id_is_valid(&request_id) || !request_id_is_valid(&project_session_id) {
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || Uuid::parse_str(&zone_id).is_err()
+    {
         return plan_failure(
             &request_id,
             host_diagnostic(
@@ -3017,7 +3456,7 @@ pub async fn plan_zone_volume_patch(
             ),
         );
     };
-    let active = {
+    let (active, contam_number) = {
         let state = store.state.lock().expect("desktop session mutex poisoned");
         match state.active_project.clone() {
             None => {
@@ -3040,7 +3479,20 @@ pub async fn plan_zone_volume_patch(
                     ),
                 )
             }
-            Some(active) => active,
+            Some(active) => {
+                let Some(zone) = active.zone_by_id(&zone_id) else {
+                    return plan_failure(
+                        &request_id,
+                        host_diagnostic(
+                            "draft_identity_mismatch",
+                            "Zone identity did not match the active draft.",
+                            BTreeMap::new(),
+                        ),
+                    );
+                };
+                let contam_number = zone.contam_number;
+                (active, contam_number)
+            }
         }
     };
     let request = json!({
@@ -3090,18 +3542,22 @@ pub async fn plan_zone_volume_patch(
                 )
             }
         };
-    let (planned, review) =
-        match validate_plan_result(plan, &active, &request_id, contam_number, &new_volume_token) {
-            Ok(value) => value,
-            Err(error) => return plan_failure(&request_id, error),
-        };
+    let (planned, review) = match validate_plan_result(
+        plan,
+        &active,
+        &request_id,
+        &zone_id,
+        contam_number,
+        &new_volume_token,
+    ) {
+        Ok(value) => value,
+        Err(error) => return plan_failure(&request_id, error),
+    };
     let mut state = store.state.lock().expect("desktop session mutex poisoned");
-    if state
-        .active_project
-        .as_ref()
-        .map(|value| &value.project_session_id)
-        != Some(&project_session_id)
-    {
+    if state.active_project.as_ref().is_none_or(|value| {
+        value.project_session_id != project_session_id
+            || value.active_revision().revision_id != active.active_revision().revision_id
+    }) {
         return plan_failure(
             &request_id,
             host_diagnostic(
@@ -3120,7 +3576,7 @@ pub async fn plan_zone_volume_patch(
 }
 
 #[tauri::command]
-pub async fn apply_zone_volume_patch_to_copy(
+pub async fn apply_zone_volume_patch_to_draft(
     app: AppHandle,
     request_id: String,
     project_session_id: String,
@@ -3130,6 +3586,7 @@ pub async fn apply_zone_volume_patch_to_copy(
     if !request_id_is_valid(&request_id)
         || !request_id_is_valid(&project_session_id)
         || !request_id_is_valid(&patch_id)
+        || Uuid::parse_str(&request_id).is_err()
     {
         return apply_failure(
             &request_id,
@@ -3156,8 +3613,8 @@ pub async fn apply_zone_volume_patch_to_copy(
             return apply_failure(
                 &request_id,
                 host_diagnostic(
-                    "project_session_missing",
-                    "No active project session exists.",
+                    "draft_session_missing",
+                    "No active draft session exists.",
                     BTreeMap::new(),
                 ),
             );
@@ -3166,8 +3623,8 @@ pub async fn apply_zone_volume_patch_to_copy(
             return apply_failure(
                 &request_id,
                 host_diagnostic(
-                    "project_session_mismatch",
-                    "Project session did not match.",
+                    "draft_session_mismatch",
+                    "Draft session did not match.",
                     BTreeMap::new(),
                 ),
             );
@@ -3182,97 +3639,58 @@ pub async fn apply_zone_volume_patch_to_copy(
                 ),
             );
         };
-        if planned.patch_id != patch_id || planned.project_session_id != project_session_id {
-            return apply_failure(
-                &request_id,
-                host_diagnostic(
-                    "patch_session_mismatch",
-                    "Patch session did not match.",
-                    BTreeMap::new(),
-                ),
-            );
-        }
-        if planned.source_sha256 != active.source_sha256
+        if planned.patch_id != patch_id
+            || planned.project_session_id != project_session_id
+            || planned.revision_id != active.active_revision().revision_id
+            || planned.source_sha256 != active.source_sha256
             || planned.new_volume_token != planned.patch.replacement.new_token
         {
             return apply_failure(
                 &request_id,
                 host_diagnostic(
-                    "patch_precondition_failed",
-                    "Stored patch preconditions are invalid.",
+                    "patch_session_mismatch",
+                    "Patch did not belong to the active draft revision.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if active.revision_cursor + 1 >= MAX_DRAFT_REVISIONS {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_history_limit_reached",
+                    "The draft revision limit was reached.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if !active_project_source_matches(&active) {
+            return apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_revision_changed",
+                    "The active draft revision changed before application.",
                     BTreeMap::new(),
                 ),
             );
         }
         (active, planned)
     };
-    let suggested = format!(
-        "{}-modified.prj",
-        active
-            .source_path
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or("project")
-    );
-    let dialog_app = app.clone();
-    let selected = match tauri::async_runtime::spawn_blocking(move || {
-        dialog_app
-            .dialog()
-            .file()
-            .add_filter("CONTAM PRJ", &["prj"])
-            .set_file_name(suggested)
-            .blocking_save_file()
-    })
-    .await
-    {
-        Ok(selected) => selected,
-        Err(_) => {
-            return apply_failure(
-                &request_id,
-                host_diagnostic(
-                    "desktop_save_dialog_failed",
-                    "The native save dialog failed.",
-                    BTreeMap::new(),
-                ),
-            )
-        }
-    };
-    let Some(selected) = selected else {
-        return DesktopApplyResponse {
-            request_id,
-            cancelled: true,
-            project_session_id: None,
-            project: None,
-            target_zone_number: None,
-            error: None,
-        };
-    };
-    let selected_path = match selected.into_path() {
-        Ok(path) => path,
-        Err(_) => {
-            return apply_failure(
-                &request_id,
-                host_diagnostic(
-                    "selected_output_path_invalid",
-                    "The selected output was not a local path.",
-                    BTreeMap::new(),
-                ),
-            )
-        }
-    };
-    let output = match validate_output_path(&active.source_path, &selected_path) {
-        Ok(path) => path,
-        Err(code) => {
-            return apply_failure(
-                &request_id,
-                host_diagnostic(
-                    code,
-                    "The selected output path is not allowed.",
-                    BTreeMap::new(),
-                ),
-            )
-        }
-    };
+    let revision_number = active.active_revision().revision_number + 1;
+    let output = active
+        .draft_root
+        .join("snapshots")
+        .join(format!("revision-{revision_number}-{request_id}.prj"));
+    if output.exists() || !output.starts_with(active.draft_root.join("snapshots")) {
+        return apply_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_apply_failed",
+                "A fresh internal draft snapshot could not be allocated.",
+                BTreeMap::new(),
+            ),
+        );
+    }
     let request = json!({
         "protocol_version": PROTOCOL_VERSION,
         "request_id": request_id,
@@ -3293,83 +3711,714 @@ pub async fn apply_zone_volume_patch_to_copy(
             return apply_failure(
                 &request_id,
                 host_diagnostic(
-                    "bridge_task_failed",
-                    "The patch application task ended unexpectedly.",
+                    "draft_apply_failed",
+                    "The draft application task ended unexpectedly.",
                     BTreeMap::new(),
                 ),
             )
         }
     };
     if !raw.ok {
-        let error = sanitize_python_error(&raw).unwrap_or_else(|error| error);
-        if matches!(
-            error.code.as_str(),
-            "patch_precondition_failed" | "patch_verification_failed"
-        ) {
-            store
-                .state
-                .lock()
-                .expect("desktop session mutex poisoned")
-                .planned_patch = None;
-        }
-        return apply_failure(&request_id, error);
+        let _ = std::fs::remove_file(&output);
+        return apply_failure(
+            &request_id,
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
     }
     let application: RawPatchApplicationResult =
         match serde_json::from_value(raw.result.expect("validated result")) {
             Ok(value) => value,
             Err(_) => {
+                let _ = std::fs::remove_file(&output);
                 return apply_failure(
                     &request_id,
                     host_diagnostic(
-                        "patch_apply_response_invalid",
-                        "Python patch application response was invalid.",
+                        "draft_apply_failed",
+                        "Python draft application response was invalid.",
                         BTreeMap::new(),
                     ),
-                )
+                );
             }
         };
-    let project = match validate_application_result(application, &active, &planned, &output) {
+    let mut project = match validate_application_result(application, &active, &planned, &output) {
         Ok(project) => project,
-        Err(error) => return apply_failure(&request_id, error),
+        Err(error) => {
+            let _ = std::fs::remove_file(&output);
+            return apply_failure(&request_id, error);
+        }
     };
-    let target_zone_number = planned.target_zone_number;
-    let new_session_id = request_id.clone();
-    let new_active = ActiveProjectContext {
-        project_session_id: new_session_id.clone(),
-        source_path: output,
-        source_sha256: project.source_sha256.clone(),
-        source_size_bytes: project.source_size_bytes,
-        reader_mode: project.reader_mode.clone(),
-        header_version: project.header_version.clone(),
-        zones: project.zones.clone(),
-    };
-    let mut state = store.state.lock().expect("desktop session mutex poisoned");
-    if state
-        .active_project
-        .as_ref()
-        .map(|value| &value.project_session_id)
-        != Some(&project_session_id)
-        || state.planned_patch.as_ref().map(|value| &value.patch_id) != Some(&patch_id)
-    {
+    project.source_path = safe_project_file_name(&active.baseline_source_path);
+    if !active_project_source_matches(&active) {
+        let _ = std::fs::remove_file(&output);
         return apply_failure(
             &request_id,
             host_diagnostic(
-                "patch_session_mismatch",
-                "Patch session changed during application.",
+                "draft_revision_changed",
+                "The active draft revision changed during application.",
                 BTreeMap::new(),
             ),
         );
     }
-    state.active_project = Some(new_active);
+    let revision = DraftRevision {
+        revision_id: request_id.clone(),
+        revision_number,
+        parent_revision_id: Some(active.active_revision().revision_id.clone()),
+        source_path: output.clone(),
+        source_sha256: project.source_sha256.clone(),
+        source_size_bytes: project.source_size_bytes,
+        project: project.clone(),
+        patch: Some(DraftPatchSummary {
+            zone_id: planned.target_zone_id.clone(),
+            contam_number: planned.target_zone_number,
+            old_token: planned.patch.preconditions.old_token.clone(),
+            new_token: planned.patch.replacement.new_token.clone(),
+        }),
+        created_at_unix_ms: unix_time_ms(),
+        application_owned: true,
+    };
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    let planned_patch_matches = state
+        .planned_patch
+        .as_ref()
+        .is_some_and(|value| value.patch_id == patch_id);
+    let Some(current) = state.active_project.as_mut() else {
+        let _ = std::fs::remove_file(&output);
+        return apply_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_session_missing",
+                "Draft session ended during application.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    if current.project_session_id != project_session_id
+        || current.active_revision().revision_id != planned.revision_id
+        || !planned_patch_matches
+    {
+        let _ = std::fs::remove_file(&output);
+        return apply_failure(
+            &request_id,
+            host_diagnostic(
+                "patch_session_mismatch",
+                "Draft session changed during application.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let truncated = current.revisions.split_off(current.revision_cursor + 1);
+    current.revisions.push(revision);
+    let cursor = current.revisions.len() - 1;
+    current.sync_to_revision(cursor);
+    let draft = current.draft_summary();
     state.planned_patch = None;
     state.active_run = None;
     state.active_result = None;
+    drop(state);
+    for old in truncated {
+        if old.application_owned
+            && old
+                .source_path
+                .starts_with(active.draft_root.join("snapshots"))
+        {
+            let _ = std::fs::remove_file(old.source_path);
+        }
+    }
     DesktopApplyResponse {
         request_id,
         cancelled: false,
-        project_session_id: Some(new_session_id),
+        project_session_id: Some(project_session_id),
         project: Some(project),
-        target_zone_number: Some(target_zone_number),
+        target_zone_number: Some(planned.target_zone_number),
+        target_zone_id: Some(planned.target_zone_id),
+        draft: Some(draft),
+        error: None,
+    }
+}
+
+fn draft_transition_failure(
+    request_id: &str,
+    error: ReaderDiagnostic,
+) -> DesktopDraftTransitionResponse {
+    DesktopDraftTransitionResponse {
+        request_id: request_id.into(),
+        project_session_id: None,
+        project: None,
+        draft: None,
+        error: Some(error),
+    }
+}
+
+fn draft_export_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopDraftExportResponse {
+    DesktopDraftExportResponse {
+        request_id: request_id.into(),
+        cancelled: false,
+        project_session_id: None,
+        export: None,
+        error: Some(error),
+    }
+}
+
+fn validate_draft_revision(
+    active: &ActiveProjectContext,
+    revision: &DraftRevision,
+    request_id: &str,
+) -> Result<ProjectInspection, ReaderDiagnostic> {
+    let revision_index = active
+        .revisions
+        .iter()
+        .position(|candidate| candidate.revision_id == revision.revision_id)
+        .ok_or_else(|| {
+            host_diagnostic(
+                "draft_identity_mismatch",
+                "The draft revision is not part of the active history.",
+                BTreeMap::new(),
+            )
+        })?;
+    let metadata_valid = if revision_index == 0 {
+        revision.revision_number == 0
+            && revision.parent_revision_id.is_none()
+            && revision.patch.is_none()
+            && !revision.application_owned
+            && revision.source_path == active.baseline_source_path
+            && revision.source_sha256 == active.baseline_source_sha256
+            && revision.source_size_bytes == active.baseline_source_size_bytes
+    } else {
+        let previous = &active.revisions[revision_index - 1];
+        let patch = revision.patch.as_ref();
+        revision.revision_number == previous.revision_number + 1
+            && revision.parent_revision_id.as_deref() == Some(previous.revision_id.as_str())
+            && revision.application_owned
+            && revision.created_at_unix_ms > 0
+            && patch.is_some_and(|patch| {
+                !patch.old_token.is_empty()
+                    && !patch.new_token.is_empty()
+                    && patch.old_token != patch.new_token
+                    && revision.project.zones.iter().any(|zone| {
+                        zone.zone_id == patch.zone_id
+                            && zone.contam_number == patch.contam_number
+                            && patch
+                                .new_token
+                                .parse::<f64>()
+                                .is_ok_and(|value| value.is_finite() && value == zone.volume_m3)
+                    })
+            })
+    };
+    if !metadata_valid {
+        return Err(host_diagnostic(
+            "draft_identity_mismatch",
+            "The draft revision lineage metadata was invalid.",
+            BTreeMap::new(),
+        ));
+    }
+    let (sha256, size) = sha256_file(&revision.source_path).map_err(|_| {
+        host_diagnostic(
+            "draft_revision_missing",
+            "The draft revision file is unavailable.",
+            BTreeMap::new(),
+        )
+    })?;
+    if size != revision.source_size_bytes || !sha256.eq_ignore_ascii_case(&revision.source_sha256) {
+        let code = if revision.revision_number == 0 {
+            "draft_baseline_changed"
+        } else {
+            "draft_revision_changed"
+        };
+        return Err(host_diagnostic(
+            code,
+            "The draft revision no longer matches its verified snapshot.",
+            BTreeMap::new(),
+        ));
+    }
+    let envelope = execute_read(&revision.source_path, request_id);
+    if !envelope.ok {
+        return Err(envelope.error.unwrap_or_else(|| {
+            host_diagnostic(
+                "draft_revision_changed",
+                "The draft revision could not be read.",
+                BTreeMap::new(),
+            )
+        }));
+    }
+    let mut project = envelope.result.ok_or_else(|| {
+        host_diagnostic(
+            "draft_revision_changed",
+            "The draft revision response was incomplete.",
+            BTreeMap::new(),
+        )
+    })?;
+    bind_revision_zone_ids(&mut project, &active.revisions[0].project.zones)?;
+    project.source_path = safe_project_file_name(&active.baseline_source_path);
+    let expected = &revision.project;
+    if project.source_sha256 != expected.source_sha256
+        || project.source_size_bytes != expected.source_size_bytes
+        || project.reader_mode != expected.reader_mode
+        || project.header_version != expected.header_version
+        || project.zones != expected.zones
+    {
+        return Err(host_diagnostic(
+            "draft_identity_mismatch",
+            "The draft revision did not match its verified Zone view.",
+            BTreeMap::new(),
+        ));
+    }
+    Ok(project)
+}
+
+async fn switch_project_draft(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    direction: i8,
+) -> DesktopDraftTransitionResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id) || !request_id_is_valid(&project_session_id) {
+        return draft_transition_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "Draft transition request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return draft_transition_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let (active, target_cursor) = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return draft_transition_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_session_missing",
+                    "No active draft session exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id {
+            return draft_transition_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_session_mismatch",
+                    "Draft session did not match.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        let target = if direction < 0 {
+            active.revision_cursor.checked_sub(1).ok_or_else(|| {
+                host_diagnostic(
+                    "draft_undo_unavailable",
+                    "No earlier draft revision is available.",
+                    BTreeMap::new(),
+                )
+            })
+        } else if active.revision_cursor + 1 < active.revisions.len() {
+            Ok(active.revision_cursor + 1)
+        } else {
+            Err(host_diagnostic(
+                "draft_redo_unavailable",
+                "No later draft revision is available.",
+                BTreeMap::new(),
+            ))
+        };
+        let target = match target {
+            Ok(value) => value,
+            Err(error) => return draft_transition_failure(&request_id, error),
+        };
+        (active, target)
+    };
+    let validation_active = active.clone();
+    let target_revision = active.revisions[target_cursor].clone();
+    let validation_request = request_id.clone();
+    let project = match tauri::async_runtime::spawn_blocking(move || {
+        validate_draft_revision(&validation_active, &target_revision, &validation_request)
+    })
+    .await
+    {
+        Ok(Ok(project)) => project,
+        Ok(Err(error)) => return draft_transition_failure(&request_id, error),
+        Err(_) => {
+            return draft_transition_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_revision_changed",
+                    "Draft revision validation ended unexpectedly.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    let Some(current) = state.active_project.as_mut() else {
+        return draft_transition_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_session_missing",
+                "Draft session ended during transition.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    if current.project_session_id != project_session_id
+        || current.revision_cursor != active.revision_cursor
+        || current.revisions[target_cursor].revision_id
+            != active.revisions[target_cursor].revision_id
+    {
+        return draft_transition_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_session_mismatch",
+                "Draft session changed during transition.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    current.revisions[target_cursor].project = project.clone();
+    current.sync_to_revision(target_cursor);
+    let draft = current.draft_summary();
+    state.planned_patch = None;
+    state.active_run = None;
+    state.active_result = None;
+    DesktopDraftTransitionResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        project: Some(project),
+        draft: Some(draft),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn undo_project_draft(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+) -> DesktopDraftTransitionResponse {
+    switch_project_draft(app, request_id, project_session_id, -1).await
+}
+
+#[tauri::command]
+pub async fn redo_project_draft(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+) -> DesktopDraftTransitionResponse {
+    switch_project_draft(app, request_id, project_session_id, 1).await
+}
+
+fn validate_draft_export_destination(
+    active: &ActiveProjectContext,
+    selected: &Path,
+) -> Result<PathBuf, &'static str> {
+    let mut candidate = selected.to_path_buf();
+    match candidate.extension().and_then(|value| value.to_str()) {
+        None => {
+            candidate.set_extension("prj");
+        }
+        Some(extension) if extension.eq_ignore_ascii_case("prj") => {}
+        _ => return Err("draft_export_destination_invalid"),
+    }
+    let file_name = candidate
+        .file_name()
+        .filter(|value| !value.is_empty())
+        .ok_or("draft_export_destination_invalid")?;
+    let parent = candidate
+        .parent()
+        .ok_or("draft_export_destination_invalid")?;
+    let canonical_parent =
+        std::fs::canonicalize(parent).map_err(|_| "draft_export_destination_invalid")?;
+    let output = canonical_parent.join(file_name);
+    if output.to_str().is_none() {
+        return Err("draft_export_destination_invalid");
+    }
+    let resolved_output = if output.exists() {
+        std::fs::canonicalize(&output).map_err(|_| "draft_export_destination_invalid")?
+    } else {
+        output.clone()
+    };
+    let resolved_draft_root = projected_canonical_path(&active.draft_root)
+        .map_err(|_| "draft_export_destination_invalid")?;
+    if resolved_output == active.baseline_source_path
+        || resolved_output.starts_with(&resolved_draft_root)
+        || active.revisions.iter().any(|revision| {
+            projected_canonical_path(&revision.source_path)
+                .is_ok_and(|path| resolved_output == path)
+        })
+    {
+        return Err("draft_export_conflicts_with_source");
+    }
+    if output.exists() {
+        return Err("draft_export_destination_exists");
+    }
+    Ok(output)
+}
+
+fn copy_draft_atomically(source: &Path, output: &Path) -> Result<(), &'static str> {
+    if output.exists() {
+        return Err("draft_export_destination_exists");
+    }
+    let parent = output.parent().ok_or("draft_export_destination_invalid")?;
+    let file_name = output
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or("draft_export_destination_invalid")?;
+    let temporary = parent.join(format!(
+        ".{file_name}.{}.{}.draft.tmp",
+        std::process::id(),
+        unix_time_ms()
+    ));
+    let result = (|| {
+        let mut input = File::open(source).map_err(|_| "draft_export_write_failed")?;
+        let mut target = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|_| "draft_export_write_failed")?;
+        std::io::copy(&mut input, &mut target).map_err(|_| "draft_export_write_failed")?;
+        target.flush().map_err(|_| "draft_export_write_failed")?;
+        target.sync_all().map_err(|_| "draft_export_write_failed")?;
+        drop(target);
+        std::fs::hard_link(&temporary, output).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "draft_export_destination_exists"
+            } else {
+                "draft_export_write_failed"
+            }
+        })?;
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&temporary);
+    if result.is_err() {
+        let _ = std::fs::remove_file(output);
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn export_active_project_draft_copy(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+) -> DesktopDraftExportResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || Uuid::parse_str(&revision_id).is_err()
+    {
+        return draft_export_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "Draft export request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return draft_export_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let active = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return draft_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_session_missing",
+                    "No active draft session exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id
+            || active.active_revision().revision_id != revision_id
+        {
+            return draft_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_session_mismatch",
+                    "Draft export did not match the active revision.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if !active_project_source_matches(&active) {
+            return draft_export_failure(
+                &request_id,
+                host_diagnostic(
+                    if active.active_revision().revision_number == 0 {
+                        "draft_baseline_changed"
+                    } else {
+                        "draft_revision_changed"
+                    },
+                    "The active draft revision changed before export.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        active
+    };
+    let suggested = format!(
+        "{}-draft-r{}.prj",
+        active
+            .baseline_source_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("project"),
+        active.active_revision().revision_number
+    );
+    let dialog_app = app.clone();
+    let selected = match tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter("CONTAM PRJ", &["prj"])
+            .set_file_name(suggested)
+            .blocking_save_file()
+    })
+    .await
+    {
+        Ok(value) => value,
+        Err(_) => {
+            return draft_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_export_destination_invalid",
+                    "The native draft export dialog failed.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let Some(selected) = selected else {
+        return DesktopDraftExportResponse {
+            request_id,
+            cancelled: true,
+            project_session_id: Some(project_session_id),
+            export: None,
+            error: None,
+        };
+    };
+    let selected = match selected.into_path() {
+        Ok(path) => path,
+        Err(_) => {
+            return draft_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_export_destination_invalid",
+                    "The selected draft destination was not local.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let output = match validate_draft_export_destination(&active, &selected) {
+        Ok(path) => path,
+        Err(code) => {
+            return draft_export_failure(
+                &request_id,
+                host_diagnostic(
+                    code,
+                    "The draft export destination is not allowed.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if let Err(code) = copy_draft_atomically(&active.source_path, &output) {
+        return draft_export_failure(
+            &request_id,
+            host_diagnostic(
+                code,
+                "The draft copy could not be written.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let verification = (|| {
+        let (sha256, size) = sha256_file(&output).map_err(|_| {
+            host_diagnostic(
+                "draft_export_verification_failed",
+                "The exported draft could not be verified.",
+                BTreeMap::new(),
+            )
+        })?;
+        if sha256 != active.source_sha256 || size != active.source_size_bytes {
+            return Err(host_diagnostic(
+                "draft_export_verification_failed",
+                "The exported draft did not match the active revision.",
+                BTreeMap::new(),
+            ));
+        }
+        let mut exported_revision = active.active_revision().clone();
+        exported_revision.source_path = output.clone();
+        let project = validate_draft_revision(&active, &exported_revision, &request_id)?;
+        Ok((sha256, size, project))
+    })();
+    let (sha256, size, project) = match verification {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = std::fs::remove_file(&output);
+            return draft_export_failure(&request_id, error);
+        }
+    };
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    let Some(current) = state.active_project.as_mut() else {
+        let _ = std::fs::remove_file(&output);
+        return draft_export_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_session_missing",
+                "Draft session ended during export.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    if current.project_session_id != project_session_id
+        || current.active_revision().revision_id != revision_id
+    {
+        let _ = std::fs::remove_file(&output);
+        return draft_export_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_session_mismatch",
+                "Draft session changed during export.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    if !current.exported_revisions.contains(&revision_id) {
+        current.exported_revisions.push(revision_id);
+    }
+    DesktopDraftExportResponse {
+        request_id,
+        cancelled: false,
+        project_session_id: Some(project_session_id),
+        export: Some(DraftExportSummary {
+            file_name: safe_project_file_name(&output),
+            sha256,
+            size_bytes: size,
+            zone_count: project.declared_zone_count,
+            revision_number: active.active_revision().revision_number,
+            matches_active_revision: true,
+        }),
         error: None,
     }
 }
@@ -3385,6 +4434,123 @@ mod tests {
 
     fn primary_fixture() -> PathBuf {
         fixture_path("fixtures/contam/official-contamxpy/test_GetPrjInfo.prj")
+    }
+
+    fn test_draft_root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("contam-studio-{label}-{}", std::process::id()))
+    }
+
+    fn active_context(
+        label: &str,
+        source: PathBuf,
+        project: &ProjectInspection,
+    ) -> ActiveProjectContext {
+        let store = DesktopProjectSessionStore::default();
+        store.activate_project(
+            format!("session-{label}"),
+            source,
+            test_draft_root(label),
+            project,
+        );
+        let active = store.state.lock().unwrap().active_project.clone().unwrap();
+        active
+    }
+
+    fn synthetic_active(
+        label: &str,
+        source: PathBuf,
+        sha256: String,
+        size: u64,
+    ) -> ActiveProjectContext {
+        let project = ProjectInspection {
+            schema_version: "1.0".into(),
+            reader_mode: READER_MODE.into(),
+            source_path: safe_project_file_name(&source),
+            source_sha256: sha256,
+            source_size_bytes: size,
+            source_unchanged: true,
+            header_version: "3.4.0.4".into(),
+            header_variant: 0,
+            declared_zone_count: 0,
+            zones: Vec::new(),
+            first_zone: None,
+            diagnostics: Vec::new(),
+        };
+        active_context(label, source, &project)
+    }
+
+    fn append_test_revision(
+        active: &mut ActiveProjectContext,
+        revision_id: &str,
+        new_volume_token: &str,
+    ) -> PathBuf {
+        let plan_id = format!("plan-{revision_id}");
+        let zone_id = active.zones[0].zone_id.clone();
+        let contam_number = active.zones[0].contam_number;
+        let request = json!({
+            "protocol_version": PROTOCOL_VERSION,
+            "request_id": plan_id,
+            "operation": PLAN_OPERATION,
+            "source_path": active.source_path,
+            "contam_number": contam_number,
+            "new_volume_token": new_volume_token,
+        });
+        let envelope = execute_bridge_request(&request, &plan_id, READ_AND_PLAN_TIMEOUT).unwrap();
+        let raw: RawPatchPlanResult = serde_json::from_value(envelope.result.unwrap()).unwrap();
+        let (planned, _) = validate_plan_result(
+            raw,
+            active,
+            &plan_id,
+            &zone_id,
+            contam_number,
+            new_volume_token,
+        )
+        .unwrap();
+        let revision_number = active.active_revision().revision_number + 1;
+        let snapshots = active.draft_root.join("snapshots");
+        fs::create_dir_all(&snapshots).unwrap();
+        let output = fs::canonicalize(snapshots)
+            .unwrap()
+            .join(format!("revision-{revision_number}-{revision_id}.prj"));
+        let request = json!({
+            "protocol_version": PROTOCOL_VERSION,
+            "request_id": revision_id,
+            "operation": APPLY_OPERATION,
+            "source_path": active.source_path,
+            "output_path": output,
+            "patch": planned.patch,
+        });
+        let envelope = execute_bridge_request(&request, revision_id, APPLY_TIMEOUT).unwrap();
+        let raw: RawPatchApplicationResult =
+            serde_json::from_value(envelope.result.unwrap()).unwrap();
+        let mut project = validate_application_result(raw, active, &planned, &output).unwrap();
+        project.source_path = safe_project_file_name(&active.baseline_source_path);
+        let revision = DraftRevision {
+            revision_id: revision_id.into(),
+            revision_number,
+            parent_revision_id: Some(active.active_revision().revision_id.clone()),
+            source_path: output.clone(),
+            source_sha256: project.source_sha256.clone(),
+            source_size_bytes: project.source_size_bytes,
+            project: project.clone(),
+            patch: Some(DraftPatchSummary {
+                zone_id,
+                contam_number,
+                old_token: planned.patch.preconditions.old_token,
+                new_token: planned.patch.replacement.new_token,
+            }),
+            created_at_unix_ms: unix_time_ms(),
+            application_owned: true,
+        };
+        let truncated = active.revisions.split_off(active.revision_cursor + 1);
+        for old in truncated {
+            if old.application_owned {
+                let _ = fs::remove_file(old.source_path);
+            }
+        }
+        active.revisions.push(revision);
+        active.sync_to_revision(active.revisions.len() - 1);
+        output
     }
 
     fn outcome(stdout: Vec<u8>) -> ProcessOutcome {
@@ -3455,30 +4621,40 @@ mod tests {
     }
 
     #[test]
-    fn output_path_rules_refuse_existing_and_source() {
+    fn draft_export_rules_refuse_existing_source_and_internal_snapshots() {
         let root = std::env::temp_dir().join(format!("contam-studio-rust-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let source = root.join("source.prj");
         fs::write(&source, b"source").unwrap();
         let source = fs::canonicalize(source).unwrap();
+        let (sha256, size) = sha256_file(&source).unwrap();
+        let mut active = synthetic_active("export-rules", source.clone(), sha256, size);
+        active.draft_root = root.join("draft-root");
+        fs::create_dir_all(active.draft_root.join("snapshots")).unwrap();
         let no_extension = root.join("copy");
-        assert!(validate_output_path(&source, &no_extension)
+        assert!(validate_draft_export_destination(&active, &no_extension)
             .unwrap()
             .ends_with("copy.prj"));
         assert_eq!(
-            validate_output_path(&source, &source),
-            Err("selected_output_path_invalid")
+            validate_draft_export_destination(&active, &source),
+            Err("draft_export_conflicts_with_source")
         );
         let existing = root.join("existing.prj");
         fs::write(&existing, b"keep").unwrap();
         assert_eq!(
-            validate_output_path(&source, &existing),
-            Err("patch_output_exists")
+            validate_draft_export_destination(&active, &existing),
+            Err("draft_export_destination_exists")
         );
         assert_eq!(
-            validate_output_path(&source, &root.join("copy.txt")),
-            Err("selected_output_path_invalid")
+            validate_draft_export_destination(&active, &root.join("copy.txt")),
+            Err("draft_export_destination_invalid")
+        );
+        let internal = active.draft_root.join("snapshots").join("internal.prj");
+        fs::write(&internal, b"draft").unwrap();
+        assert_eq!(
+            validate_draft_export_destination(&active, &internal),
+            Err("draft_export_conflicts_with_source")
         );
         fs::remove_dir_all(root).unwrap();
     }
@@ -3493,10 +4669,152 @@ mod tests {
     }
 
     #[test]
+    fn zone_uuid_is_deterministic_project_bound_and_well_formed() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "uuid-baseline").result.unwrap();
+        let first = &project.zones[0];
+        let repeated = zone_uuid(
+            &project.source_sha256,
+            "zone",
+            first.contam_number,
+            first.source_line_number,
+            &first.name,
+        );
+        assert_eq!(first.zone_id, repeated);
+        assert!(Uuid::parse_str(&first.zone_id).is_ok());
+        assert_eq!(first.zone_id.as_bytes()[14], b'5');
+        assert_ne!(first.zone_id, project.zones[1].zone_id);
+        assert_ne!(
+            first.zone_id,
+            zone_uuid(
+                &"0".repeat(64),
+                "zone",
+                first.contam_number,
+                first.source_line_number,
+                &first.name,
+            )
+        );
+    }
+
+    #[test]
+    fn immutable_draft_history_preserves_zone_ids_and_truncates_redo() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "draft-history").result.unwrap();
+        let mut active = active_context("draft-history", fixture.clone(), &project);
+        let _ = fs::remove_dir_all(&active.draft_root);
+        let baseline_hash = active.source_sha256.clone();
+        let zone_id = active.zones[0].zone_id.clone();
+        let revision1_path =
+            append_test_revision(&mut active, "11111111-1111-5111-8111-111111111111", "650.0");
+        let revision1_bytes = fs::read(&revision1_path).unwrap();
+        assert_eq!(active.draft_summary().revision_number, 1);
+        assert_eq!(active.zones[0].zone_id, zone_id);
+        assert_eq!(active.zones[0].volume_m3, 650.0);
+        assert_ne!(active.source_sha256, baseline_hash);
+
+        let old_revision2_path =
+            append_test_revision(&mut active, "22222222-2222-5222-8222-222222222222", "700.0");
+        assert_eq!(active.draft_summary().revision_number, 2);
+        assert_eq!(active.zones[0].zone_id, zone_id);
+        assert_eq!(active.zones[0].volume_m3, 700.0);
+        assert_eq!(fs::read(&revision1_path).unwrap(), revision1_bytes);
+
+        let revision1 = validate_draft_revision(&active, &active.revisions[1], "undo-r1").unwrap();
+        active.revisions[1].project = revision1;
+        active.sync_to_revision(1);
+        assert!(active.draft_summary().can_redo);
+        let baseline = validate_draft_revision(&active, &active.revisions[0], "undo-r0").unwrap();
+        active.revisions[0].project = baseline;
+        active.sync_to_revision(0);
+        assert_eq!(active.zones[0].volume_m3, 600.0);
+        assert_eq!(active.zones[0].zone_id, zone_id);
+        let redone = validate_draft_revision(&active, &active.revisions[1], "redo-r1").unwrap();
+        active.revisions[1].project = redone;
+        active.sync_to_revision(1);
+
+        let new_revision2_path =
+            append_test_revision(&mut active, "33333333-3333-5333-8333-333333333333", "675.0");
+        assert_eq!(active.revisions.len(), 3);
+        assert!(!active.draft_summary().can_redo);
+        assert_eq!(active.zones[0].volume_m3, 675.0);
+        assert_eq!(active.zones[0].zone_id, zone_id);
+        assert!(!old_revision2_path.exists());
+        assert!(new_revision2_path.exists());
+        assert!(sha256_file(&fixture)
+            .unwrap()
+            .0
+            .eq_ignore_ascii_case(&baseline_hash));
+        fs::remove_dir_all(&active.draft_root).unwrap();
+    }
+
+    #[test]
+    fn changed_baseline_is_rejected_without_moving_the_history_cursor() {
+        let root = std::env::temp_dir().join(format!(
+            "contam-studio-baseline-source-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("baseline.prj");
+        fs::copy(primary_fixture(), &source).unwrap();
+        let source = fs::canonicalize(source).unwrap();
+        let project = execute_read(&source, "baseline-copy").result.unwrap();
+        let mut active = active_context("baseline-change", source.clone(), &project);
+        append_test_revision(&mut active, "44444444-4444-5444-8444-444444444444", "650.0");
+        assert_eq!(active.revision_cursor, 1);
+        let mut bytes = fs::read(&source).unwrap();
+        bytes.push(b'\n');
+        fs::write(&source, bytes).unwrap();
+        let error =
+            validate_draft_revision(&active, &active.revisions[0], "undo-changed").unwrap_err();
+        assert_eq!(error.code, "draft_baseline_changed");
+        assert_eq!(active.revision_cursor, 1);
+        let _ = fs::remove_dir_all(&active.draft_root);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn draft_copy_is_byte_exact_non_overwriting_and_has_a_path_free_summary() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "draft-copy").result.unwrap();
+        let mut active = active_context("draft-copy", fixture, &project);
+        let _ = fs::remove_dir_all(&active.draft_root);
+        append_test_revision(&mut active, "55555555-5555-5555-8555-555555555555", "650.0");
+        let root = std::env::temp_dir().join(format!("contam-studio-copy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let output = root.join("draft-copy.prj");
+        copy_draft_atomically(&active.source_path, &output).unwrap();
+        assert_eq!(
+            fs::read(&output).unwrap(),
+            fs::read(&active.source_path).unwrap()
+        );
+        assert_eq!(
+            copy_draft_atomically(&active.source_path, &output),
+            Err("draft_export_destination_exists")
+        );
+        let summary = DraftExportSummary {
+            file_name: "draft-copy.prj".into(),
+            sha256: active.source_sha256.clone(),
+            size_bytes: active.source_size_bytes,
+            zone_count: active.zones.len() as u64,
+            revision_number: active.active_revision().revision_number,
+            matches_active_revision: true,
+        };
+        let serialized = serde_json::to_string(&summary).unwrap();
+        for forbidden in ["source_path", "output_path", "draft_root", "snapshots"] {
+            assert!(!serialized.contains(forbidden));
+        }
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(&active.draft_root).unwrap();
+    }
+
+    #[test]
     fn review_view_does_not_serialize_source_or_byte_ranges() {
         let review = PatchReviewView {
             project_session_id: "session-1".into(),
             patch_id: "patch-1".into(),
+            zone_id: "00000000-0000-5000-8000-000000000001".into(),
             zone_number: 1,
             zone_name: "One".into(),
             field: PATCH_FIELD.into(),
@@ -3521,7 +4839,12 @@ mod tests {
         let store = DesktopProjectSessionStore::default();
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "read-session").result.unwrap();
-        store.activate_project("session-1".into(), fixture, &project);
+        store.activate_project(
+            "session-1".into(),
+            fixture,
+            test_draft_root("session-1"),
+            &project,
+        );
         assert_eq!(
             store
                 .state
@@ -3542,16 +4865,28 @@ mod tests {
         let store = DesktopProjectSessionStore::default();
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "read-session").result.unwrap();
-        store.activate_project("session-1".into(), fixture.clone(), &project);
+        store.activate_project(
+            "session-1".into(),
+            fixture.clone(),
+            test_draft_root("session-1a"),
+            &project,
+        );
         let active = store.state.lock().unwrap().active_project.clone().unwrap();
         let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-store", "operation": PLAN_OPERATION, "source_path": active.source_path, "contam_number": 1, "new_volume_token": "650"});
         let envelope =
             execute_bridge_request(&request, "plan-store", READ_AND_PLAN_TIMEOUT).unwrap();
         let raw: RawPatchPlanResult = serde_json::from_value(envelope.result.unwrap()).unwrap();
-        let (planned, _) = validate_plan_result(raw, &active, "plan-store", 1, "650").unwrap();
+        let zone_id = active.zones[0].zone_id.clone();
+        let (planned, _) =
+            validate_plan_result(raw, &active, "plan-store", &zone_id, 1, "650").unwrap();
         store.state.lock().unwrap().planned_patch = Some(planned);
 
-        store.activate_project("session-2".into(), fixture, &project);
+        store.activate_project(
+            "session-2".into(),
+            fixture,
+            test_draft_root("session-2a"),
+            &project,
+        );
         let state = store.state.lock().unwrap();
         assert_eq!(
             state.active_project.as_ref().unwrap().project_session_id,
@@ -3564,15 +4899,8 @@ mod tests {
     fn plan_contract_rejects_source_hash_and_target_mismatches() {
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "read-plan").result.unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "session-plan".into(),
-            source_path: fixture.clone(),
-            source_sha256: project.source_sha256,
-            source_size_bytes: project.source_size_bytes,
-            reader_mode: project.reader_mode,
-            header_version: project.header_version,
-            zones: project.zones,
-        };
+        let active = active_context("plan", fixture.clone(), &project);
+        let zone_id = active.zones[0].zone_id.clone();
         let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-contract", "operation": PLAN_OPERATION, "source_path": fixture, "contam_number": 1, "new_volume_token": "650"});
         let envelope =
             execute_bridge_request(&request, "plan-contract", READ_AND_PLAN_TIMEOUT).unwrap();
@@ -3581,7 +4909,7 @@ mod tests {
         let mut hash_mismatch = raw.clone();
         hash_mismatch.patch.source_sha256 = "0".repeat(64);
         assert_eq!(
-            validate_plan_result(hash_mismatch, &active, "plan-contract", 1, "650")
+            validate_plan_result(hash_mismatch, &active, "plan-contract", &zone_id, 1, "650")
                 .unwrap_err()
                 .code,
             "patch_response_contract_invalid"
@@ -3590,9 +4918,16 @@ mod tests {
         let mut target_mismatch = raw.clone();
         target_mismatch.patch.target.contam_number = 2;
         assert_eq!(
-            validate_plan_result(target_mismatch, &active, "plan-contract", 1, "650")
-                .unwrap_err()
-                .code,
+            validate_plan_result(
+                target_mismatch,
+                &active,
+                "plan-contract",
+                &zone_id,
+                1,
+                "650"
+            )
+            .unwrap_err()
+            .code,
             "patch_response_contract_invalid"
         );
 
@@ -3602,9 +4937,16 @@ mod tests {
                 .to_string_lossy()
                 .into_owned();
         assert_eq!(
-            validate_plan_result(source_mismatch, &active, "plan-contract", 1, "650")
-                .unwrap_err()
-                .code,
+            validate_plan_result(
+                source_mismatch,
+                &active,
+                "plan-contract",
+                &zone_id,
+                1,
+                "650"
+            )
+            .unwrap_err()
+            .code,
             "patch_response_source_mismatch"
         );
     }
@@ -3700,15 +5042,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("contam-run-contract-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "session-run".into(),
-            source_path: primary_fixture(),
-            source_sha256: "a".repeat(64),
-            source_size_bytes: 1,
-            reader_mode: READER_MODE.into(),
-            header_version: "3.4.0.4".into(),
-            zones: vec![],
-        };
+        let active = synthetic_active("run", primary_fixture(), "a".repeat(64), 1);
         let raw = raw_contamx_run(&root, &active);
         let (summary, context) = validate_contamx_run_result(raw.clone(), &active, &root).unwrap();
         assert_eq!(summary.sim_artifact_count, 1);
@@ -3784,11 +5118,27 @@ mod tests {
         let store = DesktopProjectSessionStore::default();
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "run-store-read").result.unwrap();
-        store.activate_project("session-1".into(), fixture.clone(), &project);
+        store.activate_project(
+            "session-1".into(),
+            fixture.clone(),
+            test_draft_root("run-store-1"),
+            &project,
+        );
+        let revision_id = store
+            .state
+            .lock()
+            .unwrap()
+            .active_project
+            .as_ref()
+            .unwrap()
+            .active_revision()
+            .revision_id
+            .clone();
         let manifest = fixture.clone();
         let retained = ActiveRunContext {
             project_session_id: "session-1".into(),
             source_sha256: project.source_sha256.clone(),
+            revision_id,
             run_id: "run-1".into(),
             manifest_path: manifest,
             succeeded: true,
@@ -3809,7 +5159,12 @@ mod tests {
                 .run_id,
             "run-1"
         );
-        store.activate_project("session-2".into(), fixture, &project);
+        store.activate_project(
+            "session-2".into(),
+            fixture,
+            test_draft_root("run-store-2"),
+            &project,
+        );
         assert!(store.state.lock().unwrap().active_run.is_none());
     }
 
@@ -3825,18 +5180,11 @@ mod tests {
         fs::create_dir_all(manifest.parent().unwrap()).unwrap();
         fs::write(&manifest, b"{}").unwrap();
         let root = fs::canonicalize(root).unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "session-active-run".into(),
-            source_path: primary_fixture(),
-            source_sha256: "a".repeat(64),
-            source_size_bytes: 1,
-            reader_mode: READER_MODE.into(),
-            header_version: "3.4.0.4".into(),
-            zones: vec![],
-        };
+        let active = synthetic_active("active-run", primary_fixture(), "a".repeat(64), 1);
         let context = ActiveRunContext {
             project_session_id: active.project_session_id.clone(),
             source_sha256: active.source_sha256.clone(),
+            revision_id: active.active_revision().revision_id.clone(),
             run_id: "20260718T120000Z-abcdef12".into(),
             manifest_path: manifest,
             succeeded: true,
@@ -3899,15 +5247,7 @@ mod tests {
     fn active_run_result_must_match_the_expected_run() {
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "read-active-result").result.unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "session-active-result".into(),
-            source_path: fixture,
-            source_sha256: project.source_sha256,
-            source_size_bytes: project.source_size_bytes,
-            reader_mode: project.reader_mode,
-            header_version: project.header_version,
-            zones: project.zones,
-        };
+        let active = active_context("active-result", fixture, &project);
         assert_eq!(
             validate_zone_air_state_result(
                 raw_air_state_result(),
@@ -3928,7 +5268,12 @@ mod tests {
         let project = execute_read(&fixture, "read-active-result-store")
             .result
             .unwrap();
-        store.activate_project("session-result".into(), fixture.clone(), &project);
+        store.activate_project(
+            "session-result".into(),
+            fixture.clone(),
+            test_draft_root("result-store"),
+            &project,
+        );
         let active = store.state.lock().unwrap().active_project.clone().unwrap();
         let view =
             validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
@@ -3938,27 +5283,33 @@ mod tests {
         {
             let state = store.state.lock().unwrap();
             let retained = state.active_result.as_ref().unwrap();
+            let zone_id = active.zones[0].zone_id.as_str();
             assert_eq!(retained.source, ActiveResultSource::SelectedManifest);
             retained
-                .validate_export_identity(&active, 1, "run-1", "extract-1")
+                .validate_export_identity(&active, zone_id, "run-1", "extract-1")
                 .unwrap();
             assert_eq!(
                 retained
-                    .validate_export_identity(&active, 2, "run-1", "extract-1")
+                    .validate_export_identity(
+                        &active,
+                        "00000000-0000-5000-8000-000000000002",
+                        "run-1",
+                        "extract-1"
+                    )
                     .unwrap_err()
                     .code,
                 "active_result_zone_mismatch"
             );
             assert_eq!(
                 retained
-                    .validate_export_identity(&active, 1, "other", "extract-1")
+                    .validate_export_identity(&active, zone_id, "other", "extract-1")
                     .unwrap_err()
                     .code,
                 "active_result_identity_mismatch"
             );
             assert_eq!(
                 retained
-                    .validate_export_identity(&active, 1, "run-1", "other-extraction")
+                    .validate_export_identity(&active, zone_id, "run-1", "other-extraction")
                     .unwrap_err()
                     .code,
                 "active_result_identity_mismatch"
@@ -3967,7 +5318,7 @@ mod tests {
             other_project.source_sha256 = "b".repeat(64);
             assert_eq!(
                 retained
-                    .validate_export_identity(&other_project, 1, "run-1", "extract-1")
+                    .validate_export_identity(&other_project, zone_id, "run-1", "extract-1")
                     .unwrap_err()
                     .code,
                 "active_result_project_mismatch"
@@ -4006,7 +5357,12 @@ mod tests {
             previous.unwrap().run_id
         );
 
-        store.activate_project("session-new".into(), fixture, &project);
+        store.activate_project(
+            "session-new".into(),
+            fixture,
+            test_draft_root("result-new"),
+            &project,
+        );
         assert!(store.state.lock().unwrap().active_result.is_none());
     }
 
@@ -4017,7 +5373,12 @@ mod tests {
         let project = execute_read(&fixture, "read-run-retains-result")
             .result
             .unwrap();
-        store.activate_project("session-retained".into(), fixture.clone(), &project);
+        store.activate_project(
+            "session-retained".into(),
+            fixture.clone(),
+            test_draft_root("result-retained"),
+            &project,
+        );
         let active = store.state.lock().unwrap().active_project.clone().unwrap();
         let view =
             validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
@@ -4027,6 +5388,7 @@ mod tests {
         store.state.lock().unwrap().active_run = Some(ActiveRunContext {
             project_session_id: active.project_session_id.clone(),
             source_sha256: active.source_sha256.clone(),
+            revision_id: active.active_revision().revision_id.clone(),
             run_id: "new-run".into(),
             manifest_path: fixture,
             succeeded: true,
@@ -4048,15 +5410,7 @@ mod tests {
     fn deterministic_csv_preserves_rows_numbers_and_protects_text_fields() {
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "read-csv-result").result.unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "session-csv".into(),
-            source_path: fixture,
-            source_sha256: project.source_sha256,
-            source_size_bytes: project.source_size_bytes,
-            reader_mode: project.reader_mode,
-            header_version: project.header_version,
-            zones: project.zones,
-        };
+        let active = active_context("csv", fixture, &project);
         let mut view =
             validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
         let first = view.samples[0].clone();
@@ -4132,15 +5486,7 @@ mod tests {
         let project = execute_read(&fixture, "read-source-hash").result.unwrap();
         let copied = root.join("copied.prj");
         fs::copy(&fixture, &copied).unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "source-hash-session".into(),
-            source_path: copied.clone(),
-            source_sha256: project.source_sha256,
-            source_size_bytes: project.source_size_bytes,
-            reader_mode: project.reader_mode,
-            header_version: project.header_version,
-            zones: project.zones,
-        };
+        let active = active_context("source-hash", copied.clone(), &project);
         assert!(active_project_source_matches(&active));
         fs::OpenOptions::new()
             .append(true)
@@ -4169,15 +5515,7 @@ mod tests {
         let project = execute_read(&fixture, "read-real-csv-result")
             .result
             .unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "real-csv-session".into(),
-            source_path: fixture,
-            source_sha256: project.source_sha256,
-            source_size_bytes: project.source_size_bytes,
-            reader_mode: project.reader_mode,
-            header_version: project.header_version,
-            zones: project.zones,
-        };
+        let active = active_context("real-csv", fixture, &project);
         let context =
             ActiveResultContext::new(&active, ActiveResultSource::SelectedManifest, result)
                 .unwrap();
@@ -4314,15 +5652,7 @@ mod tests {
     fn zone_air_state_contract_rejects_untrusted_samples_and_paths_are_not_serialized() {
         let fixture = primary_fixture();
         let project = execute_read(&fixture, "read-results").result.unwrap();
-        let active = ActiveProjectContext {
-            project_session_id: "session-results".into(),
-            source_path: fixture,
-            source_sha256: project.source_sha256,
-            source_size_bytes: project.source_size_bytes,
-            reader_mode: project.reader_mode,
-            header_version: project.header_version,
-            zones: project.zones,
-        };
+        let active = active_context("results", fixture, &project);
         let view =
             validate_zone_air_state_result(raw_air_state_result(), &active, 1, None).unwrap();
         let serialized = serde_json::to_string(&view).unwrap();
@@ -4436,6 +5766,7 @@ mod tests {
                 byte_count: 200,
                 run_id: "run-1".into(),
                 extraction_id: "extract-1".into(),
+                zone_id: active.zones[0].zone_id.clone(),
                 zone_number: 1,
             }),
             error: None,
@@ -4463,7 +5794,10 @@ mod tests {
         for command in [
             "select_and_read_prj_zones",
             "plan_zone_volume_patch",
-            "apply_zone_volume_patch_to_copy",
+            "apply_zone_volume_patch_to_draft",
+            "undo_project_draft",
+            "redo_project_draft",
+            "export_active_project_draft_copy",
             "select_and_extract_zone_air_state",
             "extract_active_run_zone_air_state",
             "export_active_zone_air_state_csv",
@@ -4471,7 +5805,7 @@ mod tests {
         ] {
             assert!(build_script.contains(command));
         }
-        assert_eq!(capability["permissions"].as_array().unwrap().len(), 8);
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 11);
         let forbidden = [
             "sourcePath",
             "outputPath",
@@ -4484,6 +5818,10 @@ mod tests {
         assert!(desktop_api.contains("runActiveContamProject"));
         assert!(desktop_api.contains("extractActiveRunZoneAirState"));
         assert!(desktop_api.contains("exportActiveZoneAirStateCsv"));
+        assert!(desktop_api.contains("applyZoneVolumePatchToDraft"));
+        assert!(desktop_api.contains("undoProjectDraft"));
+        assert!(desktop_api.contains("redoProjectDraft"));
+        assert!(desktop_api.contains("exportActiveProjectDraftCopy"));
         assert!(desktop_api.contains("requestId"));
         assert!(desktop_api.contains("projectSessionId"));
         assert!(!package_json.contains("@tauri-apps/plugin-dialog"));
@@ -4554,22 +5892,21 @@ mod tests {
         let active = {
             let fixture = primary_fixture();
             let project = execute_read(&fixture, "read-real").result.unwrap();
-            ActiveProjectContext {
-                project_session_id: "session-real".into(),
-                source_path: fixture,
-                source_sha256: project.source_sha256,
-                source_size_bytes: project.source_size_bytes,
-                reader_mode: project.reader_mode,
-                header_version: project.header_version,
-                zones: project.zones,
-            }
+            active_context("real", fixture, &project)
         };
         let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": "plan-real", "operation": PLAN_OPERATION, "source_path": active.source_path, "contam_number": 1, "new_volume_token": "650.0"});
         let envelope =
             execute_bridge_request(&request, "plan-real", READ_AND_PLAN_TIMEOUT).unwrap();
         let raw: RawPatchPlanResult = serde_json::from_value(envelope.result.unwrap()).unwrap();
-        let (planned, review) =
-            validate_plan_result(raw, &active, "plan-real", 1, "650.0").unwrap();
+        let (planned, review) = validate_plan_result(
+            raw,
+            &active,
+            "plan-real",
+            &active.zones[0].zone_id,
+            1,
+            "650.0",
+        )
+        .unwrap();
         assert_eq!(review.new_token, "650.0");
 
         let output_root =

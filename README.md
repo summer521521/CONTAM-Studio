@@ -19,7 +19,7 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前阶段
 
-项目当前进入**Phase 5C：Zone空气状态分析工作区**。严格验证的当前Zone结果可在三项原始曲线、确定性统计和完整数据表之间审阅，并由Rust内存中的活动结果上下文导出为用户明确选择的新CSV。曲线不插值、不平滑、不采样；React不提交路径、样本或CSV，导出不会覆盖既有文件。
+项目当前进入**Phase 3C：不可变草稿Revision与撤销**。原始PRJ固定为Revision 0，批准的单Zone体积Patch在Rust控制的应用本地数据目录创建新Revision；稳定Zone UUID贯穿修改、Undo/Redo、运行和结果。另存当前草稿只创建用户选择的新PRJ，不覆盖源文件，也不自动切换项目。当前仍只支持`Zone.volume_m3`。
 
 ## 架构方向
 
@@ -37,7 +37,7 @@ Python CONTAM领域核心
 官方ContamX
 ```
 
-Phase 1实现了React前端与最小Tauri桌面宿主；Phase 2建立了严格Zone纯文档读取器和桌面只读闭环；Phase 3A-0建立哈希绑定、仅写副本的Python Patch。Phase 3B将计划、Diff审阅、原生另存为和副本重读接入同一一次性Python桥。Rust持有活动项目快照与完整Patch，React只取得审阅视图；contamxpy隔离稳态初始化入口没有接入GUI。
+Phase 1实现React前端与最小Tauri桌面宿主；Phase 2建立严格Zone纯文档读取器和桌面只读闭环；Phase 3A-0建立哈希绑定、仅写副本的Python Patch，Phase 3B接入Diff审阅。Phase 3C复用同一Patch领域函数，把批准修改提交为不可变内部Revision，并由Rust管理稳定Zone UUID、线性Undo/Redo、安全另存和当前Revision的运行/结果绑定。React只取得路径无关的安全视图；contamxpy隔离检查没有接入GUI。
 
 ## 开发启动
 
@@ -115,6 +115,8 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [PRJ简单Zone只读兼容范围](docs/architecture/prj-zone-reader-support.md)
 - [Tauri-Python Zone桥](docs/architecture/tauri-python-zone-bridge.md)
 - [Zone体积副本Patch](docs/architecture/zone-volume-patch.md)
+- [不可变项目草稿Revision](docs/architecture/draft-project-revisions.md)
+- [Phase 3C自动与非GUI验证](docs/development/phase-3c-draft-snapshots-undo-verification.md)
 - [ContamX运行工作区](docs/architecture/contamx-run-workspace.md)
 - [Phase 4B-1受控桌面运行](docs/architecture/phase-4b-desktop-contamx-run.md)
 - [Phase 4B-1自动验证](docs/development/phase-4b-desktop-contamx-run-verification.md)
@@ -149,7 +151,7 @@ python\.venv\Scripts\python.exe -m contam_studio_core.zone_air_state_results ext
 
 ## Phase 5B桌面结果摘要
 
-打开受支持PRJ并选择Zone后，Phase 5B-1允许通过原生对话框选择Phase 4运行清单。Phase 5B-2新增无对话框的“加载最新运行结果”：manifest只来自Rust内存中的`ActiveRunContext`，并严格绑定当前项目session、源SHA-256、受控运行目录和`run_id`。React始终只提交request、session和Zone编号，不提交任何路径。详见[Phase 5B架构](docs/architecture/phase-5b-zone-result-summary.md)、[Phase 5B-1验证记录](docs/development/phase-5b-zone-result-summary-verification.md)和[Phase 5B-2验证记录](docs/development/phase-5b-active-run-results-verification.md)。
+打开受支持PRJ并选择Zone后，Phase 5B-1允许通过原生对话框选择Phase 4运行清单。Phase 5B-2新增无对话框的“加载最新运行结果”：manifest只来自Rust内存中的`ActiveRunContext`，并严格绑定当前项目session、活动Revision SHA-256、受控运行目录和`run_id`。Phase 3C之后React始终只提交request、session和稳定`zone_id`，不提交CONTAM编号或任何路径；Rust负责映射当前Revision中的外部编号。详见[Phase 5B架构](docs/architecture/phase-5b-zone-result-summary.md)、[Phase 5B-1验证记录](docs/development/phase-5b-zone-result-summary-verification.md)和[Phase 5B-2验证记录](docs/development/phase-5b-active-run-results-verification.md)。
 
 结果入口仍不接受任意SIM/NFR；运行成功后不会自动提取结果。Phase 5C在同一结果上增加当前Zone曲线、确定性统计、完整表格和受控CSV导出；仍不支持Excel原生格式、多Zone或多运行比较、运行历史、污染物结果或AI解释。
 
@@ -160,6 +162,8 @@ Phase 5B-2自动、非GUI官方闭环和用户真实Tauri验收均已通过；�
 当前Zone的严格结果默认进入图表视图：温度K、参考压力Pa和空气密度kg/m³使用一个模块化ECharts实例、等长同范围的三个累计时间横轴和鼠标滚轮同步缩放；不显示独立拖放滑块。数据原序、数值和单位保持不变。纯TypeScript模块用一次遍历确定性计算三项指标的最小值、最大值、平均值和首次极值位置，统计卡明确标注极值时间，原始语义化表格仍完整保留。
 
 CSV只由Rust内存中的`ActiveResultContext`生成。WebView只提交项目、Zone、运行和提取身份；目标路径来自原生保存对话框。导出使用UTF-8、CRLF、固定13列、RFC兼容转义、文本公式注入防护和同目录原子提交，拒绝现有文件。详见[分析架构](docs/architecture/phase-5c-zone-analysis-workspace.md)和[CSV契约](docs/architecture/zone-air-state-csv-export.md)。
+
+Phase 5C真实GUI复核已通过，证据见[PR #13评论](https://github.com/summer521521/CONTAM-Studio/pull/13#issuecomment-5013358557)。Phase 3C只改变项目草稿与身份边界，不改变结果数值、统计或CSV契约。
 
 ## Phase 4B-1桌面运行
 

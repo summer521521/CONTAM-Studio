@@ -51,4 +51,4 @@ Phase 2已能严格读取经验证的CONTAM 3.4简单Zone子集，但完整PRJ�
 
 ## 后续实现状态
 
-Phase 3B已实现桌面人工审批切片：Rust内存保存源快照和完整Patch，前端只接收单行Diff审阅视图，输出路径只来自Rust原生保存对话框。只有用户点击“另存为新副本”才调用既有领域应用函数，成功后桌面切换到经重读验证的新副本。该session不是稳定UUID，仍不支持源文件保存、多个Patch、撤销、其他字段或AI自动应用。
+Phase 3B先实现桌面人工审批和立即另存副本。Phase 3C保留本ADR的哈希绑定、单记号替换和只写新文件原则，但由Rust把Python输出写入应用拥有的不可变草稿Revision；稳定Zone UUID、线性Undo/Redo和独立“另存当前草稿”由[ADR-009](ADR-009-use-immutable-draft-revisions.md)定义。仍不支持源文件保存、多个Patch、其他字段或AI自动应用。

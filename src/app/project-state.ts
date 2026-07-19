@@ -17,6 +17,7 @@ export interface ReaderDiagnostic {
 }
 
 export interface ZoneRecord {
+  zone_id: string;
   contam_number: number;
   name: string;
   flags: number;
@@ -54,6 +55,42 @@ export interface DesktopOpenResponse {
   cancelled: boolean;
   project_session_id: string | null;
   envelope: BridgeEnvelope | null;
+  draft: DraftSummary | null;
+}
+
+export interface DraftSummary {
+  revision_id: string;
+  revision_number: number;
+  history_tip: number;
+  dirty: boolean;
+  exported: boolean;
+  can_undo: boolean;
+  can_redo: boolean;
+}
+
+export interface DesktopDraftTransitionResponse {
+  request_id: string;
+  project_session_id: string | null;
+  project: ProjectInspection | null;
+  draft: DraftSummary | null;
+  error: ReaderDiagnostic | null;
+}
+
+export interface DraftExportSummary {
+  file_name: string;
+  sha256: string;
+  size_bytes: number;
+  zone_count: number;
+  revision_number: number;
+  matches_active_revision: boolean;
+}
+
+export interface DesktopDraftExportResponse {
+  request_id: string;
+  cancelled: boolean;
+  project_session_id: string | null;
+  export: DraftExportSummary | null;
+  error: ReaderDiagnostic | null;
 }
 
 export interface ProjectState {
@@ -62,6 +99,7 @@ export interface ProjectState {
   activeRequestId: string | null;
   project: ProjectInspection | null;
   projectSessionId: string | null;
+  draft: DraftSummary | null;
   selectedZoneKey: string | null;
   issue: ReaderDiagnostic | null;
 }
@@ -77,6 +115,7 @@ export type ProjectAction =
       requestId: string;
       project: ProjectInspection;
       projectSessionId: string;
+      draft: DraftSummary;
     }
   | {
       type: "loading_failed";
@@ -85,11 +124,13 @@ export type ProjectAction =
       issue: ReaderDiagnostic;
     }
   | {
-      type: "project_replaced";
+      type: "draft_replaced";
       project: ProjectInspection;
       projectSessionId: string;
-      targetZoneNumber: number;
+      targetZoneId: string;
+      draft: DraftSummary;
     }
+  | { type: "draft_exported"; revisionId: string }
   | { type: "issue_reported"; issue: ReaderDiagnostic }
   | { type: "issue_cleared" }
   | { type: "zone_selected"; zoneKey: string };
@@ -100,6 +141,7 @@ export const INITIAL_PROJECT_STATE: ProjectState = {
   activeRequestId: null,
   project: null,
   projectSessionId: null,
+  draft: null,
   selectedZoneKey: null,
   issue: null,
 };
@@ -138,15 +180,44 @@ const SAFE_CONTEXT_KEYS = new Set([
   "token",
 ]);
 
-// This key is only an in-memory selection identity for the current read result.
-// It must never be persisted or treated as the future stable project UUID.
-export function zoneSelectionKey(project: ProjectInspection, zone: ZoneRecord): string {
-  return `${project.source_sha256}:${zone.contam_number}:${zone.source_line_number}`;
+export function zoneSelectionKey(_project: ProjectInspection, zone: ZoneRecord): string {
+  return zone.zone_id;
 }
 
 export function projectFileName(sourcePath: string): string {
   const parts = sourcePath.split(/[\\/]/);
   return parts.at(-1) || sourcePath;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
+
+export function isDraftSummaryValid(draft: DraftSummary): boolean {
+  return UUID_PATTERN.test(draft.revision_id) &&
+    Number.isInteger(draft.revision_number) && draft.revision_number >= 0 &&
+    Number.isInteger(draft.history_tip) && draft.history_tip >= draft.revision_number &&
+    typeof draft.dirty === "boolean" && typeof draft.exported === "boolean" &&
+    draft.can_undo === (draft.revision_number > 0) &&
+    draft.can_redo === (draft.revision_number < draft.history_tip);
+}
+
+export function isSafeProjectInspection(project: ProjectInspection): boolean {
+  if (project.schema_version !== "1.0" || project.source_path.length === 0 || project.source_path.length > 255 || /[\\/]/.test(project.source_path)) return false;
+  if (!SHA256_PATTERN.test(project.source_sha256) || !Number.isInteger(project.source_size_bytes) || project.source_size_bytes < 0 || project.source_unchanged !== true) return false;
+  if (!Number.isInteger(project.declared_zone_count) || project.declared_zone_count !== project.zones.length || !Array.isArray(project.diagnostics)) return false;
+  const zoneIds = new Set<string>();
+  for (const zone of project.zones) {
+    if (!UUID_PATTERN.test(zone.zone_id) || zoneIds.has(zone.zone_id) || !Number.isInteger(zone.contam_number) || zone.contam_number <= 0 || !Number.isInteger(zone.source_line_number) || zone.source_line_number <= 0 || zone.name.length === 0 || zone.name.length > 80 || !Number.isFinite(zone.volume_m3)) return false;
+    zoneIds.add(zone.zone_id);
+  }
+  return project.first_zone === null || project.zones.some((zone) => zone.zone_id === project.first_zone?.zone_id);
+}
+
+export function isDraftExportSummaryValid(summary: DraftExportSummary): boolean {
+  return summary.file_name.length > 4 && summary.file_name.length <= 255 && !/[\\/]/.test(summary.file_name) && summary.file_name.toLowerCase().endsWith(".prj") &&
+    SHA256_PATTERN.test(summary.sha256) && Number.isInteger(summary.size_bytes) && summary.size_bytes >= 0 &&
+    Number.isInteger(summary.zone_count) && summary.zone_count >= 0 && Number.isInteger(summary.revision_number) && summary.revision_number >= 0 &&
+    summary.matches_active_revision === true;
 }
 
 export function selectedZone(state: ProjectState): ZoneRecord | null {
@@ -230,6 +301,7 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
         activeRequestId: null,
         project: action.project,
         projectSessionId: action.projectSessionId,
+        draft: action.draft,
         selectedZoneKey: action.project.zones[0]
           ? zoneSelectionKey(action.project, action.project.zones[0])
           : null,
@@ -244,9 +316,9 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
         activeRequestId: null,
         issue: sanitizeDiagnostic(action.issue),
       };
-    case "project_replaced": {
+    case "draft_replaced": {
       const target = action.project.zones.find(
-        (zone) => zone.contam_number === action.targetZoneNumber,
+        (zone) => zone.zone_id === action.targetZoneId,
       );
       return {
         status: "loaded",
@@ -254,10 +326,15 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
         activeRequestId: null,
         project: action.project,
         projectSessionId: action.projectSessionId,
+        draft: action.draft,
         selectedZoneKey: target ? zoneSelectionKey(action.project, target) : null,
         issue: null,
       };
     }
+    case "draft_exported":
+      return state.draft?.revision_id === action.revisionId
+        ? { ...state, draft: { ...state.draft, exported: true } }
+        : state;
     case "issue_reported":
       return { ...state, issue: sanitizeDiagnostic(action.issue) };
     case "issue_cleared":
@@ -302,7 +379,7 @@ export function envelopeIssue(envelope: BridgeEnvelope, requestId: string): Read
           context: {},
         };
   }
-  if (!envelope.result || envelope.error) {
+  if (!envelope.result || envelope.error || !isSafeProjectInspection(envelope.result)) {
     return {
       code: "python_response_contract_invalid",
       message: "Bridge response contract invalid",
@@ -328,7 +405,9 @@ export function desktopOpenIssue(
   if (
     response.cancelled !== (response.envelope === null) ||
     (response.cancelled && response.project_session_id !== null) ||
-    (!response.cancelled && response.envelope?.ok === true && !response.project_session_id)
+    (response.cancelled && response.draft !== null) ||
+    (!response.cancelled && response.envelope?.ok === true && (!response.project_session_id || !response.draft || !isDraftSummaryValid(response.draft))) ||
+    (!response.cancelled && response.envelope?.ok !== true && response.draft !== null)
   ) {
     return {
       code: "desktop_response_contract_invalid",

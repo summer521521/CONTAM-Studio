@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ArrowLeft, CopyPlus, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, FileCheck2, ShieldCheck, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { PatchReviewView } from "../../app/patch-state";
 
@@ -95,8 +95,8 @@ export function ZoneVolumePatchDialog({
           </button>
           <button type="button" className="secondary-action" onClick={onCancel} disabled={applying}>{t("patch.cancel")}</button>
           <button type="button" className="primary-action" onClick={onApply} disabled={applying}>
-            {applying ? <span className="loading-indicator" /> : <CopyPlus size={16} />}
-            {t(applying ? "patch.creatingCopy" : "patch.saveAsCopy")}
+            {applying ? <span className="loading-indicator" /> : <FileCheck2 size={16} />}
+            {t(applying ? "patch.applyingDraft" : "patch.applyToDraft")}
           </button>
         </footer>
       </div>

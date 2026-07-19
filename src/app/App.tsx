@@ -13,13 +13,16 @@ import { WelcomePage } from "../components/workbench/WelcomePage";
 import { ZoneVolumePatchDialog } from "../components/workbench/ZoneVolumePatchDialog";
 import i18n from "../i18n";
 import {
-  applyZoneVolumePatchToCopy,
+  applyZoneVolumePatchToDraft,
+  exportActiveProjectDraftCopy,
   exportActiveZoneAirStateCsv,
   extractActiveRunZoneAirState,
   planZoneVolumePatch,
+  redoProjectDraft,
   selectAndReadPrjZones,
   selectAndExtractZoneAirState,
   runActiveContamProject,
+  undoProjectDraft,
 } from "./desktop-api";
 import {
   applyResponseIssue,
@@ -29,6 +32,9 @@ import {
 } from "./patch-state";
 import {
   desktopOpenIssue,
+  isDraftExportSummaryValid,
+  isDraftSummaryValid,
+  isSafeProjectInspection,
   envelopeIssue,
   INITIAL_PROJECT_STATE,
   projectReducer,
@@ -51,6 +57,7 @@ import {
   type ResultExportStageEvent,
 } from "./result-export-state";
 import { INITIAL_RUN_STATE, runReducer, runResponseIssue } from "./run-state";
+import { draftShortcutAction } from "./draft-shortcuts";
 import {
   getCenterLayout,
   getMainLayout,
@@ -70,6 +77,7 @@ function App() {
   const [resultExportState, dispatchResultExport] = useReducer(resultExportReducer, INITIAL_RESULT_EXPORT_STATE);
   const [runState, dispatchRun] = useReducer(runReducer, INITIAL_RUN_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
   const requestSequence = useRef(0);
   const resultSequence = useRef(0);
   const resultExportSequence = useRef(0);
@@ -208,6 +216,7 @@ function App() {
         requestId,
         project: envelope.result,
         projectSessionId: response.project_session_id as string,
+        draft: response.draft!,
       });
       dispatchPatch({ type: "project_or_zone_changed" });
       dispatchResult({ type: "project_or_zone_changed" });
@@ -240,6 +249,7 @@ function App() {
       sequence,
       requestId,
       projectSessionId: projectState.projectSessionId,
+      zoneId: currentZone.zone_id,
       zoneNumber: currentZone.contam_number,
     });
     try {
@@ -248,7 +258,7 @@ function App() {
         : selectAndExtractZoneAirState)(
           requestId,
           projectState.projectSessionId,
-          currentZone.contam_number,
+          currentZone.zone_id,
         );
       if (!mounted.current || sequence !== resultSequence.current) return;
       if (response.cancelled) {
@@ -264,6 +274,7 @@ function App() {
         issue ||
         !response.result ||
         response.project_session_id !== projectState.projectSessionId ||
+        response.result.zone_id !== currentZone.zone_id ||
         (source === "active_run" && response.result.run_id !== expectedActiveRunId)
       ) {
         dispatchResult({
@@ -322,6 +333,7 @@ function App() {
       sequence,
       requestId,
       projectSessionId: projectState.projectSessionId,
+      zoneId: currentZone.zone_id,
       zoneNumber: currentZone.contam_number,
       runId: result.run_id,
       extractionId: result.extraction_id,
@@ -330,7 +342,7 @@ function App() {
       const response = await exportActiveZoneAirStateCsv(
         requestId,
         projectState.projectSessionId,
-        currentZone.contam_number,
+        currentZone.zone_id,
         result.run_id,
         result.extraction_id,
       );
@@ -345,6 +357,7 @@ function App() {
         issue
         || !summary
         || response.project_session_id !== projectState.projectSessionId
+        || summary.zone_id !== currentZone.zone_id
         || summary.zone_number !== currentZone.contam_number
         || summary.run_id !== result.run_id
         || summary.extraction_id !== result.extraction_id
@@ -394,7 +407,7 @@ function App() {
     dispatchPatch({
       type: "start_editing",
       projectSessionId: projectState.projectSessionId,
-      zoneNumber: currentZone.contam_number,
+      zoneId: currentZone.zone_id,
       token: String(currentZone.volume_m3),
     });
   }, [currentZone, projectState.projectSessionId]);
@@ -457,7 +470,7 @@ function App() {
   }, [projectState.project, projectState.projectSessionId, updateWorkbench]);
 
   const planVolumePatch = useCallback(async () => {
-    if (!patchState.projectSessionId || patchState.zoneNumber === null) return;
+    if (!patchState.projectSessionId || patchState.zoneId === null) return;
     const requestId = crypto.randomUUID();
     dispatchProject({ type: "issue_cleared" });
     dispatchPatch({ type: "plan_started", requestId });
@@ -465,7 +478,7 @@ function App() {
       const response = await planZoneVolumePatch(
         requestId,
         patchState.projectSessionId,
-        patchState.zoneNumber,
+        patchState.zoneId,
         patchState.newVolumeToken,
       );
       if (!mounted.current) return;
@@ -483,7 +496,7 @@ function App() {
       }
       if (
         response.review.project_session_id !== patchState.projectSessionId ||
-        response.review.zone_number !== patchState.zoneNumber ||
+        response.review.zone_id !== patchState.zoneId ||
         response.review.new_token !== patchState.newVolumeToken
       ) {
         const issue = {
@@ -508,7 +521,7 @@ function App() {
       dispatchPatch({ type: "plan_failed", requestId, issue });
       dispatchProject({ type: "issue_reported", issue });
     }
-  }, [patchState.newVolumeToken, patchState.projectSessionId, patchState.zoneNumber]);
+  }, [patchState.newVolumeToken, patchState.projectSessionId, patchState.zoneId]);
 
   const applyVolumePatch = useCallback(async () => {
     if (!patchState.projectSessionId || !patchState.patchId) return;
@@ -516,19 +529,14 @@ function App() {
     dispatchProject({ type: "issue_cleared" });
     dispatchPatch({ type: "apply_started", requestId });
     try {
-      const response = await applyZoneVolumePatchToCopy(
+      const response = await applyZoneVolumePatchToDraft(
         requestId,
         patchState.projectSessionId,
         patchState.patchId,
       );
       if (!mounted.current) return;
       const issue = applyResponseIssue(response, requestId);
-      if (response.cancelled && !issue) {
-        dispatchPatch({ type: "apply_cancelled", requestId });
-        setPlaceholderNotice(t("patch.saveDialogCancelled"));
-        return;
-      }
-      if (issue || !response.project || !response.project_session_id || response.target_zone_number === null) {
+      if (issue || !response.project || !response.project_session_id || !response.target_zone_id || !response.draft) {
         const safeIssue = issue ?? {
           code: "patch_apply_response_invalid",
           message: "Patch apply response invalid",
@@ -546,16 +554,17 @@ function App() {
         return;
       }
       dispatchProject({
-        type: "project_replaced",
+        type: "draft_replaced",
         project: response.project,
         projectSessionId: response.project_session_id,
-        targetZoneNumber: response.target_zone_number,
+        targetZoneId: response.target_zone_id,
+        draft: response.draft,
       });
       dispatchResult({ type: "project_or_zone_changed" });
       dispatchResultExport({ type: "result_changed" });
       dispatchRun({ type: "project_changed" });
       dispatchPatch({ type: "apply_succeeded", requestId });
-      setPlaceholderNotice(t("patch.copyCreatedSuccess"));
+      setPlaceholderNotice(t("patch.draftAppliedSuccess", { revision: response.draft.revision_number }));
     } catch {
       if (!mounted.current) return;
       const issue = {
@@ -568,6 +577,63 @@ function App() {
       dispatchProject({ type: "issue_reported", issue });
     }
   }, [patchState.patchId, patchState.projectSessionId, t]);
+
+  const switchDraft = useCallback(async (direction: "undo" | "redo") => {
+    if (!projectState.projectSessionId || draftBusy) return;
+    const requestId = crypto.randomUUID();
+    setDraftBusy(true);
+    dispatchProject({ type: "issue_cleared" });
+    try {
+      const response = await (direction === "undo" ? undoProjectDraft : redoProjectDraft)(
+        requestId,
+        projectState.projectSessionId,
+      );
+      if (!mounted.current) return;
+      if (response.request_id !== requestId || response.error || !response.project || !isSafeProjectInspection(response.project) || !response.draft || !isDraftSummaryValid(response.draft) || response.project_session_id !== projectState.projectSessionId) {
+        dispatchProject({
+          type: "issue_reported",
+          issue: response.error ?? { code: "draft_identity_mismatch", message: "Draft transition response invalid", source_line_number: null, context: {} },
+        });
+        return;
+      }
+      const targetZoneId = currentZone && response.project.zones.some((zone) => zone.zone_id === currentZone.zone_id)
+        ? currentZone.zone_id
+        : response.project.zones[0]?.zone_id ?? "";
+      dispatchProject({ type: "draft_replaced", project: response.project, projectSessionId: response.project_session_id, targetZoneId, draft: response.draft });
+      dispatchPatch({ type: "project_or_zone_changed" });
+      dispatchRun({ type: "project_changed" });
+      dispatchResult({ type: "project_or_zone_changed" });
+      dispatchResultExport({ type: "result_changed" });
+      setPlaceholderNotice(t(direction === "undo" ? "draft.undoSuccess" : "draft.redoSuccess", { revision: response.draft.revision_number }));
+    } catch {
+      if (mounted.current) dispatchProject({ type: "issue_reported", issue: { code: "desktop_bridge_invoke_failed", message: "Draft transition failed", source_line_number: null, context: {} } });
+    } finally {
+      if (mounted.current) setDraftBusy(false);
+    }
+  }, [currentZone, draftBusy, projectState.projectSessionId, t]);
+
+  const exportDraft = useCallback(async () => {
+    if (!projectState.projectSessionId || !projectState.draft || draftBusy) return;
+    const requestId = crypto.randomUUID();
+    setDraftBusy(true);
+    dispatchProject({ type: "issue_cleared" });
+    try {
+      const response = await exportActiveProjectDraftCopy(requestId, projectState.projectSessionId, projectState.draft.revision_id);
+      if (!mounted.current) return;
+      if (response.cancelled) {
+        setPlaceholderNotice(t("draft.exportCancelled"));
+      } else if (response.error || !response.export || !isDraftExportSummaryValid(response.export) || response.project_session_id !== projectState.projectSessionId) {
+        dispatchProject({ type: "issue_reported", issue: response.error ?? { code: "draft_export_verification_failed", message: "Draft export response invalid", source_line_number: null, context: {} } });
+      } else {
+        dispatchProject({ type: "draft_exported", revisionId: projectState.draft.revision_id });
+        setPlaceholderNotice(t("draft.exportSuccess", { file: response.export.file_name }));
+      }
+    } catch {
+      if (mounted.current) dispatchProject({ type: "issue_reported", issue: { code: "desktop_bridge_invoke_failed", message: "Draft export failed", source_line_number: null, context: {} } });
+    } finally {
+      if (mounted.current) setDraftBusy(false);
+    }
+  }, [draftBusy, projectState.draft, projectState.projectSessionId, t]);
   const openDisabled =
     projectState.status === "selecting" ||
     projectState.status === "loading" ||
@@ -577,13 +643,39 @@ function App() {
     resultState.status === "loading" ||
     resultExportState.status === "selecting_destination" ||
     resultExportState.status === "exporting" ||
-    runState.status === "running";
+    runState.status === "running" || draftBusy;
   const runDisabled = openDisabled || projectState.status !== "loaded" || !projectState.project;
   const activeRunId =
     runState.projectSessionId === projectState.projectSessionId
       ? runState.summary?.run_id ?? null
       : null;
   const resultLoadDisabled = openDisabled || !currentZone;
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const action = draftShortcutAction({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        editableTarget: Boolean(target && (target.matches("input, textarea, [contenteditable='true']") || target.isContentEditable)),
+        patchWorkflowActive: ["editing", "planning", "review", "applying"].includes(patchState.status),
+      });
+      if (action === "export") {
+        event.preventDefault();
+        void exportDraft();
+      } else if (action === "redo") {
+        event.preventDefault();
+        void switchDraft("redo");
+      } else if (action === "undo") {
+        event.preventDefault();
+        void switchDraft("undo");
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [exportDraft, patchState.status, switchDraft]);
 
   const toggleProject = () => {
     if (workbench.projectCollapsed) projectPanelRef.current?.expand();
@@ -643,6 +735,12 @@ function App() {
         openDisabled={openDisabled}
         onRunProject={runProject}
         runDisabled={runDisabled}
+        onUndoDraft={() => void switchDraft("undo")}
+        undoDisabled={openDisabled || !projectState.draft?.can_undo}
+        onRedoDraft={() => void switchDraft("redo")}
+        redoDisabled={openDisabled || !projectState.draft?.can_redo}
+        onExportDraft={() => void exportDraft()}
+        exportDraftDisabled={openDisabled || !projectState.draft}
         onPlaceholder={showPlaceholder}
       />
 

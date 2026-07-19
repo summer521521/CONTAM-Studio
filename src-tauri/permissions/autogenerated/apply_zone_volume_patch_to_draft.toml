@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-apply-zone-volume-patch-to-draft"
+description = "Enables the apply_zone_volume_patch_to_draft command without any pre-configured scope."
+commands.allow = ["apply_zone_volume_patch_to_draft"]
+
+[[permission]]
+identifier = "deny-apply-zone-volume-patch-to-draft"
+description = "Denies the apply_zone_volume_patch_to_draft command without any pre-configured scope."
+commands.deny = ["apply_zone_volume_patch_to_draft"]

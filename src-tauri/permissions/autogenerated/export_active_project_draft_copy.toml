@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-active-project-draft-copy"
+description = "Enables the export_active_project_draft_copy command without any pre-configured scope."
+commands.allow = ["export_active_project_draft_copy"]
+
+[[permission]]
+identifier = "deny-export-active-project-draft-copy"
+description = "Denies the export_active_project_draft_copy command without any pre-configured scope."
+commands.deny = ["export_active_project_draft_copy"]

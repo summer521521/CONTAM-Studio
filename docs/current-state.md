@@ -1,13 +1,20 @@
 # 当前状态
 
-记录日期：2026-07-18。
+记录日期：2026-07-19。
+
+## Phase 3C不可变草稿与撤销工作流
+
+- 当前切片把原始PRJ固定为Revision 0基线，并由Rust在应用本地数据目录管理Revision 1及以后的不可变草稿快照。每次用户批准的`volume_m3` Patch只创建新快照，不覆盖源文件或已有快照。
+- Zone获得由基线SHA-256、对象类型、CONTAM编号、基线源行号和名称生成的确定性UUID v5。该`zone_id`在同一基线的全部草稿、撤销、重做、运行和结果中稳定；不同字节基线不会复用身份。
+- Rust线性历史支持撤销、重做、Undo后新修改截断Redo链，以及将当前Revision复制为用户明确选择且不存在的新PRJ。草稿不跨应用重启恢复，另存副本不自动切换项目。
+- 活动ContamX运行、SimRead结果、统计图表和CSV导出均绑定当前Revision；Revision改变后旧运行、结果和导出上下文失效。当前仍只允许修改`Zone.volume_m3`，不是完整PRJ编辑器。
 
 ## Phase 5C Zone空气状态分析工作区
 
 - 当前Zone的严格`zone_air_state`结果新增模块化ECharts三联曲线、确定性统计和完整语义化数据表切换。曲线不插值、不平滑、不采样，统计使用一次遍历在线均值且不改变原始样本或SI单位。
 - Rust新增仅存在于桌面进程内存的`ActiveResultContext`，绑定项目session/SHA-256、Zone、运行、提取、来源和完整严格结果。提取失败或取消不覆盖，新项目和Patch副本清除，新运行成功保留旧结果以显示过期提示。
 - 新增显式ACL命令`export_active_zone_air_state_csv`。React只提交结果身份；Rust在对话框前、写入前和写入后复核源PRJ SHA-256，路径由原生保存对话框取得，CSV使用固定13列、UTF-8、CRLF、RFC转义和公式注入防护生成，并以不可覆盖的同目录原子写入提交。
-- 新增唯一依赖`echarts 6.1.0`（Apache-2.0），使用模块化Canvas折线图入口。自动检查及官方ContamX→SimRead→统计→生产Rust CSV→独立CSV重读的非GUI闭环已通过。用户首轮真实GUI验收除状态栏、三联横轴/缩放和极值时间标签外均通过；三个展示问题已修正，真实Tauri复核为`pending_user_recheck`。
+- 新增唯一前端依赖`echarts 6.1.0`（Apache-2.0），使用模块化Canvas折线图入口。自动检查及官方ContamX→SimRead→统计→生产Rust CSV→独立CSV重读的非GUI闭环已通过。用户已完成修正后的真实Tauri复核，Phase 5C手动GUI状态为`passed`；证据见[PR #13评论](https://github.com/summer521521/CONTAM-Studio/pull/13#issuecomment-5013358557)。
 
 ## Phase 4B-1受控桌面ContamX运行
 
@@ -126,9 +133,9 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - Python响应先进入不可序列化到WebView的Raw类型；Rust验证诊断code，以固定消息替换Python原始message，并对白名单context执行类型检查与120字符截断。成功diagnostics和失败error使用同一规则，TypeScript清理保留为第二道防线。
 - Python成功结果的`source_path`必须规范化后与Rust实际选择路径一致；不一致、路径失效或无法规范化时整体返回`python_response_source_mismatch`，不返回两个路径。
 - 前端项目状态使用`idle/selecting/loading/loaded/cancelled/unsupported/error`互斥状态；请求序号与`request_id`共同阻止旧响应覆盖新状态。新项目加载失败时保留上一次成功项目，首次失败保持欢迎页。
-- 成功后项目树显示全部Zone和CONTAM原始编号；选择Zone可查看名称、编号、flags、楼层、相对高度、体积、源行号、读取模式和只读状态。当前选择键是源哈希、CONTAM编号和源行号组成的临时键，不是稳定UUID。
+- Phase 2C最初以源哈希、CONTAM编号和源行号组成临时选择键；Phase 3C已由基线SHA-256及Zone身份生成稳定UUID v5并取代该临时键。CONTAM编号继续只用于显示和外部格式映射。
 - 项目摘要明确显示文件头、Zone数、源文件大小、SHA-256缩略值、严格读取模式及未解析其他PRJ区块的边界；不支持文件不会显示部分项目树。
-- Node依赖包括`@tauri-apps/api 2.11.1`和模块化图表`echarts 6.1.0`，测试依赖为`vitest 4.1.10`；前端`@tauri-apps/plugin-dialog`已移除。Rust依赖保留`serde 1.0.228`、`serde_json 1.0.150`和`tauri-plugin-dialog 2.7.1`。相关项目均为MIT、Apache-2.0或双许可证，来自持续维护的官方仓库。
+- Node依赖包括`@tauri-apps/api 2.11.1`和模块化图表`echarts 6.1.0`，测试依赖为`vitest 4.1.10`；前端`@tauri-apps/plugin-dialog`已移除。Rust依赖保留`serde 1.0.228`、`serde_json 1.0.150`、`tauri-plugin-dialog 2.7.1`，并新增仅启用v5功能的`uuid 1.24.0`。相关项目均为MIT、Apache-2.0或双许可证，来自持续维护的官方仓库。
 - 正式界面截图为`docs/ui/phase-2c-real-zone-project.png`，内容来自实际Tauri窗口，PNG为1443×931。
 
 ## Phase 2C验证
@@ -168,7 +175,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入一个Zone体积的Diff审阅与另存副本、受控ContamX运行、当前Zone真实`zone_air_state`摘要，以及Phase 5C曲线、确定性统计和CSV副本导出。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、稳定UUID、完整领域模型、撤销、多Patch、其他结果类型、多Zone/多运行比较、运行历史、AI调用、网络服务或Python打包分发；Phase 3B和Phase 5C不得解释为完整编辑或结果分析系统。
+桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、AI调用、网络服务或Python打包分发；Phase 3C和Phase 5C不得解释为完整编辑或结果分析系统。
 
 ## 待验证问题
 

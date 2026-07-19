@@ -12,6 +12,7 @@ ADR用于记录具有长期影响的项目决策、理由、后果和待验证�
 - [ADR-006：采用哈希绑定、仅写副本的单字段Patch](ADR-006-use-hash-bound-copy-only-patches.md)
 - [ADR-007：使用隔离ContamX运行工作区](ADR-007-use-isolated-contamx-run-workspaces.md)
 - [ADR-008：首个结果切片使用官方SimRead](ADR-008-use-official-simread-for-first-results.md)
+- [ADR-009：使用不可变草稿Revision与确定性Zone UUID](ADR-009-use-immutable-draft-revisions.md)
 
 ## 统一格式
 

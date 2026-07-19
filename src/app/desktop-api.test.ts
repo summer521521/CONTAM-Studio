@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyZoneVolumePatchToCopy,
+  applyZoneVolumePatchToDraft,
+  exportActiveProjectDraftCopy,
+  redoProjectDraft,
   extractActiveRunZoneAirState,
   exportActiveZoneAirStateCsv,
   planZoneVolumePatch,
   selectAndExtractZoneAirState,
   selectAndReadPrjZones,
   runActiveContamProject,
+  undoProjectDraft,
 } from "./desktop-api";
 
 describe("desktop API boundary", () => {
@@ -16,9 +19,20 @@ describe("desktop API boundary", () => {
 
   it("accepts only identifiers and volume input for Patch operations", () => {
     expect(planZoneVolumePatch).toHaveLength(4);
-    expect(applyZoneVolumePatchToCopy).toHaveLength(3);
+    expect(applyZoneVolumePatchToDraft).toHaveLength(3);
     expect(planZoneVolumePatch.toString()).not.toContain("sourcePath");
-    expect(applyZoneVolumePatchToCopy.toString()).not.toContain("outputPath");
+    expect(applyZoneVolumePatchToDraft.toString()).not.toContain("outputPath");
+    expect(applyZoneVolumePatchToDraft.toString()).not.toContain("contamNumber");
+  });
+
+  it("exposes draft history and copy export without accepting paths or project data", () => {
+    expect(undoProjectDraft).toHaveLength(2);
+    expect(redoProjectDraft).toHaveLength(2);
+    expect(exportActiveProjectDraftCopy).toHaveLength(3);
+    for (const api of [undoProjectDraft, redoProjectDraft, exportActiveProjectDraftCopy]) {
+      const source = api.toString();
+      for (const forbidden of ["sourcePath", "outputPath", "draftRoot", "projectJson", "patchJson"]) expect(source).not.toContain(forbidden);
+    }
   });
 
   it("sends only session and Zone identity for result extraction", () => {

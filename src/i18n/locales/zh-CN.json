@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 5C 结果分析"
+    "phase": "Phase 3C 可逆草稿"
   },
   "common": {
     "yes": "是",
@@ -17,6 +17,21 @@
     "light": "浅色",
     "dark": "深色",
     "settings": "设置"
+  },
+  "draft": {
+    "toolbarLabel": "草稿历史",
+    "undo": "撤销",
+    "redo": "重做",
+    "export": "另存当前草稿",
+    "statusTitle": "当前草稿Revision",
+    "original": "原始项目",
+    "revision": "草稿 Revision {{revision}}",
+    "notExported": "当前修改尚未另存",
+    "exported": "当前Revision已另存",
+    "undoSuccess": "已切换到Revision {{revision}}。",
+    "redoSuccess": "已切换到Revision {{revision}}。",
+    "exportCancelled": "已取消另存；当前草稿保持不变。",
+    "exportSuccess": "已从当前草稿创建{{file}}；原始PRJ保持不变。"
   },
   "navigation": {
     "projects": "项目",
@@ -130,7 +145,7 @@
     "bytes": "{{value}} 字节",
     "hash": "SHA-256",
     "readerMode": "读取模式",
-    "showSourcePath": "显示完整源路径",
+    "showSourcePath": "显示源文件名",
     "openAnother": "打开其他PRJ",
     "cancelledHint": "已取消文件选择，未读取任何文件。",
     "status": {
@@ -266,12 +281,15 @@
     "newValue": "新值",
     "diffLabel": "Zone体积单行Diff",
     "originalUnchanged": "原始PRJ不会被覆盖",
-    "copyOnlyBoundary": "确认后只会创建新的PRJ副本，当前仅修改一个Vol记号。",
+    "copyOnlyBoundary": "确认后只会创建新的不可变内部草稿Revision，当前仅修改一个Vol记号。",
     "bytePreservation": "未知区块依靠原始字节保留，不进行完整PRJ重建。",
     "backToEdit": "返回修改",
     "cancel": "取消修改",
     "saveAsCopy": "另存为新副本",
     "creatingCopy": "正在创建副本",
+    "applyToDraft": "应用到草稿",
+    "applyingDraft": "正在应用到草稿",
+    "draftAppliedSuccess": "草稿Revision {{revision}}已生效；原始PRJ未修改。",
     "saveDialogCancelled": "已取消另存为；审阅内容仍保留。",
     "copyCreatedSuccess": "已创建并打开新副本，原始PRJ未修改。"
   },
@@ -343,6 +361,21 @@
       "patch_precondition_failed": "源文件或Patch前置条件已变化，请重新生成预览",
       "patch_application_failed": "无法安全创建新的PRJ副本",
       "patch_verification_failed": "新副本未通过确定性验证，未保留输出",
+      "draft_session_missing": "当前没有可用的草稿会话",
+      "draft_session_mismatch": "草稿会话已变化，请重新打开项目",
+      "draft_revision_missing": "草稿Revision文件不可用",
+      "draft_revision_changed": "草稿Revision不再匹配已验证快照",
+      "draft_history_limit_reached": "已达到草稿历史上限",
+      "draft_baseline_changed": "原始PRJ已被外部修改，不能切回原始基线",
+      "draft_identity_mismatch": "草稿未保持已验证的Zone身份",
+      "draft_apply_failed": "无法将已批准修改应用到新的草稿Revision",
+      "draft_undo_unavailable": "没有可撤销的草稿Revision",
+      "draft_redo_unavailable": "没有可重做的草稿Revision",
+      "draft_export_destination_invalid": "草稿副本目标无效",
+      "draft_export_destination_exists": "同名文件已存在，不会覆盖",
+      "draft_export_conflicts_with_source": "草稿副本不能覆盖原始PRJ或内部快照",
+      "draft_export_write_failed": "无法安全写入草稿副本",
+      "draft_export_verification_failed": "导出的草稿副本验证失败并已移除",
       "bridge_internal_error": "Python读取桥内部错误",
       "contamx_solver_not_configured": "未配置受支持的ContamX，请设置CONTAM_STUDIO_CONTAMX",
       "contamx_solver_not_found": "找不到已配置的ContamX",
