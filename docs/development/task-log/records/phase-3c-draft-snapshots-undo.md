@@ -30,7 +30,7 @@ validation:
   - 官方ContamX与SimRead非GUI闭环在当前草稿Revision上完成，Zone 1为577个样本，统计和CSV生产契约通过
   - Markdown相对链接、JSON解析、pnpm与Cargo锁、uuid许可证和git diff检查通过
 dependencies: 新增Rust uuid 1.24.0，仅启用v5；Apache-2.0 OR MIT；无新增前端或Python依赖
-manual_gui_validation_status: pending_user
+manual_gui_validation_status: partial_pending_export_recheck
 delivery_status: pushed_draft_pr
 pull_request: https://github.com/summer521521/CONTAM-Studio/pull/14
 token_usage:
@@ -39,5 +39,5 @@ token_usage:
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: 手动GUI验收按最终31步清单由用户执行，不使用Computer Use或自动截图。任务边界中提到的Phase 5C用户CSV在最终工作区检查时不存在；本任务未读取其业务内容，也未暂存或提交该路径。客户端未提供精确逐任务Token数据。
+notes: 用户于2026-07-19完成首轮手动GUI验收，除“另存当前草稿”误报draft_export_verification_failed外其余步骤正常；缺陷在后续独立修复任务中处理并等待聚焦复核。ContamX在首次实际运行前显示待验证、运行后显示已验证版本符合契约。不使用Computer Use或自动截图。任务边界中提到的Phase 5C用户CSV在最终工作区检查时不存在；本任务未读取其业务内容，也未暂存或提交该路径。客户端未提供精确逐任务Token数据。
 ```

@@ -4204,6 +4204,38 @@ fn copy_draft_atomically(source: &Path, output: &Path) -> Result<(), &'static st
     result
 }
 
+fn verify_draft_export_copy(
+    active: &ActiveProjectContext,
+    output: &Path,
+    request_id: &str,
+) -> Result<(String, u64, ProjectInspection), ReaderDiagnostic> {
+    let (sha256, size) = sha256_file(output).map_err(|_| {
+        host_diagnostic(
+            "draft_export_verification_failed",
+            "The exported draft could not be verified.",
+            BTreeMap::new(),
+        )
+    })?;
+    if !sha256.eq_ignore_ascii_case(&active.source_sha256) || size != active.source_size_bytes {
+        return Err(host_diagnostic(
+            "draft_export_verification_failed",
+            "The exported draft did not match the active revision.",
+            BTreeMap::new(),
+        ));
+    }
+    let canonical_output = std::fs::canonicalize(output).map_err(|_| {
+        host_diagnostic(
+            "draft_export_verification_failed",
+            "The exported draft could not be resolved for verification.",
+            BTreeMap::new(),
+        )
+    })?;
+    let mut exported_revision = active.active_revision().clone();
+    exported_revision.source_path = canonical_output;
+    let project = validate_draft_revision(active, &exported_revision, request_id)?;
+    Ok((sha256, size, project))
+}
+
 #[tauri::command]
 pub async fn export_active_project_draft_copy(
     app: AppHandle,
@@ -4352,26 +4384,7 @@ pub async fn export_active_project_draft_copy(
             ),
         );
     }
-    let verification = (|| {
-        let (sha256, size) = sha256_file(&output).map_err(|_| {
-            host_diagnostic(
-                "draft_export_verification_failed",
-                "The exported draft could not be verified.",
-                BTreeMap::new(),
-            )
-        })?;
-        if sha256 != active.source_sha256 || size != active.source_size_bytes {
-            return Err(host_diagnostic(
-                "draft_export_verification_failed",
-                "The exported draft did not match the active revision.",
-                BTreeMap::new(),
-            ));
-        }
-        let mut exported_revision = active.active_revision().clone();
-        exported_revision.source_path = output.clone();
-        let project = validate_draft_revision(&active, &exported_revision, &request_id)?;
-        Ok((sha256, size, project))
-    })();
+    let verification = verify_draft_export_copy(&active, &output, &request_id);
     let (sha256, size, project) = match verification {
         Ok(value) => value,
         Err(error) => {
@@ -4792,6 +4805,17 @@ mod tests {
         assert_eq!(
             copy_draft_atomically(&active.source_path, &output),
             Err("draft_export_destination_exists")
+        );
+        let (verified_sha256, verified_size, verified_project) =
+            verify_draft_export_copy(&active, &output, "draft-copy-verify").unwrap();
+        assert_eq!(verified_sha256, active.source_sha256.to_ascii_uppercase());
+        assert!(verified_sha256.eq_ignore_ascii_case(&active.source_sha256));
+        assert_eq!(verified_size, active.source_size_bytes);
+        assert_eq!(verified_project.zones, active.zones);
+        assert_eq!(verified_project.zones[0].volume_m3, 650.0);
+        assert_eq!(
+            verified_project.zones[0].zone_id,
+            active.revisions[0].project.zones[0].zone_id
         );
         let summary = DraftExportSummary {
             file_name: "draft-copy.prj".into(),

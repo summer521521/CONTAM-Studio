@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [Phase 3C草稿副本导出验证修复](records/phase-3c-draft-export-verification-fix.md) | Phase 3C | completed | live |
 | [Phase 3C安全草稿快照与撤销/重做](records/phase-3c-draft-snapshots-undo.md) | Phase 3C | completed | live |
 | [Phase 5C GUI反馈收口](records/phase-5c-zone-analysis-gui-feedback.md) | Phase 5C | completed | live |
 | [Phase 5C Zone空气状态分析工作区](records/phase-5c-zone-analysis-workspace.md) | Phase 5C | completed | live |
