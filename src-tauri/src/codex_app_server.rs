@@ -1373,6 +1373,70 @@ fn thread_start_params(model_id: &str, runtime_dir: &Path, language: &str) -> Va
     })
 }
 
+fn canonical_paths_equal(left: &Path, right: &Path) -> bool {
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+fn validate_readonly_thread_response(
+    response: &Value,
+    runtime_dir: &Path,
+) -> Result<String, RpcFailure> {
+    let thread_id = response
+        .pointer("/thread/id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 128)
+        .ok_or_else(|| RpcFailure::new("codex_app_server_incompatible"))?;
+    let returned_cwd = response
+        .get("cwd")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 4096)
+        .ok_or_else(|| RpcFailure::new("codex_app_server_incompatible"))?;
+    let sandbox = response.pointer("/sandbox/type").and_then(Value::as_str);
+    let network_access = response
+        .pointer("/sandbox/networkAccess")
+        .and_then(Value::as_bool);
+    let approval = response.get("approvalPolicy").and_then(Value::as_str);
+    let instruction_sources_valid = match response.get("instructionSources") {
+        None => true,
+        Some(Value::Array(sources)) => sources.iter().all(|source| {
+            source
+                .as_str()
+                .is_some_and(|value| !value.is_empty() && value.len() <= 4096)
+        }),
+        _ => false,
+    };
+    let runtime_workspace_roots_confined = match response.get("runtimeWorkspaceRoots") {
+        None | Some(Value::Null) => true,
+        Some(Value::Array(roots)) => {
+            roots.len() <= 1
+                && roots.iter().all(|root| {
+                    root.as_str().is_some_and(|value| {
+                        !value.is_empty()
+                            && value.len() <= 4096
+                            && canonical_paths_equal(Path::new(value), runtime_dir)
+                    })
+                })
+        }
+        _ => false,
+    };
+
+    // App Server can report inherited process-level instruction paths. They are not
+    // project context, so Studio never reads, retains, or forwards them to the WebView.
+    if sandbox != Some("readOnly")
+        || network_access != Some(false)
+        || approval != Some("never")
+        || !canonical_paths_equal(Path::new(returned_cwd), runtime_dir)
+        || !instruction_sources_valid
+        || !runtime_workspace_roots_confined
+    {
+        return Err(RpcFailure::new("codex_readonly_mode_unavailable"));
+    }
+    Ok(thread_id.to_string())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn turn_start_params(
     thread_id: &str,
@@ -2301,21 +2365,7 @@ pub async fn start_readonly_ai_turn(
                 thread_start_params(&model_id, &runtime_dir, &language),
                 RPC_TIMEOUT,
             )?;
-            let id = response
-                .pointer("/thread/id")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty() && value.len() <= 128)
-                .ok_or_else(|| RpcFailure::new("codex_app_server_incompatible"))?;
-            let sandbox = response.pointer("/sandbox/type").and_then(Value::as_str);
-            let approval = response.get("approvalPolicy").and_then(Value::as_str);
-            let instructions_empty = response
-                .get("instructionSources")
-                .and_then(Value::as_array)
-                .is_some_and(Vec::is_empty);
-            if sandbox != Some("readOnly") || approval != Some("never") || !instructions_empty {
-                return Err(RpcFailure::new("codex_readonly_mode_unavailable"));
-            }
-            id.to_string()
+            validate_readonly_thread_response(&response, &runtime_dir)?
         } else {
             existing_thread.expect("existing thread when no replacement is needed")
         };
@@ -3122,6 +3172,76 @@ mod tests {
         assert_eq!(turn["environments"], json!([]));
         assert_eq!(turn["summary"], "none");
         assert_eq!(turn["outputSchema"]["additionalProperties"], false);
+    }
+
+    #[test]
+    fn readonly_thread_response_accepts_inherited_instruction_sources_without_workspace_access() {
+        let root = test_root("readonly-thread-response");
+        let runtime = root.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        let response = json!({
+            "thread": {"id": "thread-1"},
+            "cwd": runtime.to_string_lossy(),
+            "sandbox": {"type": "readOnly", "networkAccess": false},
+            "approvalPolicy": "never",
+            "instructionSources": ["C:\\Users\\test-user\\.codex\\AGENTS.md"],
+            "runtimeWorkspaceRoots": []
+        });
+        assert_eq!(
+            validate_readonly_thread_response(&response, &runtime).unwrap(),
+            "thread-1"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn readonly_thread_response_accepts_only_the_controlled_runtime_workspace_root() {
+        let root = test_root("readonly-thread-response-reject");
+        let runtime = root.join("runtime");
+        let other_runtime = root.join("other-runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        fs::create_dir_all(&other_runtime).unwrap();
+        let base = json!({
+            "thread": {"id": "thread-1"},
+            "cwd": runtime.to_string_lossy(),
+            "sandbox": {"type": "readOnly", "networkAccess": false},
+            "approvalPolicy": "never",
+            "instructionSources": [],
+            "runtimeWorkspaceRoots": []
+        });
+        assert!(validate_readonly_thread_response(&base, &runtime).is_ok());
+
+        let mut with_controlled_runtime_root = base.clone();
+        with_controlled_runtime_root["runtimeWorkspaceRoots"] = json!([runtime.to_string_lossy()]);
+        assert!(validate_readonly_thread_response(&with_controlled_runtime_root, &runtime).is_ok());
+
+        let mut with_workspace_root = base.clone();
+        with_workspace_root["runtimeWorkspaceRoots"] = json!([other_runtime.to_string_lossy()]);
+        assert_eq!(
+            validate_readonly_thread_response(&with_workspace_root, &runtime)
+                .unwrap_err()
+                .code,
+            "codex_readonly_mode_unavailable"
+        );
+
+        let mut mismatched_runtime = base.clone();
+        mismatched_runtime["cwd"] = json!(other_runtime.to_string_lossy());
+        assert_eq!(
+            validate_readonly_thread_response(&mismatched_runtime, &runtime)
+                .unwrap_err()
+                .code,
+            "codex_readonly_mode_unavailable"
+        );
+
+        let mut invalid_instruction_source = base;
+        invalid_instruction_source["instructionSources"] = json!([42]);
+        assert_eq!(
+            validate_readonly_thread_response(&invalid_instruction_source, &runtime)
+                .unwrap_err()
+                .code,
+            "codex_readonly_mode_unavailable"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

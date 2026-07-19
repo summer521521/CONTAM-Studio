@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [Phase 6A Assistant协议修复](records/phase-6a-assistant-protocol-fix.md) | Phase 6A | completed | live |
 | [Phase 6A Codex CLI受控安装](records/phase-6a-codex-cli-install.md) | Phase 6A | completed | live |
 | [Phase 6A Codex只读AI助手](records/phase-6a-codex-readonly-assistant.md) | Phase 6A | completed | live |
 | [Phase 3C草稿副本导出验证修复](records/phase-3c-draft-export-verification-fix.md) | Phase 3C | completed | live |

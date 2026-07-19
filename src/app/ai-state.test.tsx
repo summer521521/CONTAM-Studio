@@ -77,10 +77,58 @@ describe("read-only AI state", () => {
   });
 
   it("invalidates preview and answer when a scope, model, or trusted context changes", () => {
-    const populated = { ...INITIAL_AI_STATE, connection, status: "available" as const, preview, answer: { deterministic_facts: ["x"], interpretation: "y", limitations: [], suggested_questions: [] } };
+    const populated = { ...INITIAL_AI_STATE, connection, status: "available" as const, preview, previewExpanded: true, answer: { deterministic_facts: ["x"], interpretation: "y", limitations: [], suggested_questions: [] } };
     expect(aiReducer(populated, { type: "scope_toggled", scope: "run_summary" }).preview).toBeNull();
     expect(aiReducer(populated, { type: "model_changed", modelId: "model-a", effort: "high" }).answer).toBeNull();
     expect(aiReducer(populated, { type: "context_changed" }).question).toBe("");
+  });
+
+  it("collapses a confirmed preview without invalidating the approved disclosure", () => {
+    const previewing = aiReducer(
+      { ...INITIAL_AI_STATE, activeRequestId: "preview-1" },
+      { type: "preview_succeeded", requestId: "preview-1", preview },
+    );
+    expect(previewing.previewExpanded).toBe(true);
+    const collapsed = aiReducer(previewing, { type: "preview_visibility_toggled" });
+    expect(collapsed.preview).toEqual(preview);
+    expect(collapsed.previewExpanded).toBe(false);
+    expect(aiReducer(collapsed, { type: "preview_visibility_toggled" }).previewExpanded).toBe(true);
+  });
+
+  it("keeps a confirmed preview eligible for sending after it is collapsed", () => {
+    const html = renderToStaticMarkup(
+      <CodexAssistantPanel
+        state={{
+          ...INITIAL_AI_STATE,
+          status: "available",
+          connection,
+          modelId: "model-a",
+          reasoningEffort: "low",
+          preview,
+          previewExpanded: false,
+          question: "Explain this Zone.",
+        }}
+        contextAvailable
+        onConnect={() => undefined}
+        onInstall={() => undefined}
+        onRefresh={() => undefined}
+        onDisconnect={() => undefined}
+        onScopeToggle={() => undefined}
+        onModelChange={() => undefined}
+        onEffortChange={() => undefined}
+        onPreview={() => undefined}
+        onQuestionChange={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+        onClear={() => undefined}
+      />,
+    );
+    expect(html).toContain("Preview context to be sent");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("This context is confirmed. You can hide the preview and send your question.");
+    expect(html).not.toContain("Structured context preview");
+    expect(html).toContain(">Send<");
+    expect(html).not.toContain("disabled=\"\"");
   });
 
   it("ignores stale connection and turn responses", () => {
@@ -113,6 +161,7 @@ describe("read-only AI state", () => {
           modelId: "model-a",
           reasoningEffort: "low",
           preview,
+          previewExpanded: true,
           answer: { deterministic_facts: ["Volume is 600 m3."], interpretation: "Large volume.", limitations: ["No full series."], suggested_questions: [] },
         }}
         contextAvailable
@@ -185,6 +234,7 @@ describe("read-only AI state", () => {
           modelId: "model-a",
           reasoningEffort: "low",
           preview,
+          previewExpanded: true,
           question: "Explain this Zone.",
         }}
         contextAvailable
@@ -228,7 +278,7 @@ describe("read-only AI state", () => {
     await i18n.changeLanguage("zh-CN");
     const html = renderToStaticMarkup(
       <CodexAssistantPanel
-        state={{ ...INITIAL_AI_STATE, status: "available", connection, preview }}
+        state={{ ...INITIAL_AI_STATE, status: "available", connection, preview, previewExpanded: true }}
         contextAvailable
         onConnect={() => undefined}
         onInstall={() => undefined}

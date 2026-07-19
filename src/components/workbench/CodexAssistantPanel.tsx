@@ -23,6 +23,7 @@ interface CodexAssistantPanelProps {
   onModelChange: (modelId: string) => void;
   onEffortChange: (effort: string) => void;
   onPreview: () => void;
+  onPreviewVisibilityToggle?: () => void;
   onQuestionChange: (question: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -40,6 +41,7 @@ export function CodexAssistantPanel({
   onModelChange,
   onEffortChange,
   onPreview,
+  onPreviewVisibilityToggle = () => undefined,
   onQuestionChange,
   onSend,
   onStop,
@@ -167,14 +169,19 @@ export function CodexAssistantPanel({
           <button
             type="button"
             className="secondary-action assistant-wide-action"
-            onClick={onPreview}
-            disabled={!ready || !contextAvailable || state.scopes.length === 0}
+            onClick={state.preview ? onPreviewVisibilityToggle : onPreview}
+            disabled={!state.preview && (!ready || !contextAvailable || state.scopes.length === 0)}
+            aria-expanded={state.preview ? state.previewExpanded : false}
+            aria-controls="ai-context-preview"
           >
-            <Eye size={15} />{t("assistant.previewContext")}
+            <Eye size={15} />{t(state.previewExpanded ? "assistant.hidePreview" : "assistant.previewContext")}
           </button>
+          <p className="assistant-safe-note">
+            {state.preview ? t("assistant.previewConfirmed") : t("assistant.previewRequired")}
+          </p>
 
-          {state.preview ? (
-            <section className="assistant-preview" aria-labelledby="ai-context-preview-title">
+          {state.preview && state.previewExpanded ? (
+            <section id="ai-context-preview" className="assistant-preview" aria-labelledby="ai-context-preview-title">
               <h3 id="ai-context-preview-title">{t("assistant.previewTitle")}</h3>
               <dl>
                 <div><dt>{t("assistant.boundRevision")}</dt><dd>{state.preview.revision_number}</dd></div>

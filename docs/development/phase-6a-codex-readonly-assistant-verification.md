@@ -14,16 +14,21 @@
 
 ## 自动验证
 
-- Rust：`56 passed, 1 ignored`；`cargo fmt --check`和`cargo check`通过。新增覆盖环境变量、官方用户安装位置和PATH优先级、固定安装入口与脚本哈希、超时和错误映射、安装响应路径隔离、显式ACL；原有账号、模型、JSONL、只读Thread/Turn、上下文绑定、工具拦截和连接清理回归保持。
-- 前端：Vitest `11 files, 115 tests passed`；TypeScript和Vite生产构建通过。新增覆盖安装状态、缺失提醒、双语确认文案及只含`request_id`的桌面API；原有模型、范围、Rust预览、生成/停止和结构化回答回归保持。
+- Rust：`58 passed, 1 ignored`；`cargo fmt --check`和`cargo check`通过。新增覆盖环境变量、官方用户安装位置和PATH优先级、固定安装入口与脚本哈希、超时和错误映射、安装响应路径隔离、显式ACL，以及继承指令来源和受控运行根的只读Thread响应；原有账号、模型、JSONL、只读Thread/Turn、上下文绑定、工具拦截和连接清理回归保持。
+- 前端：Vitest `11 files, 117 tests passed`；TypeScript和Vite生产构建通过。新增覆盖安装状态、缺失提醒、双语确认文案、已确认预览的收起/展开及收起后仍可发送；原有模型、范围、Rust预览、生成/停止和结构化回答回归保持。
 - Python：`266 passed`；Ruff通过。AI没有增加Python文件读取接口，既有Zone、Patch、ContamX、SimRead和结果回归保持通过。
-- 通用：62个Markdown文件相对链接、8个已跟踪JSON、pnpm与Cargo锁、依赖清单和`git diff --check`通过。Phase 6A没有新增依赖。
+- 通用：63个Markdown文件相对链接、8个已跟踪JSON、pnpm冻结锁校验、Cargo锁元数据、依赖清单和`git diff --check`通过。Phase 6A没有新增依赖。
 
 ## 真实Codex探测
 
 当前机器已安装OpenAI官方独立Codex CLI，真实`codex --version`返回`codex-cli 0.144.6`。Studio的新发现顺序会在未设置`CONTAM_STUDIO_CODEX`时优先采用精确的当前用户官方安装位置，避免Microsoft Store WindowsApps入口抢先命中；WebView仍只收到版本和`official_install`来源，不收到实际路径或文件哈希。
 
-真实App Server验证完成`initialize`、`initialized`、`account/read`和`model/list`：账号为已认证ChatGPT Plus；服务端返回4个可用模型，其中`gpt-5.6-sol`为默认模型，推理强度保持服务端返回顺序。真实只读Thread确认`readOnly`、网络工具关闭和`never`审批；最小官方fixture Zone上下文得到四字段Schema回答，无命令、文件、审批或其他工具事件，回答不含项目路径。第二个Turn在中断请求到达前已经自行完成，因此本次不能把真实`turn/interrupt`写成已验证中断成功；Fake App Server回归继续覆盖中断协议。
+真实App Server验证完成`initialize`、`initialized`、`account/read`和`model/list`：账号为已认证ChatGPT Plus；服务端返回4个可用模型，其中`gpt-5.6-sol`为默认模型，推理强度保持服务端返回顺序。真实只读Thread确认`readOnly`、`networkAccess=false`和`never`审批；最小官方fixture Zone上下文得到四字段Schema回答，无命令、文件、审批或其他工具事件，回答不含项目路径。第二个Turn在中断请求到达前已经自行完成，因此本次不能把真实`turn/interrupt`写成已验证中断成功；Fake App Server回归继续覆盖中断协议。
+
+## 后续协议与预览修正
+
+- 已安装CLI `0.144.6`的Thread响应会报告继承的进程级指令来源，并将受控空AI目录报告为唯一`runtimeWorkspaceRoots`项。前者不是项目上下文；Rust只验证其为有界字符串数组，绝不读取、保留或暴露路径或内容。后者只允许为空或唯一等于Rust创建的受控空目录；仍要求`readOnly`、`networkAccess=false`和`never`，其他根目录一律拒绝。
+- 已确认的结构化上下文预览现在可以显式收起和再次展开，收起不会改变`preview_id`或使发送资格失效；项目、Revision、Zone、模型、推理强度或范围变化仍会使其失效。
 
 本次未重新执行一键安装，因为当前官方CLI已经可用，避免无意义地修改用户安装。重新下载的官方`install.ps1`为30133字节，SHA-256为`95923C2AC60B963C95435AAEAEFEAAB3CBC01559E21FCE1FA501EE1F9793AC0E`，与生产锁定值一致。真实验证未提升权限、未修改`PATH`、未读取`.codex`、未发起登录、未发送用户科研项目，也未运行ContamX。
 

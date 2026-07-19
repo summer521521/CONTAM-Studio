@@ -53,11 +53,11 @@ Phase 6A只处理初始化、账号读取、模型目录、Thread/Turn、Turn中
 - `result_summary`：当前Zone结果首末样本、范围和样本数；
 - `diagnostics`：白名单诊断码、清理文案和来源行号。
 
-默认仅选择`selected_zone`和`draft_summary`。不发送路径、PRJ正文、内部快照、manifest、SIM、日志或完整577条样本。React先请求Rust生成最终预览；预览绑定项目session、Revision、Zone、范围、语言、模型和推理强度。任一维度变化都会使预览与旧Thread失效，必须重新预览。
+默认仅选择`selected_zone`和`draft_summary`。不发送路径、PRJ正文、内部快照、manifest、SIM、日志或完整577条样本。React先请求Rust生成最终预览；预览绑定项目session、Revision、Zone、范围、语言、模型和推理强度。确认后的预览可在界面收起而不失效；任一绑定维度变化仍会使预览与旧Thread失效，必须重新预览。
 
 ## 只读Thread与回答
 
-Thread使用受控空目录、`read-only`沙箱、`never`审批、临时会话、空MCP和动态工具集合；Turn再次指定只读且禁用网络工具。若服务端不能确认只读沙箱与`never`审批，返回`codex_readonly_mode_unavailable`，不会降级到可写权限。
+Thread使用受控空目录、`read-only`沙箱、`never`审批、临时会话、空MCP和动态工具集合；Turn再次指定只读且禁用网络工具。Rust要求Thread响应确认`readOnly`、`networkAccess=false`、`never`审批和受控`cwd`；`runtimeWorkspaceRoots`只能为空或唯一等于该受控空目录，不能包含项目、草稿、运行或结果目录。App Server可能单独报告继承的进程级指令来源；这些不是Studio披露的项目上下文，Studio不读取其内容，也不将路径或内容发送到WebView或用户消息。若服务端不能确认上述只读契约，返回`codex_readonly_mode_unavailable`，不会降级到可写权限。
 
 系统指令要求只依据披露上下文，不读取文件、不运行命令、不修改项目、不运行ContamX、不创建Patch，也不声称分析未发送的数据。回答必须精确匹配四字段Schema：
 

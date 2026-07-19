@@ -28,6 +28,7 @@ interface ContextSidebarProps {
   onAiModelChange?: (modelId: string) => void;
   onAiEffortChange?: (effort: string) => void;
   onAiPreview?: () => void;
+  onAiPreviewVisibilityToggle?: () => void;
   onAiQuestionChange?: (question: string) => void;
   onAiSend?: () => void;
   onAiStop?: () => void;
@@ -56,6 +57,7 @@ export function ContextSidebar({
   onAiModelChange = () => undefined,
   onAiEffortChange = () => undefined,
   onAiPreview = () => undefined,
+  onAiPreviewVisibilityToggle = () => undefined,
   onAiQuestionChange = () => undefined,
   onAiSend = () => undefined,
   onAiStop = () => undefined,
@@ -211,6 +213,7 @@ export function ContextSidebar({
           onModelChange={onAiModelChange}
           onEffortChange={onAiEffortChange}
           onPreview={onAiPreview}
+          onPreviewVisibilityToggle={onAiPreviewVisibilityToggle}
           onQuestionChange={onAiQuestionChange}
           onSend={onAiSend}
           onStop={onAiStop}

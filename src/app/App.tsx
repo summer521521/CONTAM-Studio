@@ -1064,6 +1064,7 @@ function App() {
               onAiModelChange={changeAiModel}
               onAiEffortChange={changeAiEffort}
               onAiPreview={() => void previewContext()}
+              onAiPreviewVisibilityToggle={() => dispatchAi({ type: "preview_visibility_toggled" })}
               onAiQuestionChange={(question) => dispatchAi({ type: "question_changed", question })}
               onAiSend={() => void sendAiQuestion()}
               onAiStop={() => void stopAiTurn()}

@@ -136,6 +136,7 @@ export interface AiState {
   modelId: string;
   reasoningEffort: string;
   preview: AiContextDisclosureView | null;
+  previewExpanded: boolean;
   question: string;
   answer: StructuredAiAnswer | null;
   tokenUsage: AiTokenUsageView | null;
@@ -152,6 +153,7 @@ export const INITIAL_AI_STATE: AiState = {
   modelId: "",
   reasoningEffort: "",
   preview: null,
+  previewExpanded: false,
   question: "",
   answer: null,
   tokenUsage: null,
@@ -170,6 +172,7 @@ export type AiAction =
   | { type: "effort_changed"; effort: string }
   | { type: "preview_started"; requestId: string }
   | { type: "preview_succeeded"; requestId: string; preview: AiContextDisclosureView }
+  | { type: "preview_visibility_toggled" }
   | { type: "question_changed"; question: string }
   | { type: "turn_started"; requestId: string }
   | { type: "turn_succeeded"; requestId: string; answer: StructuredAiAnswer; tokenUsage: AiTokenUsageView | null }
@@ -218,17 +221,19 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
       const scopes = state.scopes.includes(action.scope)
         ? state.scopes.filter((scope) => scope !== action.scope)
         : [...state.scopes, action.scope];
-      return { ...state, scopes, preview: null, answer: null, tokenUsage: null, issue: null };
+      return { ...state, scopes, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
     }
     case "model_changed":
-      return { ...state, modelId: action.modelId, reasoningEffort: action.effort, preview: null, answer: null, tokenUsage: null, issue: null };
+      return { ...state, modelId: action.modelId, reasoningEffort: action.effort, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
     case "effort_changed":
-      return { ...state, reasoningEffort: action.effort, preview: null, answer: null, tokenUsage: null, issue: null };
+      return { ...state, reasoningEffort: action.effort, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
     case "preview_started":
-      return { ...state, activeRequestId: action.requestId, preview: null, answer: null, tokenUsage: null, issue: null };
+      return { ...state, activeRequestId: action.requestId, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
     case "preview_succeeded":
       if (state.activeRequestId !== action.requestId) return state;
-      return { ...state, status: "available", activeRequestId: null, preview: action.preview, answer: null, tokenUsage: null, issue: null };
+      return { ...state, status: "available", activeRequestId: null, preview: action.preview, previewExpanded: true, answer: null, tokenUsage: null, issue: null };
+    case "preview_visibility_toggled":
+      return state.preview ? { ...state, previewExpanded: !state.previewExpanded } : state;
     case "question_changed":
       return { ...state, question: action.question };
     case "turn_started":
@@ -241,9 +246,9 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
     case "turn_interrupted":
       return { ...state, status: "available", activeRequestId: null, answer: null, tokenUsage: null, issue: null };
     case "context_changed":
-      return { ...state, preview: null, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
+      return { ...state, preview: null, previewExpanded: false, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
     case "session_cleared":
-      return { ...state, preview: null, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
+      return { ...state, preview: null, previewExpanded: false, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
     case "disconnected":
       return {
         ...INITIAL_AI_STATE,
