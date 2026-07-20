@@ -6,6 +6,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(zone_bridge::DesktopProjectSessionStore::default())
         .manage(codex_app_server::CodexAssistantStore::default())
+        .manage(codex_app_server::AiConversationArchiveStore::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             zone_bridge::select_and_read_prj_zones,
@@ -24,6 +25,11 @@ pub fn run() {
             codex_app_server::refresh_codex_account,
             codex_app_server::preview_ai_context,
             codex_app_server::start_readonly_ai_turn,
+            codex_app_server::load_ai_conversation_archive,
+            codex_app_server::set_ai_conversation_archive_enabled,
+            codex_app_server::delete_ai_conversation_archive_entry,
+            codex_app_server::clear_ai_conversation_archive_for_zone,
+            codex_app_server::clear_all_ai_conversation_archive,
             codex_app_server::interrupt_readonly_ai_turn,
             codex_app_server::clear_readonly_ai_session,
             codex_app_server::disconnect_codex_app_server

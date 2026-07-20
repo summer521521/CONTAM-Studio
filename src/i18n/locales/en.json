@@ -158,6 +158,25 @@
     "limitations": "Limitations",
     "suggestedQuestions": "Suggested questions",
     "factsCaveat": "These facts are the model's restatement of disclosed data and do not replace the application's deterministic panels.",
+    "archive": {
+      "title": "Local conversation archive",
+      "localOnly": "Saved only on this device after you opt in. Saved exchanges are never automatically added to a future model request.",
+      "enable": "Save completed answers locally",
+      "disable": "Stop saving new answers",
+      "loading": "Loading local conversation archive...",
+      "enabledNotice": "New completed structured answers are saved locally for this Zone and its revision history. They are not sent back to Codex automatically.",
+      "consentNotice": "Automatic local saving is off. Turn it on only if you want completed answers to persist after restart.",
+      "empty": "No locally saved completed answers for this Zone yet.",
+      "clearZone": "Delete this Zone's archive",
+      "clearAll": "Delete all local archives",
+      "confirmZone": "Delete every locally saved answer for this project baseline and Zone? This cannot be undone.",
+      "confirmAll": "Delete every locally saved AI answer on this device? This cannot be undone.",
+      "confirmDelete": "Delete permanently",
+      "entryTitle": "Saved answer from Revision {{revision}}",
+      "historical": "historical revision",
+      "deleteEntry": "Delete saved answer",
+      "notReused": "This archived answer is shown only locally and is not added automatically to new AI context."
+    },
     "status": {
       "probing": "Checking Codex CLI",
       "disabled": "Codex CLI not detected, AI not connected",
@@ -523,6 +542,11 @@
       "ai_response_too_large": "The AI answer exceeded its size limit",
       "ai_protocol_message_invalid": "A Codex protocol message was invalid",
       "ai_protocol_message_too_large": "A Codex protocol message exceeded its size limit",
+      "ai_archive_unavailable": "The local conversation archive is unavailable",
+      "ai_archive_write_failed": "The local conversation archive could not be updated",
+      "ai_archive_entry_not_found": "The selected local conversation archive entry is no longer available",
+      "ai_conversation_archive_invalid": "The local conversation archive is invalid",
+      "ai_conversation_archive_unavailable": "The local conversation archive is unavailable",
       "unknown": "Unknown project read error"
     }
   },

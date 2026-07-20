@@ -4,14 +4,14 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
@@ -37,7 +37,13 @@ const MAX_CONTEXT_BYTES: usize = 32 * 1024;
 const MAX_QUESTION_CHARS: usize = 2_000;
 const MAX_AGENT_RESPONSE_CHARS: usize = 24_000;
 const MAX_RESPONSE_ITEM_CHARS: usize = 1_200;
+const MAX_ARCHIVE_FILE_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES: usize = 200;
 const CONTEXT_FINGERPRINT_NAMESPACE: Uuid = Uuid::from_u128(0x4bf2190f_8f82_56aa_9720_19aa44ab2a6d);
+const AI_CONVERSATION_ARCHIVE_NAMESPACE: Uuid =
+    Uuid::from_u128(0x05d637d2_faaa_5f3e_8a40_f657c1f755e3);
+const AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION: &str = "1.0";
+static ARCHIVE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 const ALL_CONTEXT_SCOPES: [&str; 6] = [
     "project_summary",
     "selected_zone",
@@ -187,7 +193,92 @@ pub struct DesktopAiTurnResponse {
     status: String,
     answer: Option<StructuredAiAnswer>,
     token_usage: Option<AiTokenUsageView>,
+    archive: AiArchiveSaveView,
     error: Option<AiDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AiArchiveSaveView {
+    saved: bool,
+    entry_id: Option<String>,
+    warning: Option<AiDiagnostic>,
+}
+
+impl Default for AiArchiveSaveView {
+    fn default() -> Self {
+        Self {
+            saved: false,
+            entry_id: None,
+            warning: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AiArchivedConversationEntryView {
+    entry_id: String,
+    revision_id: String,
+    revision_number: u64,
+    zone_id: String,
+    zone_name: String,
+    language: String,
+    model_id: String,
+    reasoning_effort: String,
+    included_scopes: Vec<String>,
+    completed_at_unix_ms: u64,
+    is_current_revision: bool,
+    question: String,
+    answer: StructuredAiAnswer,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AiConversationArchiveView {
+    persistence_enabled: bool,
+    entries: Vec<AiArchivedConversationEntryView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopAiConversationArchiveResponse {
+    request_id: String,
+    archive: Option<AiConversationArchiveView>,
+    error: Option<AiDiagnostic>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AiConversationArchiveFile {
+    schema_version: String,
+    persistence_enabled: bool,
+    entries: Vec<StoredAiConversationArchiveEntry>,
+}
+
+impl Default for AiConversationArchiveFile {
+    fn default() -> Self {
+        Self {
+            schema_version: AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION.to_string(),
+            persistence_enabled: false,
+            entries: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredAiConversationArchiveEntry {
+    entry_id: String,
+    baseline_source_sha256: String,
+    revision_id: String,
+    revision_number: u64,
+    zone_id: String,
+    zone_name: String,
+    context_fingerprint: String,
+    language: String,
+    model_id: String,
+    reasoning_effort: String,
+    included_scopes: Vec<String>,
+    completed_at_unix_ms: u64,
+    question: String,
+    answer: StructuredAiAnswer,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -339,6 +430,13 @@ pub struct CodexAssistantStore {
     // Keep an incomplete close alive so a child handle and its stream threads
     // are not detached while the controlled runtime directory is still live.
     retired_connections: Mutex<Vec<Arc<AppServerConnection>>>,
+}
+
+/// Serializes short, controlled local archive operations. The archive never
+/// stores project files, App Server protocol traffic, credentials, or paths.
+#[derive(Default)]
+pub struct AiConversationArchiveStore {
+    operation_gate: Mutex<()>,
 }
 
 impl CodexAssistantStore {
@@ -1644,6 +1742,437 @@ fn context_fingerprint(
     Ok(Uuid::new_v5(&CONTEXT_FINGERPRINT_NAMESPACE, &bytes).to_string())
 }
 
+fn archive_response_failure(
+    request_id: String,
+    error: AiDiagnostic,
+) -> DesktopAiConversationArchiveResponse {
+    DesktopAiConversationArchiveResponse {
+        request_id,
+        archive: None,
+        error: Some(error),
+    }
+}
+
+fn archive_action_failure(request_id: String, error: AiDiagnostic) -> DesktopAiActionResponse {
+    DesktopAiActionResponse {
+        request_id,
+        status: "error".to_string(),
+        error: Some(error),
+    }
+}
+
+fn archive_error(code: &str, message: &str) -> AiDiagnostic {
+    AiDiagnostic::new(code, message)
+}
+
+fn safe_archive_text(value: &str, maximum: usize) -> bool {
+    !value.is_empty()
+        && value.chars().count() <= maximum
+        && !value.chars().any(char::is_control)
+        && !contains_sensitive_path(value)
+}
+
+/// Archive content is deliberately stricter than a transient model response:
+/// local history must never become another place for a user path to persist.
+fn contains_sensitive_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    value.contains("\\\\")
+        || value.to_ascii_lowercase().contains("file://")
+        || bytes.windows(3).any(|window| {
+            window[0].is_ascii_alphabetic()
+                && window[1] == b':'
+                && matches!(window[2], b'\\' | b'/')
+        })
+}
+
+fn safe_archive_answer(answer: &StructuredAiAnswer) -> bool {
+    answer
+        .deterministic_facts
+        .iter()
+        .all(|item| safe_archive_text(item, MAX_RESPONSE_ITEM_CHARS))
+        && safe_archive_text(&answer.interpretation, MAX_AGENT_RESPONSE_CHARS)
+        && answer
+            .limitations
+            .iter()
+            .all(|item| safe_archive_text(item, MAX_RESPONSE_ITEM_CHARS))
+        && answer
+            .suggested_questions
+            .iter()
+            .all(|item| safe_archive_text(item, MAX_RESPONSE_ITEM_CHARS))
+}
+
+fn safe_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn archive_file_path(app: &AppHandle) -> Result<PathBuf, AiDiagnostic> {
+    app.path()
+        .app_local_data_dir()
+        .map(|path| {
+            path.join("ai")
+                .join("conversation-archive")
+                .join("archive.json")
+        })
+        .map_err(|_| {
+            archive_error(
+                "ai_archive_unavailable",
+                "The controlled local conversation archive is unavailable.",
+            )
+        })
+}
+
+fn validate_archive_entry(entry: &StoredAiConversationArchiveEntry) -> Result<(), AiDiagnostic> {
+    if Uuid::parse_str(&entry.entry_id).is_err()
+        || !safe_sha256(&entry.baseline_source_sha256)
+        || Uuid::parse_str(&entry.revision_id).is_err()
+        || Uuid::parse_str(&entry.zone_id).is_err()
+        || Uuid::parse_str(&entry.context_fingerprint).is_err()
+        || !safe_language(&entry.language)
+        || !safe_archive_text(&entry.zone_name, 256)
+        || !safe_archive_text(&entry.model_id, 160)
+        || !safe_archive_text(&entry.reasoning_effort, 80)
+        || !safe_archive_text(&entry.question, MAX_QUESTION_CHARS)
+        || entry.included_scopes.is_empty()
+    {
+        return Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive contains invalid data.",
+        ));
+    }
+    let scopes = canonical_scopes(entry.included_scopes.clone()).map_err(|_| {
+        archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive contains invalid context scopes.",
+        )
+    })?;
+    if scopes != entry.included_scopes {
+        return Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive contains invalid context scopes.",
+        ));
+    }
+    validate_answer(entry.answer.clone()).map_err(|_| {
+        archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive contains an invalid AI answer.",
+        )
+    })?;
+    if !safe_archive_answer(&entry.answer) {
+        return Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive contains unsafe answer content.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_archive_file(archive: &AiConversationArchiveFile) -> Result<(), AiDiagnostic> {
+    if archive.schema_version != AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION
+        || archive.entries.len() > MAX_ARCHIVE_ENTRIES
+    {
+        return Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive format is unsupported.",
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for entry in &archive.entries {
+        validate_archive_entry(entry)?;
+        if !seen.insert(entry.entry_id.as_str()) {
+            return Err(archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive contains duplicate entries.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn read_archive_file(path: &Path) -> Result<AiConversationArchiveFile, AiDiagnostic> {
+    if !path.exists() {
+        return Ok(AiConversationArchiveFile::default());
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|_| {
+        archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive could not be read.",
+        )
+    })?;
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || metadata.len() > MAX_ARCHIVE_FILE_BYTES
+    {
+        return Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive is unavailable.",
+        ));
+    }
+    let bytes = fs::read(path).map_err(|_| {
+        archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive could not be read.",
+        )
+    })?;
+    let archive: AiConversationArchiveFile = serde_json::from_slice(&bytes).map_err(|_| {
+        archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive is invalid.",
+        )
+    })?;
+    validate_archive_file(&archive)?;
+    Ok(archive)
+}
+
+fn write_archive_file(
+    path: &Path,
+    archive: &AiConversationArchiveFile,
+) -> Result<(), AiDiagnostic> {
+    validate_archive_file(archive)?;
+    let parent = path.parent().ok_or_else(|| {
+        archive_error(
+            "ai_archive_write_failed",
+            "The local conversation archive destination is invalid.",
+        )
+    })?;
+    fs::create_dir_all(parent).map_err(|_| {
+        archive_error(
+            "ai_archive_write_failed",
+            "The controlled local conversation archive could not be created.",
+        )
+    })?;
+    let bytes = serde_json::to_vec_pretty(archive).map_err(|_| {
+        archive_error(
+            "ai_archive_write_failed",
+            "The local conversation archive could not be serialized.",
+        )
+    })?;
+    if bytes.len() as u64 > MAX_ARCHIVE_FILE_BYTES {
+        return Err(archive_error(
+            "ai_archive_write_failed",
+            "The local conversation archive exceeded its safe size limit.",
+        ));
+    }
+    let temporary_sequence = ARCHIVE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let temporary_timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let temporary = parent.join(format!(
+        ".archive-{}-{}-{}.tmp",
+        std::process::id(),
+        temporary_timestamp,
+        temporary_sequence
+    ));
+    let write_result = (|| -> Result<(), AiDiagnostic> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|_| {
+                archive_error(
+                    "ai_archive_write_failed",
+                    "The local conversation archive could not be written.",
+                )
+            })?;
+        file.write_all(&bytes).map_err(|_| {
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive could not be written.",
+            )
+        })?;
+        file.sync_all().map_err(|_| {
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive could not be synchronized.",
+            )
+        })?;
+        fs::rename(&temporary, path).map_err(|_| {
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive could not be finalized.",
+            )
+        })?;
+        Ok(())
+    })();
+    if write_result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    write_result
+}
+
+fn archive_view_for_context(
+    archive: &AiConversationArchiveFile,
+    trusted: &AiTrustedContext,
+) -> AiConversationArchiveView {
+    let mut entries: Vec<_> = archive
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry
+                .baseline_source_sha256
+                .eq_ignore_ascii_case(&trusted.baseline_source_sha256)
+                && entry.zone_id == trusted.zone_id
+        })
+        .map(|entry| AiArchivedConversationEntryView {
+            entry_id: entry.entry_id.clone(),
+            revision_id: entry.revision_id.clone(),
+            revision_number: entry.revision_number,
+            zone_id: entry.zone_id.clone(),
+            zone_name: entry.zone_name.clone(),
+            language: entry.language.clone(),
+            model_id: entry.model_id.clone(),
+            reasoning_effort: entry.reasoning_effort.clone(),
+            included_scopes: entry.included_scopes.clone(),
+            completed_at_unix_ms: entry.completed_at_unix_ms,
+            is_current_revision: entry.revision_id == trusted.revision_id,
+            question: entry.question.clone(),
+            answer: entry.answer.clone(),
+        })
+        .collect();
+    entries.sort_by(|left, right| right.completed_at_unix_ms.cmp(&left.completed_at_unix_ms));
+    AiConversationArchiveView {
+        persistence_enabled: archive.persistence_enabled,
+        entries,
+    }
+}
+
+fn archive_now_unix_ms() -> Result<u64, AiDiagnostic> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| {
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive timestamp is unavailable.",
+            )
+        })
+        .map(|duration| duration.as_millis().try_into().unwrap_or(u64::MAX))
+}
+
+fn archive_save_completed_turn(
+    store: &AiConversationArchiveStore,
+    path: &Path,
+    trusted: &AiTrustedContext,
+    preview: &AiContextDisclosureView,
+    language: &str,
+    model_id: &str,
+    reasoning_effort: &str,
+    question: &str,
+    answer: &StructuredAiAnswer,
+) -> AiArchiveSaveView {
+    let _gate = store
+        .operation_gate
+        .lock()
+        .expect("AI conversation archive mutex poisoned");
+    let result = (|| -> Result<Option<String>, AiDiagnostic> {
+        let mut archive = read_archive_file(path)?;
+        if !archive.persistence_enabled {
+            return Ok(None);
+        }
+        let completed_at_unix_ms = archive_now_unix_ms()?;
+        let sequence = ARCHIVE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let entry_id = Uuid::new_v5(
+            &AI_CONVERSATION_ARCHIVE_NAMESPACE,
+            format!(
+                "{}:{}:{}:{}:{}:{}",
+                trusted.baseline_source_sha256,
+                trusted.revision_id,
+                trusted.zone_id,
+                preview.context_fingerprint,
+                completed_at_unix_ms,
+                sequence,
+            )
+            .as_bytes(),
+        )
+        .to_string();
+        let entry = StoredAiConversationArchiveEntry {
+            entry_id: entry_id.clone(),
+            baseline_source_sha256: trusted.baseline_source_sha256.clone(),
+            revision_id: trusted.revision_id.clone(),
+            revision_number: trusted.revision_number,
+            zone_id: trusted.zone_id.clone(),
+            zone_name: trusted.zone_name.clone(),
+            context_fingerprint: preview.context_fingerprint.clone(),
+            language: language.to_string(),
+            model_id: model_id.to_string(),
+            reasoning_effort: reasoning_effort.to_string(),
+            included_scopes: preview.included_scopes.clone(),
+            completed_at_unix_ms,
+            question: question.trim().to_string(),
+            answer: answer.clone(),
+        };
+        validate_archive_entry(&entry)?;
+        archive.entries.push(entry);
+        if archive.entries.len() > MAX_ARCHIVE_ENTRIES {
+            let excess = archive.entries.len() - MAX_ARCHIVE_ENTRIES;
+            archive.entries.drain(0..excess);
+        }
+        write_archive_file(path, &archive)?;
+        Ok(Some(entry_id))
+    })();
+    match result {
+        Ok(Some(entry_id)) => AiArchiveSaveView {
+            saved: true,
+            entry_id: Some(entry_id),
+            warning: None,
+        },
+        Ok(None) => AiArchiveSaveView::default(),
+        Err(error) => AiArchiveSaveView {
+            saved: false,
+            entry_id: None,
+            warning: Some(error),
+        },
+    }
+}
+
+async fn persist_completed_ai_answer(
+    app: &AppHandle,
+    trusted: AiTrustedContext,
+    preview: AiContextDisclosureView,
+    language: String,
+    model_id: String,
+    reasoning_effort: String,
+    question: String,
+    answer: StructuredAiAnswer,
+) -> AiArchiveSaveView {
+    let path = match archive_file_path(app) {
+        Ok(path) => path,
+        Err(error) => {
+            return AiArchiveSaveView {
+                saved: false,
+                entry_id: None,
+                warning: Some(error),
+            }
+        }
+    };
+    let app_for_task = app.clone();
+    match tauri::async_runtime::spawn_blocking(move || {
+        let store = app_for_task.state::<AiConversationArchiveStore>();
+        archive_save_completed_turn(
+            &store,
+            &path,
+            &trusted,
+            &preview,
+            &language,
+            &model_id,
+            &reasoning_effort,
+            &question,
+            &answer,
+        )
+    })
+    .await
+    {
+        Ok(view) => view,
+        Err(_) => AiArchiveSaveView {
+            saved: false,
+            entry_id: None,
+            warning: Some(archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive task failed.",
+            )),
+        },
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn preview_matches_turn(
     preview: &AiPreviewRecord,
@@ -2077,6 +2606,7 @@ fn turn_failure(request_id: String, error: AiDiagnostic) -> DesktopAiTurnRespons
         status: "error".to_string(),
         answer: None,
         token_usage: None,
+        archive: AiArchiveSaveView::default(),
         error: Some(error),
     }
 }
@@ -2925,6 +3455,12 @@ pub async fn start_readonly_ai_turn(
             AiDiagnostic::new("ai_context_stale", "The AI context changed after preview."),
         );
     }
+    let archive_trusted = preview.trusted.clone();
+    let archive_preview = preview.view.clone();
+    let archive_language = language.clone();
+    let archive_model_id = model_id.clone();
+    let archive_reasoning_effort = reasoning_effort.clone();
+    let archive_question = question.clone();
     let binding = AiThreadBinding {
         project_session_id,
         revision_id,
@@ -2938,6 +3474,10 @@ pub async fn start_readonly_ai_turn(
     let runtime_dir = connection.runtime_dir.clone();
     let request_for_task = request_id.clone();
     let context_payload = preview.view.payload.clone();
+    let model_for_task = model_id.clone();
+    let language_for_task = language.clone();
+    let reasoning_effort_for_task = reasoning_effort.clone();
+    let question_for_task = question.clone();
     let cancellation = Arc::new(AtomicBool::new(false));
     let interrupt_requested = Arc::new(AtomicBool::new(false));
     let turn_epoch = {
@@ -2987,7 +3527,7 @@ pub async fn start_readonly_ai_turn(
             let response = connection_for_task
                 .request(
                     "thread/start",
-                    thread_start_params(&model_id, &runtime_dir, &language),
+                    thread_start_params(&model_for_task, &runtime_dir, &language_for_task),
                     RPC_TIMEOUT,
                 )
                 .map_err(TurnStartFailure::before_turn)?;
@@ -2999,7 +3539,7 @@ pub async fn start_readonly_ai_turn(
         let user_payload = json!({
             "instruction": "Answer only from this disclosed CONTAM Studio context. Do not use tools or access files.",
             "context": context_payload,
-            "question": question,
+            "question": question_for_task,
         });
         let user_text = serde_json::to_string(&user_payload).map_err(|_| {
             TurnStartFailure::before_turn(RpcFailure::new("ai_turn_start_failed"))
@@ -3011,8 +3551,8 @@ pub async fn start_readonly_ai_turn(
                     &thread_id,
                     &request_for_task,
                     &user_text,
-                    &model_id,
-                    &reasoning_effort,
+                    &model_for_task,
+                    &reasoning_effort_for_task,
                 ),
                 RPC_TIMEOUT,
             )
@@ -3281,11 +3821,23 @@ pub async fn start_readonly_ai_turn(
                         .lock()
                         .expect("Codex assistant mutex poisoned")
                         .token_usage = token_usage.clone();
+                    let archive = persist_completed_ai_answer(
+                        &app,
+                        archive_trusted,
+                        archive_preview,
+                        archive_language,
+                        archive_model_id,
+                        archive_reasoning_effort,
+                        archive_question,
+                        answer.clone(),
+                    )
+                    .await;
                     DesktopAiTurnResponse {
                         request_id,
                         status: "completed".to_string(),
                         answer: Some(answer),
                         token_usage,
+                        archive,
                         error: None,
                     }
                 }
@@ -3318,6 +3870,301 @@ pub async fn start_readonly_ai_turn(
             AiDiagnostic::new(
                 "codex_app_server_disconnected",
                 "Codex App Server could not confirm the AI turn state.",
+            ),
+        ),
+    }
+}
+
+fn active_archive_context(
+    app: &AppHandle,
+    project_session_id: &str,
+    revision_id: &str,
+    zone_id: &str,
+) -> Result<AiTrustedContext, AiDiagnostic> {
+    if !safe_request_id(project_session_id)
+        || Uuid::parse_str(revision_id).is_err()
+        || Uuid::parse_str(zone_id).is_err()
+    {
+        return Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive request was invalid.",
+        ));
+    }
+    app.state::<DesktopProjectSessionStore>()
+        .build_ai_context(project_session_id, revision_id, zone_id, &[])
+        .map_err(|error| AiDiagnostic::new(&error.code, &error.message))
+}
+
+#[tauri::command]
+pub async fn load_ai_conversation_archive(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    zone_id: String,
+) -> DesktopAiConversationArchiveResponse {
+    if !safe_request_id(&request_id) {
+        return archive_response_failure(
+            request_id,
+            archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive request was invalid.",
+            ),
+        );
+    }
+    let trusted = match active_archive_context(&app, &project_session_id, &revision_id, &zone_id) {
+        Ok(context) => context,
+        Err(error) => return archive_response_failure(request_id, error),
+    };
+    let path = match archive_file_path(&app) {
+        Ok(path) => path,
+        Err(error) => return archive_response_failure(request_id, error),
+    };
+    let app_for_task = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let store = app_for_task.state::<AiConversationArchiveStore>();
+        let _gate = store
+            .operation_gate
+            .lock()
+            .expect("AI conversation archive mutex poisoned");
+        let archive = read_archive_file(&path)?;
+        Ok::<_, AiDiagnostic>(archive_view_for_context(&archive, &trusted))
+    })
+    .await;
+    match result {
+        Ok(Ok(archive)) => DesktopAiConversationArchiveResponse {
+            request_id,
+            archive: Some(archive),
+            error: None,
+        },
+        Ok(Err(error)) => archive_response_failure(request_id, error),
+        Err(_) => archive_response_failure(
+            request_id,
+            archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive task failed.",
+            ),
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn set_ai_conversation_archive_enabled(
+    app: AppHandle,
+    request_id: String,
+    enabled: bool,
+) -> DesktopAiActionResponse {
+    if !safe_request_id(&request_id) {
+        return archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive request was invalid.",
+            ),
+        );
+    }
+    let path = match archive_file_path(&app) {
+        Ok(path) => path,
+        Err(error) => return archive_action_failure(request_id, error),
+    };
+    let app_for_task = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let store = app_for_task.state::<AiConversationArchiveStore>();
+        let _gate = store
+            .operation_gate
+            .lock()
+            .expect("AI conversation archive mutex poisoned");
+        let mut archive = read_archive_file(&path)?;
+        archive.persistence_enabled = enabled;
+        write_archive_file(&path, &archive)
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => DesktopAiActionResponse {
+            request_id,
+            status: if enabled { "enabled" } else { "disabled" }.to_string(),
+            error: None,
+        },
+        Ok(Err(error)) => archive_action_failure(request_id, error),
+        Err(_) => archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive task failed.",
+            ),
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn delete_ai_conversation_archive_entry(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    zone_id: String,
+    archive_entry_id: String,
+) -> DesktopAiActionResponse {
+    if !safe_request_id(&request_id) || Uuid::parse_str(&archive_entry_id).is_err() {
+        return archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive request was invalid.",
+            ),
+        );
+    }
+    let trusted = match active_archive_context(&app, &project_session_id, &revision_id, &zone_id) {
+        Ok(context) => context,
+        Err(error) => return archive_action_failure(request_id, error),
+    };
+    let path = match archive_file_path(&app) {
+        Ok(path) => path,
+        Err(error) => return archive_action_failure(request_id, error),
+    };
+    let app_for_task = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let store = app_for_task.state::<AiConversationArchiveStore>();
+        let _gate = store
+            .operation_gate
+            .lock()
+            .expect("AI conversation archive mutex poisoned");
+        let mut archive = read_archive_file(&path)?;
+        let original_len = archive.entries.len();
+        archive.entries.retain(|entry| {
+            !(entry.entry_id == archive_entry_id
+                && entry
+                    .baseline_source_sha256
+                    .eq_ignore_ascii_case(&trusted.baseline_source_sha256)
+                && entry.zone_id == trusted.zone_id)
+        });
+        if archive.entries.len() == original_len {
+            return Err(archive_error(
+                "ai_archive_entry_not_found",
+                "The local conversation archive entry is no longer available.",
+            ));
+        }
+        write_archive_file(&path, &archive)
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => DesktopAiActionResponse {
+            request_id,
+            status: "deleted".to_string(),
+            error: None,
+        },
+        Ok(Err(error)) => archive_action_failure(request_id, error),
+        Err(_) => archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive task failed.",
+            ),
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn clear_ai_conversation_archive_for_zone(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    zone_id: String,
+) -> DesktopAiActionResponse {
+    if !safe_request_id(&request_id) {
+        return archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive request was invalid.",
+            ),
+        );
+    }
+    let trusted = match active_archive_context(&app, &project_session_id, &revision_id, &zone_id) {
+        Ok(context) => context,
+        Err(error) => return archive_action_failure(request_id, error),
+    };
+    let path = match archive_file_path(&app) {
+        Ok(path) => path,
+        Err(error) => return archive_action_failure(request_id, error),
+    };
+    let app_for_task = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let store = app_for_task.state::<AiConversationArchiveStore>();
+        let _gate = store
+            .operation_gate
+            .lock()
+            .expect("AI conversation archive mutex poisoned");
+        let mut archive = read_archive_file(&path)?;
+        archive.entries.retain(|entry| {
+            !(entry
+                .baseline_source_sha256
+                .eq_ignore_ascii_case(&trusted.baseline_source_sha256)
+                && entry.zone_id == trusted.zone_id)
+        });
+        write_archive_file(&path, &archive)
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => DesktopAiActionResponse {
+            request_id,
+            status: "cleared_zone".to_string(),
+            error: None,
+        },
+        Ok(Err(error)) => archive_action_failure(request_id, error),
+        Err(_) => archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive task failed.",
+            ),
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn clear_all_ai_conversation_archive(
+    app: AppHandle,
+    request_id: String,
+) -> DesktopAiActionResponse {
+    if !safe_request_id(&request_id) {
+        return archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive request was invalid.",
+            ),
+        );
+    }
+    let path = match archive_file_path(&app) {
+        Ok(path) => path,
+        Err(error) => return archive_action_failure(request_id, error),
+    };
+    let app_for_task = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let store = app_for_task.state::<AiConversationArchiveStore>();
+        let _gate = store
+            .operation_gate
+            .lock()
+            .expect("AI conversation archive mutex poisoned");
+        let mut archive = read_archive_file(&path)?;
+        archive.entries.clear();
+        write_archive_file(&path, &archive)
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => DesktopAiActionResponse {
+            request_id,
+            status: "cleared_all".to_string(),
+            error: None,
+        },
+        Ok(Err(error)) => archive_action_failure(request_id, error),
+        Err(_) => archive_action_failure(
+            request_id,
+            archive_error(
+                "ai_archive_write_failed",
+                "The local conversation archive task failed.",
             ),
         ),
     }
@@ -3495,6 +4342,79 @@ mod tests {
         root
     }
 
+    fn archive_test_answer() -> StructuredAiAnswer {
+        StructuredAiAnswer {
+            deterministic_facts: vec!["The selected Zone is One.".to_string()],
+            interpretation: "The disclosed Zone volume is stable in the current snapshot."
+                .to_string(),
+            limitations: vec!["No complete result series was disclosed.".to_string()],
+            suggested_questions: vec!["What does the Zone volume represent?".to_string()],
+        }
+    }
+
+    fn archive_test_context(
+        baseline_source_sha256: &str,
+        revision_id: &str,
+        revision_number: u64,
+        zone_id: &str,
+        zone_name: &str,
+    ) -> AiTrustedContext {
+        AiTrustedContext {
+            project_session_id: "session-1".to_string(),
+            baseline_source_sha256: baseline_source_sha256.to_string(),
+            revision_id: revision_id.to_string(),
+            revision_number,
+            zone_id: zone_id.to_string(),
+            zone_name: zone_name.to_string(),
+            payload: json!({
+                "selected_zone": {
+                    "name": zone_name,
+                    "volume_m3": 600.0,
+                },
+                "draft_summary": {
+                    "revision_number": revision_number,
+                },
+            }),
+        }
+    }
+
+    fn archive_test_preview(context: &AiTrustedContext) -> AiContextDisclosureView {
+        AiContextDisclosureView {
+            preview_id: "00000000-0000-5000-8000-000000000004".to_string(),
+            project_session_id: context.project_session_id.clone(),
+            revision_id: context.revision_id.clone(),
+            revision_number: context.revision_number,
+            zone_id: context.zone_id.clone(),
+            zone_name: context.zone_name.clone(),
+            included_scopes: vec!["selected_zone".to_string(), "draft_summary".to_string()],
+            excluded_scopes: vec![
+                "project_summary".to_string(),
+                "run_summary".to_string(),
+                "result_summary".to_string(),
+                "diagnostics".to_string(),
+            ],
+            context_fingerprint: "00000000-0000-5000-8000-000000000005".to_string(),
+            payload: context.payload.clone(),
+            disclosure: AiDisclosureBoundary {
+                contains_local_paths: false,
+                contains_prj_text: false,
+                contains_complete_result_series: false,
+                model_request_uses_network: true,
+            },
+        }
+    }
+
+    fn archive_test_file(path: &Path, persistence_enabled: bool) {
+        write_archive_file(
+            path,
+            &AiConversationArchiveFile {
+                persistence_enabled,
+                ..AiConversationArchiveFile::default()
+            },
+        )
+        .unwrap();
+    }
+
     struct FakeAppServer {
         notifications: Vec<Value>,
     }
@@ -3547,6 +4467,226 @@ mod tests {
             validate_answer(invalid).unwrap_err().code,
             "ai_response_contract_invalid"
         );
+    }
+
+    #[test]
+    fn local_conversation_archive_is_opt_in_and_exposes_only_safe_history() {
+        let root = test_root("archive-opt-in");
+        let path = root.join("archive.json");
+        let store = AiConversationArchiveStore::default();
+        let baseline = "a".repeat(64);
+        let context = archive_test_context(
+            &baseline,
+            "00000000-0000-5000-8000-000000000001",
+            1,
+            "00000000-0000-5000-8000-000000000003",
+            "One",
+        );
+        let preview = archive_test_preview(&context);
+        let answer = archive_test_answer();
+
+        let disabled = archive_save_completed_turn(
+            &store,
+            &path,
+            &context,
+            &preview,
+            "en",
+            "model-a",
+            "low",
+            "What does this Zone mean?",
+            &answer,
+        );
+        assert!(!disabled.saved);
+        assert!(disabled.entry_id.is_none());
+        assert!(!path.exists());
+
+        archive_test_file(&path, true);
+        let saved = archive_save_completed_turn(
+            &store,
+            &path,
+            &context,
+            &preview,
+            "en",
+            "model-a",
+            "low",
+            "What does this Zone mean?",
+            &answer,
+        );
+        assert!(saved.saved);
+        assert!(saved.entry_id.is_some());
+
+        let archive = read_archive_file(&path).unwrap();
+        assert!(archive.persistence_enabled);
+        assert_eq!(archive.entries.len(), 1);
+        let view = archive_view_for_context(&archive, &context);
+        assert_eq!(view.entries.len(), 1);
+        assert!(view.entries[0].is_current_revision);
+        let serialized = serde_json::to_string(&view).unwrap();
+        for forbidden in [
+            baseline.as_str(),
+            "context_fingerprint",
+            "archive.json",
+            "C:\\\\",
+        ] {
+            assert!(!serialized.contains(forbidden));
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn local_conversation_archive_filters_by_baseline_and_zone_across_revisions() {
+        let root = test_root("archive-filtering");
+        let path = root.join("archive.json");
+        let store = AiConversationArchiveStore::default();
+        let baseline = "b".repeat(64);
+        let zone_one = "00000000-0000-5000-8000-000000000003";
+        let revision_one = archive_test_context(
+            &baseline,
+            "00000000-0000-5000-8000-000000000001",
+            1,
+            zone_one,
+            "One",
+        );
+        let revision_two = archive_test_context(
+            &baseline,
+            "00000000-0000-5000-8000-000000000002",
+            2,
+            zone_one,
+            "One",
+        );
+        let other_baseline = archive_test_context(
+            &"c".repeat(64),
+            "00000000-0000-5000-8000-000000000006",
+            1,
+            zone_one,
+            "One",
+        );
+        let other_zone = archive_test_context(
+            &baseline,
+            "00000000-0000-5000-8000-000000000007",
+            2,
+            "00000000-0000-5000-8000-000000000008",
+            "Two",
+        );
+        archive_test_file(&path, true);
+        for context in [&revision_one, &revision_two, &other_baseline, &other_zone] {
+            let preview = archive_test_preview(context);
+            let saved = archive_save_completed_turn(
+                &store,
+                &path,
+                context,
+                &preview,
+                "en",
+                "model-a",
+                "medium",
+                "Explain the selected Zone.",
+                &archive_test_answer(),
+            );
+            assert!(saved.saved);
+        }
+
+        let archive = read_archive_file(&path).unwrap();
+        assert_eq!(archive.entries.len(), 4);
+        let view = archive_view_for_context(&archive, &revision_two);
+        assert_eq!(view.entries.len(), 2);
+        assert!(view.entries.iter().any(
+            |entry| entry.revision_id == revision_two.revision_id && entry.is_current_revision
+        ));
+        assert!(view.entries.iter().any(
+            |entry| entry.revision_id == revision_one.revision_id && !entry.is_current_revision
+        ));
+        assert!(view.entries.iter().all(|entry| entry.zone_id == zone_one));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn local_conversation_archive_keeps_only_the_newest_safe_entries() {
+        let root = test_root("archive-retention");
+        let path = root.join("archive.json");
+        let store = AiConversationArchiveStore::default();
+        let context = archive_test_context(
+            &"d".repeat(64),
+            "00000000-0000-5000-8000-000000000001",
+            1,
+            "00000000-0000-5000-8000-000000000003",
+            "One",
+        );
+        let preview = archive_test_preview(&context);
+        archive_test_file(&path, true);
+        for index in 0..=MAX_ARCHIVE_ENTRIES {
+            let saved = archive_save_completed_turn(
+                &store,
+                &path,
+                &context,
+                &preview,
+                "en",
+                "model-a",
+                "low",
+                &format!("Question {index}"),
+                &archive_test_answer(),
+            );
+            assert!(saved.saved);
+        }
+        let archive = read_archive_file(&path).unwrap();
+        assert_eq!(archive.entries.len(), MAX_ARCHIVE_ENTRIES);
+        assert!(!archive
+            .entries
+            .iter()
+            .any(|entry| entry.question == "Question 0"));
+        assert!(archive
+            .entries
+            .iter()
+            .any(|entry| entry.question == format!("Question {MAX_ARCHIVE_ENTRIES}")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn local_conversation_archive_rejects_corrupt_or_sensitive_storage() {
+        let root = test_root("archive-corrupt");
+        let path = root.join("archive.json");
+        let store = AiConversationArchiveStore::default();
+        let context = archive_test_context(
+            &"e".repeat(64),
+            "00000000-0000-5000-8000-000000000001",
+            1,
+            "00000000-0000-5000-8000-000000000003",
+            "One",
+        );
+        let preview = archive_test_preview(&context);
+        archive_test_file(&path, true);
+        assert!(
+            archive_save_completed_turn(
+                &store,
+                &path,
+                &context,
+                &preview,
+                "en",
+                "model-a",
+                "low",
+                "Explain this Zone.",
+                &archive_test_answer(),
+            )
+            .saved
+        );
+
+        let mut archive = read_archive_file(&path).unwrap();
+        archive.entries[0].question = "C:\\\\private\\\\project.prj".to_string();
+        assert_eq!(
+            validate_archive_file(&archive).unwrap_err().code,
+            "ai_archive_unavailable"
+        );
+
+        fs::write(&path, b"not-json").unwrap();
+        assert_eq!(
+            read_archive_file(&path).unwrap_err().code,
+            "ai_archive_unavailable"
+        );
+        fs::write(&path, vec![b'x'; (MAX_ARCHIVE_FILE_BYTES + 1) as usize]).unwrap();
+        assert_eq!(
+            read_archive_file(&path).unwrap_err().code,
+            "ai_archive_unavailable"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -4504,6 +5644,7 @@ mod tests {
     fn preview_is_bound_to_language_model_and_reasoning_effort() {
         let trusted = AiTrustedContext {
             project_session_id: "session-a".into(),
+            baseline_source_sha256: "a".repeat(64),
             revision_id: "revision-a".into(),
             revision_number: 1,
             zone_id: "zone-a".into(),

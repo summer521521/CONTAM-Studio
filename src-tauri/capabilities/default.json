@@ -21,6 +21,11 @@
     "allow-refresh-codex-account",
     "allow-preview-ai-context",
     "allow-start-readonly-ai-turn",
+    "allow-load-ai-conversation-archive",
+    "allow-set-ai-conversation-archive-enabled",
+    "allow-delete-ai-conversation-archive-entry",
+    "allow-clear-ai-conversation-archive-for-zone",
+    "allow-clear-all-ai-conversation-archive",
     "allow-interrupt-readonly-ai-turn",
     "allow-clear-readonly-ai-session",
     "allow-disconnect-codex-app-server"

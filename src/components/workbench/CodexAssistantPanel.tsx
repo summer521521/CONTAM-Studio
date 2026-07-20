@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, CircleStop, Download, Eye, Link2, RefreshCw, Send, ShieldCheck, Trash2, Unplug, X } from "lucide-react";
+import { Archive, Bot, CircleStop, Download, Eye, Link2, RefreshCw, Send, ShieldCheck, Trash2, Unplug, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AiContextScope, AiState } from "../../app/ai-state";
 
@@ -28,6 +28,10 @@ interface CodexAssistantPanelProps {
   onSend: () => void;
   onStop: () => void;
   onClear: () => void;
+  onArchiveEnabled?: (enabled: boolean) => void;
+  onArchiveDelete?: (entryId: string) => void;
+  onArchiveClearZone?: () => void;
+  onArchiveClearAll?: () => void;
 }
 
 export function CodexAssistantPanel({
@@ -46,15 +50,24 @@ export function CodexAssistantPanel({
   onSend,
   onStop,
   onClear,
+  onArchiveEnabled = () => undefined,
+  onArchiveDelete = () => undefined,
+  onArchiveClearZone = () => undefined,
+  onArchiveClearAll = () => undefined,
 }: CodexAssistantPanelProps) {
   const { t } = useTranslation();
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const [archiveConfirmation, setArchiveConfirmation] = useState<"zone" | "all" | null>(null);
   const installDialogRef = useRef<HTMLElement>(null);
   const model = state.connection?.models.find((item) => item.id === state.modelId) ?? null;
   const cliProbe = state.connection?.cli ?? state.cliProbe;
   const connected = Boolean(state.connection);
   const ready = state.status === "available";
   const busy = state.status === "probing" || state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
+  const archivedEntryIds = new Set(state.archive?.entries.map((entry) => entry.entry_id));
+  const liveConversation = state.conversation.filter(
+    (entry) => !entry.archive_entry_id || !archivedEntryIds.has(entry.archive_entry_id),
+  );
 
   useEffect(() => {
     if (!installDialogOpen) return undefined;
@@ -67,6 +80,10 @@ export function CodexAssistantPanel({
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [installDialogOpen, state.status]);
+
+  useEffect(() => {
+    if (!state.archive?.entries.length) setArchiveConfirmation(null);
+  }, [state.archive?.entries.length]);
 
   return (
     <div className="context-content codex-assistant" role="tabpanel">
@@ -197,6 +214,124 @@ export function CodexAssistantPanel({
             </section>
           ) : null}
 
+          {contextAvailable ? (
+            <section className="assistant-archive" aria-labelledby="ai-archive-title">
+              <div className="assistant-archive-heading">
+                <div>
+                  <h3 id="ai-archive-title"><Archive size={17} aria-hidden="true" />{t("assistant.archive.title")}</h3>
+                  <p>{t("assistant.archive.localOnly")}</p>
+                </div>
+                {state.archive?.persistence_enabled ? (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => onArchiveEnabled(false)}
+                    disabled={state.archiveStatus === "loading"}
+                  >
+                    {t("assistant.archive.disable")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => onArchiveEnabled(true)}
+                    disabled={state.archiveStatus === "loading"}
+                  >
+                    {t("assistant.archive.enable")}
+                  </button>
+                )}
+              </div>
+              {state.archiveStatus === "loading" ? <p className="assistant-progress">{t("assistant.archive.loading")}</p> : null}
+              {state.archiveIssue ? (
+                <p className="patch-inline-error" role="alert">
+                  {t(`errors.codes.${state.archiveIssue.code}`, { defaultValue: t("errors.codes.unknown") })}
+                </p>
+              ) : null}
+              {state.archive?.persistence_enabled ? (
+                <p className="assistant-safe-note">{t("assistant.archive.enabledNotice")}</p>
+              ) : (
+                <p className="assistant-safe-note">{t("assistant.archive.consentNotice")}</p>
+              )}
+              {state.archive?.entries.length ? (
+                <>
+                  <div className="assistant-archive-actions compact-actions">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => setArchiveConfirmation("zone")}
+                      disabled={state.archiveStatus === "loading"}
+                    >
+                      <Trash2 size={14} />{t("assistant.archive.clearZone")}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => setArchiveConfirmation("all")}
+                      disabled={state.archiveStatus === "loading"}
+                    >
+                      <Trash2 size={14} />{t("assistant.archive.clearAll")}
+                    </button>
+                  </div>
+                  {archiveConfirmation ? (
+                    <div className="assistant-archive-confirm" role="alert">
+                      <p>{t(archiveConfirmation === "zone" ? "assistant.archive.confirmZone" : "assistant.archive.confirmAll")}</p>
+                      <div className="compact-actions">
+                        <button type="button" className="secondary-action" onClick={() => setArchiveConfirmation(null)}>
+                          {t("assistant.installCancel")}
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-action"
+                          onClick={() => {
+                            if (archiveConfirmation === "zone") onArchiveClearZone();
+                            else onArchiveClearAll();
+                            setArchiveConfirmation(null);
+                          }}
+                        >
+                          {t("assistant.archive.confirmDelete")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="assistant-archive-list">
+                    {state.archive.entries.map((entry) => (
+                      <article className="assistant-answer assistant-archive-entry" key={entry.entry_id}>
+                        <div className="assistant-archive-entry-heading">
+                          <h4>{t("assistant.archive.entryTitle", { revision: entry.revision_number })}</h4>
+                          <button
+                            type="button"
+                            className="panel-icon-button"
+                            title={t("assistant.archive.deleteEntry")}
+                            aria-label={t("assistant.archive.deleteEntry")}
+                            onClick={() => onArchiveDelete(entry.entry_id)}
+                            disabled={state.archiveStatus === "loading"}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                        <p className="assistant-safe-note">
+                          {new Date(entry.completed_at_unix_ms).toLocaleString()} · {entry.model_id} · {entry.reasoning_effort}
+                          {!entry.is_current_revision ? ` · ${t("assistant.archive.historical")}` : ""}
+                        </p>
+                        <section>
+                          <h5>{t("assistant.completedQuestion")}</h5>
+                          <p>{entry.question}</p>
+                        </section>
+                        <section><h5>{t("assistant.facts")}</h5><ul>{entry.answer.deterministic_facts.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                        <section><h5>{t("assistant.interpretation")}</h5><p>{entry.answer.interpretation}</p></section>
+                        <section><h5>{t("assistant.limitations")}</h5><ul>{entry.answer.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                        {entry.answer.suggested_questions.length > 0 ? (
+                          <section><h5>{t("assistant.suggestedQuestions")}</h5><ul>{entry.answer.suggested_questions.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                        ) : null}
+                        <p className="assistant-safe-note">{t("assistant.archive.notReused")}</p>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : state.archive?.persistence_enabled ? <p className="assistant-safe-note">{t("assistant.archive.empty")}</p> : null}
+            </section>
+          ) : null}
+
           <label className="assistant-field">
             <span>{t("assistant.question")}</span>
             <textarea
@@ -231,10 +366,10 @@ export function CodexAssistantPanel({
           </div>
 
           {state.status === "generating" ? <p className="assistant-progress" role="status">{t("assistant.generating")}</p> : null}
-          {state.conversation.length > 0 ? (
+          {liveConversation.length > 0 ? (
             <section className="assistant-conversation" aria-labelledby="ai-conversation-title">
               <h3 id="ai-conversation-title">{t("assistant.conversation")}</h3>
-              {state.conversation.map((entry, index) => (
+              {liveConversation.map((entry, index) => (
                 <article className="assistant-answer" key={entry.turn_id}>
                   <h4>{t("assistant.turn", { number: index + 1 })}</h4>
                   <section>

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-ai-conversation-archive-entry"
+description = "Enables the delete_ai_conversation_archive_entry command without any pre-configured scope."
+commands.allow = ["delete_ai_conversation_archive_entry"]
+
+[[permission]]
+identifier = "deny-delete-ai-conversation-archive-entry"
+description = "Denies the delete_ai_conversation_archive_entry command without any pre-configured scope."
+commands.deny = ["delete_ai_conversation_archive_entry"]

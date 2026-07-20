@@ -5,9 +5,12 @@ import { CodexAssistantPanel } from "../components/workbench/CodexAssistantPanel
 import {
   aiReducer,
   INITIAL_AI_STATE,
+  isSafeAiArchive,
+  isSafeAiArchiveSave,
   isSafeAiPreview,
   isStructuredAiAnswer,
   type AiState,
+  type AiConversationArchiveView,
   type AiContextDisclosureView,
   type CodexConnectionView,
 } from "./ai-state";
@@ -50,6 +53,27 @@ const structuredAnswer = {
   interpretation: "The disclosed Zone has a stable volume.",
   limitations: ["No full result series was sent."],
   suggested_questions: ["What does flag 3 mean?"],
+};
+
+const unsavedArchive = { saved: false, entry_id: null, warning: null };
+
+const archiveView: AiConversationArchiveView = {
+  persistence_enabled: true,
+  entries: [{
+    entry_id: "00000000-0000-5000-8000-000000000010",
+    revision_id: preview.revision_id,
+    revision_number: 1,
+    zone_id: preview.zone_id,
+    zone_name: "One",
+    language: "en",
+    model_id: "model-a",
+    reasoning_effort: "low",
+    included_scopes: ["selected_zone", "draft_summary"],
+    completed_at_unix_ms: 1,
+    is_current_revision: false,
+    question: "Explain One.",
+    answer: structuredAnswer,
+  }],
 };
 
 beforeAll(async () => {
@@ -162,7 +186,7 @@ describe("read-only AI state", () => {
       preview,
       previewExpanded: true,
       question: "Keep this only in the same binding.",
-      conversation: [{ turn_id: "turn-1", question: "Explain One.", answer: structuredAnswer }],
+      conversation: [{ turn_id: "turn-1", archive_entry_id: null, question: "Explain One.", answer: structuredAnswer }],
     };
     const scoped = aiReducer(populated, { type: "scope_toggled", scope: "run_summary" });
     expect(scoped.preview).toBeNull();
@@ -261,7 +285,7 @@ describe("read-only AI state", () => {
         connection,
         preview,
         question: "Explain this Zone.",
-        conversation: [{ turn_id: "turn-1", question: "Explain One.", answer: structuredAnswer }],
+        conversation: [{ turn_id: "turn-1", archive_entry_id: null, question: "Explain One.", answer: structuredAnswer }],
       },
       {
         type: "operation_failed",
@@ -280,7 +304,7 @@ describe("read-only AI state", () => {
     const connecting = aiReducer(INITIAL_AI_STATE, { type: "connect_started", requestId: "current" });
     expect(aiReducer(connecting, { type: "connect_succeeded", requestId: "old", connection })).toEqual(connecting);
     const generating = aiReducer({ ...connecting, status: "available" }, { type: "turn_started", requestId: "turn-current", question: "Explain this Zone." });
-    expect(aiReducer(generating, { type: "turn_succeeded", requestId: "turn-old", answer: structuredAnswer })).toEqual(generating);
+    expect(aiReducer(generating, { type: "turn_succeeded", requestId: "turn-old", answer: structuredAnswer, archive: unsavedArchive })).toEqual(generating);
     const ready = { ...INITIAL_AI_STATE, status: "available" as const, connection };
     expect(aiReducer(ready, { type: "operation_failed", requestId: "old", issue: { code: "codex_app_server_disconnected", message: "hidden" } })).toEqual(ready);
   });
@@ -291,7 +315,7 @@ describe("read-only AI state", () => {
       const requestId = `turn-${index}`;
       const question = `Question ${index}`;
       state = aiReducer({ ...state, question }, { type: "turn_started", requestId, question });
-      state = aiReducer(state, { type: "turn_succeeded", requestId, answer: structuredAnswer });
+      state = aiReducer(state, { type: "turn_succeeded", requestId, answer: structuredAnswer, archive: unsavedArchive });
     }
     expect(state.conversation).toHaveLength(12);
     expect(state.conversation[0]?.question).toBe("Question 1");
@@ -307,7 +331,7 @@ describe("read-only AI state", () => {
       status: "available" as const,
       connection,
       preview,
-      conversation: [{ turn_id: "turn-complete", question: "First question", answer: structuredAnswer }],
+      conversation: [{ turn_id: "turn-complete", archive_entry_id: null, question: "First question", answer: structuredAnswer }],
     };
     const previewing = aiReducer(completed, { type: "preview_started", requestId: "preview-next" });
     expect(aiReducer(previewing, { type: "preview_succeeded", requestId: "preview-next", preview }).conversation).toEqual(completed.conversation);
@@ -319,7 +343,7 @@ describe("read-only AI state", () => {
     const interrupting = aiReducer(generating, { type: "interrupt_started" });
     expect(interrupting.pendingQuestion).toBeNull();
     expect(interrupting.activeRequestId).toBeNull();
-    expect(aiReducer(interrupting, { type: "turn_succeeded", requestId: "turn-partial", answer: structuredAnswer })).toEqual(interrupting);
+    expect(aiReducer(interrupting, { type: "turn_succeeded", requestId: "turn-partial", answer: structuredAnswer, archive: unsavedArchive })).toEqual(interrupting);
     const interrupted = aiReducer(interrupting, { type: "turn_interrupted" });
     expect(interrupted.conversation).toEqual(completed.conversation);
     expect(interrupted.question).toBe("Retry this question");
@@ -329,6 +353,49 @@ describe("read-only AI state", () => {
     expect(isSafeAiPreview(preview)).toBe(true);
     expect(isSafeAiPreview({ ...preview, payload: { source: "C:\\private\\project.prj" } })).toBe(false);
     expect(isSafeAiPreview({ ...preview, disclosure: { ...preview.disclosure, contains_prj_text: true } as never })).toBe(false);
+  });
+
+  it("accepts only safe local archive views and save receipts", () => {
+    expect(isSafeAiArchive(archiveView)).toBe(true);
+    expect(isSafeAiArchiveSave({ saved: true, entry_id: archiveView.entries[0]?.entry_id, warning: null })).toBe(true);
+    expect(isSafeAiArchiveSave({ saved: true, entry_id: "not-a-uuid", warning: null })).toBe(false);
+    expect(isSafeAiArchive({
+      ...archiveView,
+      entries: [{ ...archiveView.entries[0]!, question: "C:\\private\\project.prj" }],
+    })).toBe(false);
+    expect(isSafeAiArchive({
+      ...archiveView,
+      entries: [{ ...archiveView.entries[0]!, zone_name: "One\u0000" }],
+    })).toBe(false);
+  });
+
+  it("keeps an archived entry identifier on a completed in-memory exchange", () => {
+    const generating = aiReducer(
+      { ...INITIAL_AI_STATE, status: "available", connection, preview, question: "Explain One." },
+      { type: "turn_started", requestId: "turn-archive", question: "Explain One." },
+    );
+    const completed = aiReducer(generating, {
+      type: "turn_succeeded",
+      requestId: "turn-archive",
+      answer: structuredAnswer,
+      archive: { saved: true, entry_id: archiveView.entries[0]?.entry_id ?? null, warning: null },
+    });
+    expect(completed.conversation[0]?.archive_entry_id).toBe(archiveView.entries[0]?.entry_id);
+  });
+
+  it("clears archive state when a trusted project binding changes", () => {
+    const state: AiState = {
+      ...INITIAL_AI_STATE,
+      archive: archiveView,
+      archiveStatus: "loaded",
+      archiveIssue: { code: "ai_archive_write_failed", message: "hidden" },
+      archiveRequestId: "archive-current",
+    };
+    const changed = aiReducer(state, { type: "context_changed" });
+    expect(changed.archive).toBeNull();
+    expect(changed.archiveStatus).toBe("idle");
+    expect(changed.archiveIssue).toBeNull();
+    expect(changed.archiveRequestId).toBeNull();
   });
 
   it("validates the closed structured answer shape and limits", () => {
@@ -349,7 +416,7 @@ describe("read-only AI state", () => {
           reasoningEffort: "low",
           preview,
           previewExpanded: true,
-          conversation: [{ turn_id: "turn-1", question: "Explain this Zone.", answer: structuredAnswer }],
+          conversation: [{ turn_id: "turn-1", archive_entry_id: null, question: "Explain this Zone.", answer: structuredAnswer }],
         }}
         contextAvailable
         onConnect={() => undefined}
@@ -374,6 +441,39 @@ describe("read-only AI state", () => {
     expect(html).toContain("Deterministic facts");
     expect(html).toContain("AI interpretation");
     expect(html).toContain("Limitations");
+    expect(html).not.toContain("C:\\");
+  });
+
+  it("renders opt-in local archive controls and labels historical entries", () => {
+    const html = renderToStaticMarkup(
+      <CodexAssistantPanel
+        state={{
+          ...INITIAL_AI_STATE,
+          status: "available",
+          connection,
+          modelId: "model-a",
+          reasoningEffort: "low",
+          archive: archiveView,
+          archiveStatus: "loaded",
+        }}
+        contextAvailable
+        onConnect={() => undefined}
+        onInstall={() => undefined}
+        onRefresh={() => undefined}
+        onDisconnect={() => undefined}
+        onScopeToggle={() => undefined}
+        onModelChange={() => undefined}
+        onEffortChange={() => undefined}
+        onPreview={() => undefined}
+        onQuestionChange={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+        onClear={() => undefined}
+      />,
+    );
+    expect(html).toContain("Local conversation archive");
+    expect(html).toContain("Saved only on this device");
+    expect(html).toContain("historical revision");
     expect(html).not.toContain("C:\\");
   });
 
@@ -456,7 +556,7 @@ describe("read-only AI state", () => {
       question: "Explain this Zone.",
       activeRequestId: "turn-1",
       pendingQuestion: "Explain this Zone.",
-      conversation: [{ turn_id: "turn-complete", question: "First question", answer: structuredAnswer }],
+      conversation: [{ turn_id: "turn-complete", archive_entry_id: null, question: "First question", answer: structuredAnswer }],
     };
     const interrupted = aiReducer(generating, { type: "turn_interrupted" });
     expect(interrupted.status).toBe("available");

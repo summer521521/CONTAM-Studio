@@ -33,6 +33,10 @@ interface ContextSidebarProps {
   onAiSend?: () => void;
   onAiStop?: () => void;
   onAiClear?: () => void;
+  onAiArchiveEnabled?: (enabled: boolean) => void;
+  onAiArchiveDelete?: (entryId: string) => void;
+  onAiArchiveClearZone?: () => void;
+  onAiArchiveClearAll?: () => void;
 }
 
 export function ContextSidebar({
@@ -62,6 +66,10 @@ export function ContextSidebar({
   onAiSend = () => undefined,
   onAiStop = () => undefined,
   onAiClear = () => undefined,
+  onAiArchiveEnabled = () => undefined,
+  onAiArchiveDelete = () => undefined,
+  onAiArchiveClearZone = () => undefined,
+  onAiArchiveClearAll = () => undefined,
 }: ContextSidebarProps) {
   const { t } = useTranslation();
 
@@ -218,6 +226,10 @@ export function ContextSidebar({
           onSend={onAiSend}
           onStop={onAiStop}
           onClear={onAiClear}
+          onArchiveEnabled={onAiArchiveEnabled}
+          onArchiveDelete={onAiArchiveDelete}
+          onArchiveClearZone={onAiArchiveClearZone}
+          onArchiveClearAll={onAiArchiveClearAll}
         />
       )}
     </aside>

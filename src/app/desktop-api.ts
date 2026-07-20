@@ -10,6 +10,7 @@ import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state
 import type { DesktopRunResponse } from "./run-state";
 import type {
   AiContextScope,
+  DesktopAiConversationArchiveResponse,
   DesktopAiActionResponse,
   DesktopAiContextPreviewResponse,
   DesktopAiTurnResponse,
@@ -196,6 +197,68 @@ export async function interruptReadonlyAiTurn(requestId: string): Promise<Deskto
 
 export async function clearReadonlyAiSession(requestId: string): Promise<DesktopAiActionResponse> {
   return invoke<DesktopAiActionResponse>("clear_readonly_ai_session", { requestId });
+}
+
+export async function loadAiConversationArchive(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  zoneId: string,
+): Promise<DesktopAiConversationArchiveResponse> {
+  return invoke<DesktopAiConversationArchiveResponse>("load_ai_conversation_archive", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    zoneId,
+  });
+}
+
+export async function setAiConversationArchiveEnabled(
+  requestId: string,
+  enabled: boolean,
+): Promise<DesktopAiActionResponse> {
+  return invoke<DesktopAiActionResponse>("set_ai_conversation_archive_enabled", {
+    requestId,
+    enabled,
+  });
+}
+
+export async function deleteAiConversationArchiveEntry(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  zoneId: string,
+  archiveEntryId: string,
+): Promise<DesktopAiActionResponse> {
+  return invoke<DesktopAiActionResponse>("delete_ai_conversation_archive_entry", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    zoneId,
+    archiveEntryId,
+  });
+}
+
+export async function clearAiConversationArchiveForZone(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  zoneId: string,
+): Promise<DesktopAiActionResponse> {
+  return invoke<DesktopAiActionResponse>("clear_ai_conversation_archive_for_zone", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    zoneId,
+  });
+}
+
+export async function clearAllAiConversationArchive(
+  requestId: string,
+): Promise<DesktopAiActionResponse> {
+  return invoke<DesktopAiActionResponse>("clear_all_ai_conversation_archive", {
+    requestId,
+  });
 }
 
 export async function disconnectCodexAppServer(requestId: string): Promise<DesktopAiActionResponse> {

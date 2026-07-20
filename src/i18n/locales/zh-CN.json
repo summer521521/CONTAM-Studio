@@ -158,6 +158,25 @@
     "limitations": "限制",
     "suggestedQuestions": "后续问题",
     "factsCaveat": "这里的确定性事实是模型对已披露数据的复述，不能替代应用的确定性面板。",
+    "archive": {
+      "title": "本地对话档案",
+      "localOnly": "仅在你明确启用后保存到本机。已保存的问答绝不会自动加入后续模型请求。",
+      "enable": "本地保存已完成回答",
+      "disable": "停止保存新回答",
+      "loading": "正在读取本地对话档案...",
+      "enabledNotice": "此Zone及其Revision历史中的新结构化完成回答会保存到本机，不会自动回传给Codex。",
+      "consentNotice": "自动本地保存当前关闭。只有希望已完成回答在重启后保留时才启用。",
+      "empty": "当前Zone没有已保存的本地完成回答。",
+      "clearZone": "删除此Zone档案",
+      "clearAll": "删除全部本地档案",
+      "confirmZone": "删除此项目基线和Zone的全部本地回答？此操作无法撤销。",
+      "confirmAll": "删除此设备上的全部本地AI回答？此操作无法撤销。",
+      "confirmDelete": "永久删除",
+      "entryTitle": "Revision {{revision}} 的已保存回答",
+      "historical": "历史Revision",
+      "deleteEntry": "删除已保存回答",
+      "notReused": "该档案回答仅在本地显示，不会自动加入新的AI上下文。"
+    },
     "status": {
       "probing": "正在检查Codex CLI",
       "disabled": "未检测到Codex CLI，AI未连接",
@@ -523,6 +542,11 @@
       "ai_response_too_large": "AI回答超过大小限制",
       "ai_protocol_message_invalid": "Codex协议消息无效",
       "ai_protocol_message_too_large": "Codex协议消息超过大小限制",
+      "ai_archive_unavailable": "本地对话档案不可用",
+      "ai_archive_write_failed": "无法更新本地对话档案",
+      "ai_archive_entry_not_found": "所选本地对话档案条目已不可用",
+      "ai_conversation_archive_invalid": "本地对话档案无效",
+      "ai_conversation_archive_unavailable": "本地对话档案不可用",
       "unknown": "未知项目读取错误"
     }
   },

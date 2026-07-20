@@ -1455,6 +1455,72 @@ input:focus-visible,
   padding-left: 0;
 }
 
+.assistant-archive {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-archive-heading,
+.assistant-archive-entry-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.assistant-archive-heading > div {
+  min-width: 0;
+}
+
+.assistant-archive-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.assistant-archive-heading p,
+.assistant-archive-confirm p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.assistant-archive-actions,
+.assistant-archive-list {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-archive-confirm {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--error);
+  background: color-mix(in srgb, var(--error) 8%, var(--bg-surface));
+}
+
+.assistant-archive-confirm p {
+  margin: 0;
+}
+
+.danger-action {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 55%, var(--border));
+}
+
+.assistant-archive-entry {
+  border-left: 3px solid var(--accent);
+}
+
+.assistant-archive-entry-heading h4 {
+  margin: 0;
+}
+
 .bottom-tabs {
   flex-basis: 34px;
 }

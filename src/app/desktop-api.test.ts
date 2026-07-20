@@ -11,8 +11,13 @@ import {
   runActiveContamProject,
   undoProjectDraft,
   connectCodexAppServer,
+  clearAiConversationArchiveForZone,
+  clearAllAiConversationArchive,
+  deleteAiConversationArchiveEntry,
   installOfficialCodexCli,
+  loadAiConversationArchive,
   previewAiContext,
+  setAiConversationArchiveEnabled,
   startReadonlyAiTurn,
   interruptReadonlyAiTurn,
 } from "./desktop-api";
@@ -94,5 +99,32 @@ describe("desktop API boundary", () => {
     for (const forbidden of ["downloadUrl", "shellCommand", "arguments", "installerPath", "powershell"]) {
       expect(source).not.toContain(forbidden);
     }
+  });
+
+  it("keeps the optional local conversation archive behind the Rust boundary", () => {
+    expect(loadAiConversationArchive).toHaveLength(4);
+    expect(setAiConversationArchiveEnabled).toHaveLength(2);
+    expect(deleteAiConversationArchiveEntry).toHaveLength(5);
+    expect(clearAiConversationArchiveForZone).toHaveLength(4);
+    expect(clearAllAiConversationArchive).toHaveLength(1);
+
+    const archiveApis = [
+      loadAiConversationArchive,
+      setAiConversationArchiveEnabled,
+      deleteAiConversationArchiveEntry,
+      clearAiConversationArchiveForZone,
+      clearAllAiConversationArchive,
+    ];
+    for (const api of archiveApis) {
+      const source = api.toString();
+      for (const forbidden of ["sourcePath", "outputPath", "archivePath", "draftRoot", "prjText", "projectJson", "shellCommand"]) {
+        expect(source).not.toContain(forbidden);
+      }
+    }
+    expect(loadAiConversationArchive.toString()).toContain("load_ai_conversation_archive");
+    expect(setAiConversationArchiveEnabled.toString()).toContain("set_ai_conversation_archive_enabled");
+    expect(deleteAiConversationArchiveEntry.toString()).toContain("delete_ai_conversation_archive_entry");
+    expect(clearAiConversationArchiveForZone.toString()).toContain("clear_ai_conversation_archive_for_zone");
+    expect(clearAllAiConversationArchive.toString()).toContain("clear_all_ai_conversation_archive");
   });
 });

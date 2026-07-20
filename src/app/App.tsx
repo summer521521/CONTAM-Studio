@@ -30,12 +30,19 @@ import {
   interruptReadonlyAiTurn,
   installOfficialCodexCli,
   clearReadonlyAiSession,
+  clearAiConversationArchiveForZone,
+  clearAllAiConversationArchive,
+  deleteAiConversationArchiveEntry,
   disconnectCodexAppServer,
+  loadAiConversationArchive,
+  setAiConversationArchiveEnabled,
   undoProjectDraft,
 } from "./desktop-api";
 import {
   aiReducer,
   INITIAL_AI_STATE,
+  isSafeAiArchive,
+  isSafeAiArchiveSave,
   isSafeAiPreview,
   isStructuredAiAnswer,
   type AiContextScope,
@@ -100,6 +107,7 @@ function App() {
   const resultExportSequence = useRef(0);
   const runSequence = useRef(0);
   const aiSequence = useRef(0);
+  const aiArchiveSequence = useRef(0);
   const cliProbeStarted = useRef(false);
   const mounted = useRef(true);
   const initialMainLayout = useRef(getMainLayout(workbench)).current;
@@ -121,6 +129,7 @@ function App() {
       resultExportSequence.current += 1;
       runSequence.current += 1;
       aiSequence.current += 1;
+      aiArchiveSequence.current += 1;
     };
   }, []);
 
@@ -260,6 +269,48 @@ function App() {
   }, []);
 
   const currentZone = selectedZone(projectState);
+
+  const refreshAiArchive = useCallback(async () => {
+    if (!projectState.projectSessionId || !projectState.draft || !currentZone) return;
+    const sequence = ++aiArchiveSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchAi({ type: "archive_loading", requestId });
+    try {
+      const response = await loadAiConversationArchive(
+        requestId,
+        projectState.projectSessionId,
+        projectState.draft.revision_id,
+        currentZone.zone_id,
+      );
+      if (!mounted.current || sequence !== aiArchiveSequence.current) return;
+      if (
+        response.request_id !== requestId
+        || response.error
+        || !response.archive
+        || !isSafeAiArchive(response.archive)
+        || response.archive.entries.some((entry) => entry.zone_id !== currentZone.zone_id)
+      ) {
+        dispatchAi({
+          type: "archive_failed",
+          requestId,
+          issue: response.error ?? { code: "ai_conversation_archive_invalid", message: "AI archive response invalid." },
+        });
+        return;
+      }
+      dispatchAi({ type: "archive_loaded", requestId, archive: response.archive });
+    } catch {
+      if (!mounted.current || sequence !== aiArchiveSequence.current) return;
+      dispatchAi({
+        type: "archive_failed",
+        requestId,
+        issue: { code: "ai_conversation_archive_unavailable", message: "AI archive could not be loaded." },
+      });
+    }
+  }, [currentZone, projectState.draft, projectState.projectSessionId]);
+
+  useEffect(() => {
+    void refreshAiArchive();
+  }, [refreshAiArchive]);
 
   const loadZoneResults = useCallback(async (source: ResultLoadSource) => {
     if (!projectState.projectSessionId || !currentZone) return;
@@ -670,6 +721,79 @@ function App() {
     }
   }, []);
 
+  const changeAiArchivePersistence = useCallback(async (enabled: boolean) => {
+    const sequence = ++aiArchiveSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchAi({ type: "archive_loading", requestId });
+    try {
+      const response = await setAiConversationArchiveEnabled(requestId, enabled);
+      if (!mounted.current || sequence !== aiArchiveSequence.current) return;
+      if (response.request_id !== requestId || response.error || response.status !== (enabled ? "enabled" : "disabled")) {
+        dispatchAi({
+          type: "archive_failed",
+          requestId,
+          issue: response.error ?? { code: "ai_archive_write_failed", message: "AI archive preference response invalid." },
+        });
+        return;
+      }
+      dispatchAi({ type: "archive_persistence_changed", enabled });
+      void refreshAiArchive();
+    } catch {
+      if (!mounted.current || sequence !== aiArchiveSequence.current) return;
+      dispatchAi({
+        type: "archive_failed",
+        requestId,
+        issue: { code: "ai_archive_write_failed", message: "AI archive preference could not be saved." },
+      });
+    }
+  }, [refreshAiArchive]);
+
+  const mutateAiArchive = useCallback(async (
+    action: "delete" | "clear_zone" | "clear_all",
+    archiveEntryId?: string,
+  ) => {
+    if (!projectState.projectSessionId || !projectState.draft || !currentZone) return;
+    const sequence = ++aiArchiveSequence.current;
+    const requestId = crypto.randomUUID();
+    dispatchAi({ type: "archive_loading", requestId });
+    try {
+      const response = action === "delete"
+        ? await deleteAiConversationArchiveEntry(
+          requestId,
+          projectState.projectSessionId,
+          projectState.draft.revision_id,
+          currentZone.zone_id,
+          archiveEntryId ?? "",
+        )
+        : action === "clear_zone"
+          ? await clearAiConversationArchiveForZone(
+            requestId,
+            projectState.projectSessionId,
+            projectState.draft.revision_id,
+            currentZone.zone_id,
+          )
+          : await clearAllAiConversationArchive(requestId);
+      if (!mounted.current || sequence !== aiArchiveSequence.current) return;
+      const expectedStatus = action === "delete" ? "deleted" : action === "clear_zone" ? "cleared_zone" : "cleared_all";
+      if (response.request_id !== requestId || response.error || response.status !== expectedStatus) {
+        dispatchAi({
+          type: "archive_failed",
+          requestId,
+          issue: response.error ?? { code: "ai_archive_write_failed", message: "AI archive update response invalid." },
+        });
+        return;
+      }
+      void refreshAiArchive();
+    } catch {
+      if (!mounted.current || sequence !== aiArchiveSequence.current) return;
+      dispatchAi({
+        type: "archive_failed",
+        requestId,
+        issue: { code: "ai_archive_write_failed", message: "AI archive could not be updated." },
+      });
+    }
+  }, [currentZone, projectState.draft, projectState.projectSessionId, refreshAiArchive]);
+
   useEffect(() => {
     let disposed = false;
     const timer = window.setTimeout(() => {
@@ -852,16 +976,24 @@ function App() {
         dispatchAi({ type: "turn_interrupted" });
         return;
       }
-      if (response.request_id !== requestId || response.error || response.status !== "completed" || !response.answer || !isStructuredAiAnswer(response.answer)) {
+      if (
+        response.request_id !== requestId
+        || response.error
+        || response.status !== "completed"
+        || !response.answer
+        || !isStructuredAiAnswer(response.answer)
+        || !isSafeAiArchiveSave(response.archive)
+      ) {
         dispatchAi({ type: "operation_failed", requestId, issue: response.error ?? { code: "ai_response_contract_invalid", message: "AI answer contract invalid." } });
         return;
       }
-      dispatchAi({ type: "turn_succeeded", requestId, answer: response.answer });
+      dispatchAi({ type: "turn_succeeded", requestId, answer: response.answer, archive: response.archive });
+      if (response.archive.saved) void refreshAiArchive();
     } catch {
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_app_server_disconnected", message: "AI turn failed." } });
     }
-  }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, currentZone, projectState.draft, projectState.projectSessionId, workbench.language]);
+  }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, currentZone, projectState.draft, projectState.projectSessionId, refreshAiArchive, workbench.language]);
 
   const stopAiTurn = useCallback(async () => {
     aiSequence.current += 1;
@@ -1122,6 +1254,10 @@ function App() {
               onAiSend={() => void sendAiQuestion()}
               onAiStop={() => void stopAiTurn()}
               onAiClear={() => void clearAiSession()}
+              onAiArchiveEnabled={(enabled) => void changeAiArchivePersistence(enabled)}
+              onAiArchiveDelete={(entryId) => void mutateAiArchive("delete", entryId)}
+              onAiArchiveClearZone={() => void mutateAiArchive("clear_zone")}
+              onAiArchiveClearAll={() => void mutateAiArchive("clear_all")}
             />
           </Panel>
         </Group>

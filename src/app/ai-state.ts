@@ -93,6 +93,7 @@ export interface AiTokenUsageView {
 
 export interface AiConversationEntry {
   turn_id: string;
+  archive_entry_id: string | null;
   question: string;
   answer: StructuredAiAnswer;
 }
@@ -129,6 +130,40 @@ export interface DesktopAiTurnResponse {
   status: "completed" | "error";
   answer: StructuredAiAnswer | null;
   token_usage: AiTokenUsageView | null;
+  archive: AiArchiveSaveView;
+  error: AiDiagnostic | null;
+}
+
+export interface AiArchiveSaveView {
+  saved: boolean;
+  entry_id: string | null;
+  warning: AiDiagnostic | null;
+}
+
+export interface AiArchivedConversationEntry {
+  entry_id: string;
+  revision_id: string;
+  revision_number: number;
+  zone_id: string;
+  zone_name: string;
+  language: string;
+  model_id: string;
+  reasoning_effort: string;
+  included_scopes: AiContextScope[];
+  completed_at_unix_ms: number;
+  is_current_revision: boolean;
+  question: string;
+  answer: StructuredAiAnswer;
+}
+
+export interface AiConversationArchiveView {
+  persistence_enabled: boolean;
+  entries: AiArchivedConversationEntry[];
+}
+
+export interface DesktopAiConversationArchiveResponse {
+  request_id: string;
+  archive: AiConversationArchiveView | null;
   error: AiDiagnostic | null;
 }
 
@@ -150,6 +185,10 @@ export interface AiState {
   question: string;
   pendingQuestion: string | null;
   conversation: AiConversationEntry[];
+  archive: AiConversationArchiveView | null;
+  archiveStatus: "idle" | "loading" | "loaded" | "error";
+  archiveIssue: AiDiagnostic | null;
+  archiveRequestId: string | null;
   activeRequestId: string | null;
   issue: AiDiagnostic | null;
 }
@@ -168,6 +207,10 @@ export const INITIAL_AI_STATE: AiState = {
   question: "",
   pendingQuestion: null,
   conversation: [],
+  archive: null,
+  archiveStatus: "idle",
+  archiveIssue: null,
+  archiveRequestId: null,
   activeRequestId: null,
   issue: null,
 };
@@ -189,7 +232,11 @@ export type AiAction =
   | { type: "preview_visibility_toggled" }
   | { type: "question_changed"; question: string }
   | { type: "turn_started"; requestId: string; question: string }
-  | { type: "turn_succeeded"; requestId: string; answer: StructuredAiAnswer }
+  | { type: "turn_succeeded"; requestId: string; answer: StructuredAiAnswer; archive: AiArchiveSaveView }
+  | { type: "archive_loading"; requestId: string }
+  | { type: "archive_loaded"; requestId: string; archive: AiConversationArchiveView }
+  | { type: "archive_failed"; requestId: string; issue: AiDiagnostic }
+  | { type: "archive_persistence_changed"; enabled: boolean }
   | { type: "interrupt_started" }
   | { type: "turn_interrupted" }
   | { type: "context_changed" }
@@ -308,7 +355,12 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
       if (!question) return { ...state, status: "available", activeRequestId: null, issue: null };
       const conversation = [
         ...state.conversation,
-        { turn_id: action.requestId, question, answer: action.answer },
+        {
+          turn_id: action.requestId,
+          archive_entry_id: action.archive.entry_id,
+          question,
+          answer: action.answer,
+        },
       ].slice(-MAX_AI_CONVERSATION_ENTRIES);
       return {
         ...state,
@@ -317,9 +369,35 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
         question: "",
         pendingQuestion: null,
         conversation,
+        archiveIssue: action.archive.warning,
         issue: null,
       };
     }
+    case "archive_loading":
+      return { ...state, archiveStatus: "loading", archiveIssue: null, archiveRequestId: action.requestId };
+    case "archive_loaded":
+      if (state.archiveRequestId !== action.requestId) return state;
+      return {
+        ...state,
+        archive: action.archive,
+        archiveStatus: "loaded",
+        archiveIssue: null,
+        archiveRequestId: null,
+      };
+    case "archive_failed":
+      if (state.archiveRequestId !== action.requestId) return state;
+      return { ...state, archiveStatus: "error", archiveIssue: action.issue, archiveRequestId: null };
+    case "archive_persistence_changed":
+      return {
+        ...state,
+        archive: {
+          persistence_enabled: action.enabled,
+          entries: state.archive?.entries ?? [],
+        },
+        archiveStatus: "loaded",
+        archiveIssue: null,
+        archiveRequestId: null,
+      };
     case "interrupt_started":
       return { ...state, status: "interrupting", activeRequestId: null, pendingQuestion: null };
     case "turn_interrupted":
@@ -331,6 +409,10 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
           state.status === "probing" || state.status === "installing" || state.status === "connecting",
         ),
         status: state.connection?.account.authenticated ? "available" : state.status,
+        archive: null,
+        archiveStatus: "idle",
+        archiveIssue: null,
+        archiveRequestId: null,
       };
     case "session_cleared":
       return { ...clearConversationForBindingChange(state), status: state.connection?.account.authenticated ? "available" : state.status };
@@ -374,4 +456,95 @@ export function isStructuredAiAnswer(value: unknown): value is StructuredAiAnswe
     && answer.interpretation.length <= 4000
     && validItems(answer.limitations, 8)
     && validItems(answer.suggested_questions, 6);
+}
+
+function containsSensitivePath(value: string): boolean {
+  return /[A-Za-z]:\\|\\\\|file:\/\//i.test(value);
+}
+
+function isSafeArchiveDiagnostic(value: unknown): value is AiDiagnostic {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const diagnostic = value as Record<string, unknown>;
+  return Object.keys(diagnostic).length === 2
+    && typeof diagnostic.code === "string"
+    && diagnostic.code.length > 0
+    && diagnostic.code.length <= 96
+    && typeof diagnostic.message === "string"
+    && diagnostic.message.length > 0
+    && diagnostic.message.length <= 512
+    && !containsSensitivePath(diagnostic.message);
+}
+
+export function isSafeAiArchiveSave(value: unknown): value is AiArchiveSaveView {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const archive = value as Record<string, unknown>;
+  if (Object.keys(archive).length !== 3 || typeof archive.saved !== "boolean") return false;
+  const entryIdValid = archive.entry_id === null
+    || (typeof archive.entry_id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(archive.entry_id));
+  return entryIdValid && (archive.warning === null || isSafeArchiveDiagnostic(archive.warning));
+}
+
+export function isSafeAiArchive(value: unknown): value is AiConversationArchiveView {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const archive = value as Record<string, unknown>;
+  if (
+    Object.keys(archive).length !== 2
+    || typeof archive.persistence_enabled !== "boolean"
+    || !Array.isArray(archive.entries)
+    || archive.entries.length > 200
+  ) {
+    return false;
+  }
+  const expectedEntryKeys = [
+    "entry_id",
+    "revision_id",
+    "revision_number",
+    "zone_id",
+    "zone_name",
+    "language",
+    "model_id",
+    "reasoning_effort",
+    "included_scopes",
+    "completed_at_unix_ms",
+    "is_current_revision",
+    "question",
+    "answer",
+  ];
+  return archive.entries.every((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const item = entry as Record<string, unknown>;
+    const safeText = (field: string, max: number) => typeof item[field] === "string"
+      && item[field].length > 0
+      && item[field].length <= max
+      && ![...(item[field] as string)].some((character) => /[\u0000-\u001f\u007f]/.test(character))
+      && !containsSensitivePath(item[field] as string);
+    return Object.keys(item).length === expectedEntryKeys.length
+      && expectedEntryKeys.every((key) => key in item)
+      && safeText("entry_id", 128)
+      && safeText("revision_id", 128)
+      && typeof item.revision_number === "number"
+      && Number.isInteger(item.revision_number)
+      && item.revision_number >= 0
+      && safeText("zone_id", 128)
+      && safeText("zone_name", 256)
+      && safeText("language", 32)
+      && safeText("model_id", 256)
+      && safeText("reasoning_effort", 128)
+      && Array.isArray(item.included_scopes)
+      && item.included_scopes.every((scope) => typeof scope === "string" && [
+        "project_summary",
+        "selected_zone",
+        "draft_summary",
+        "run_summary",
+        "result_summary",
+        "diagnostics",
+      ].includes(scope))
+      && typeof item.completed_at_unix_ms === "number"
+      && Number.isInteger(item.completed_at_unix_ms)
+      && item.completed_at_unix_ms > 0
+      && typeof item.is_current_revision === "boolean"
+      && safeText("question", 4000)
+      && !containsSensitivePath(JSON.stringify(item.answer))
+      && isStructuredAiAnswer(item.answer);
+  });
 }

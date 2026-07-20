@@ -1221,6 +1221,7 @@ impl DesktopProjectSessionStore {
         }
         Ok(AiTrustedContext {
             project_session_id: active.project_session_id.clone(),
+            baseline_source_sha256: active.baseline_source_sha256.clone(),
             revision_id: active.active_revision().revision_id.clone(),
             revision_number: active.active_revision().revision_number,
             zone_id: zone.zone_id.clone(),
@@ -1233,6 +1234,8 @@ impl DesktopProjectSessionStore {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct AiTrustedContext {
     pub(crate) project_session_id: String,
+    #[serde(skip_serializing)]
+    pub(crate) baseline_source_sha256: String,
     pub(crate) revision_id: String,
     pub(crate) revision_number: u64,
     pub(crate) zone_id: String,
@@ -6117,13 +6120,18 @@ mod tests {
             "refresh_codex_account",
             "preview_ai_context",
             "start_readonly_ai_turn",
+            "load_ai_conversation_archive",
+            "set_ai_conversation_archive_enabled",
+            "delete_ai_conversation_archive_entry",
+            "clear_ai_conversation_archive_for_zone",
+            "clear_all_ai_conversation_archive",
             "interrupt_readonly_ai_turn",
             "clear_readonly_ai_session",
             "disconnect_codex_app_server",
         ] {
             assert!(build_script.contains(command));
         }
-        assert_eq!(capability["permissions"].as_array().unwrap().len(), 20);
+        assert_eq!(capability["permissions"].as_array().unwrap().len(), 25);
         let forbidden = [
             "sourcePath",
             "outputPath",
