@@ -202,7 +202,7 @@ function selectValidModel(connection: CodexConnectionView) {
     ?? null;
 }
 
-function clearConversationForBindingChange(state: AiState): AiState {
+function clearConversationForBindingChange(state: AiState, preserveActiveRequest = false): AiState {
   return {
     ...state,
     preview: null,
@@ -210,7 +210,7 @@ function clearConversationForBindingChange(state: AiState): AiState {
     question: "",
     pendingQuestion: null,
     conversation: [],
-    activeRequestId: null,
+    activeRequestId: preserveActiveRequest ? state.activeRequestId : null,
     issue: null,
   };
 }
@@ -325,7 +325,13 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
     case "turn_interrupted":
       return { ...state, status: "available", activeRequestId: null, pendingQuestion: null, issue: null };
     case "context_changed":
-      return { ...clearConversationForBindingChange(state), status: state.connection?.account.authenticated ? "available" : state.status };
+      return {
+        ...clearConversationForBindingChange(
+          state,
+          state.status === "probing" || state.status === "installing" || state.status === "connecting",
+        ),
+        status: state.connection?.account.authenticated ? "available" : state.status,
+      };
     case "session_cleared":
       return { ...clearConversationForBindingChange(state), status: state.connection?.account.authenticated ? "available" : state.status };
     case "disconnected": {

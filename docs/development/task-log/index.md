@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [Phase 6A Codex连接可靠性修复](records/phase-6a-codex-connection-reliability-fix.md) | Phase 6A | completed | live |
 | [Phase 6A-Beta-1同会话对话记录与上下文失效体验](records/phase-6a-beta-session-transcript.md) | Phase 6A-Beta-1 | completed | live |
 | [Phase 6A App Server生命周期与并发安全收口](records/phase-6a-app-server-lifecycle-hardening.md) | Phase 6A | completed | live |
 | [Phase 6A首屏黑屏收口](records/phase-6a-first-paint-black-screen.md) | Phase 6A | completed | live |

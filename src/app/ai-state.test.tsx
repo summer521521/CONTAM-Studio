@@ -80,6 +80,21 @@ describe("read-only AI state", () => {
     expect(installed.connection).toBeNull();
   });
 
+  it("keeps pending CLI and connection responses valid when project context changes", () => {
+    const probing = aiReducer(INITIAL_AI_STATE, { type: "probe_started", requestId: "probe-1" });
+    const projectLoadedDuringProbe = aiReducer(probing, { type: "context_changed" });
+    expect(projectLoadedDuringProbe.activeRequestId).toBe("probe-1");
+    expect(aiReducer(projectLoadedDuringProbe, { type: "probe_succeeded", requestId: "probe-1", probe: connection.cli }).status).toBe("installed");
+
+    const connecting = aiReducer(
+      { ...INITIAL_AI_STATE, status: "installed", cliProbe: connection.cli },
+      { type: "connect_started", requestId: "connect-1" },
+    );
+    const projectLoadedDuringConnection = aiReducer(connecting, { type: "context_changed" });
+    expect(projectLoadedDuringConnection.activeRequestId).toBe("connect-1");
+    expect(aiReducer(projectLoadedDuringConnection, { type: "connect_succeeded", requestId: "connect-1", connection }).status).toBe("available");
+  });
+
   it("renders a local-only CLI checking state without an App Server connection", () => {
     const html = renderToStaticMarkup(
       <CodexAssistantPanel
