@@ -832,7 +832,8 @@ function App() {
     if (!projectState.projectSessionId || !projectState.draft || !currentZone || !aiState.preview || !aiState.question.trim()) return;
     const sequence = ++aiSequence.current;
     const requestId = crypto.randomUUID();
-    dispatchAi({ type: "turn_started", requestId });
+    const question = aiState.question.trim();
+    dispatchAi({ type: "turn_started", requestId, question });
     try {
       const response = await startReadonlyAiTurn(
         requestId,
@@ -840,7 +841,7 @@ function App() {
         projectState.draft.revision_id,
         currentZone.zone_id,
         aiState.preview.preview_id,
-        aiState.question,
+        question,
         aiState.scopes,
         workbench.language,
         aiState.modelId,
@@ -855,7 +856,7 @@ function App() {
         dispatchAi({ type: "operation_failed", requestId, issue: response.error ?? { code: "ai_response_contract_invalid", message: "AI answer contract invalid." } });
         return;
       }
-      dispatchAi({ type: "turn_succeeded", requestId, answer: response.answer, tokenUsage: response.token_usage });
+      dispatchAi({ type: "turn_succeeded", requestId, answer: response.answer });
     } catch {
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_app_server_disconnected", message: "AI turn failed." } });
@@ -863,10 +864,16 @@ function App() {
   }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, currentZone, projectState.draft, projectState.projectSessionId, workbench.language]);
 
   const stopAiTurn = useCallback(async () => {
+    aiSequence.current += 1;
     dispatchAi({ type: "interrupt_started" });
     try {
       const response = await interruptReadonlyAiTurn(crypto.randomUUID());
-      if (mounted.current && response.error) dispatchAi({ type: "operation_failed", requestId: null, issue: response.error });
+      if (!mounted.current) return;
+      if (response.error) {
+        dispatchAi({ type: "operation_failed", requestId: null, issue: response.error });
+      } else {
+        dispatchAi({ type: "turn_interrupted" });
+      }
     } catch {
       if (mounted.current) dispatchAi({ type: "operation_failed", requestId: null, issue: { code: "codex_app_server_disconnected", message: "AI interrupt failed." } });
     }

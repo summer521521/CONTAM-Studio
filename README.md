@@ -42,7 +42,7 @@ Python CONTAM领域核心
 
 Phase 1实现React前端与最小Tauri桌面宿主；Phase 2建立严格Zone纯文档读取器和桌面只读闭环；Phase 3A-0建立哈希绑定、仅写副本的Python Patch，Phase 3B接入Diff审阅。Phase 3C复用同一Patch领域函数，把批准修改提交为不可变内部Revision，并由Rust管理稳定Zone UUID、线性Undo/Redo、安全另存和当前Revision的运行/结果绑定。React只取得路径无关的安全视图；contamxpy隔离检查没有接入GUI。
 
-Phase 6A的AI侧栏只接受Rust生成的结构化披露快照。默认发送当前Zone和草稿摘要，不发送绝对路径、PRJ正文、内部快照、manifest、SIM、原始日志或完整577条结果；上下文变化后必须重新预览。Codex Thread固定为只读沙箱和禁止审批，工具或权限事件会被中断并丢弃回答。连接、上下文失效和关闭均由Rust代际化管理：迟到连接、旧Turn和未完成关闭不能覆盖当前状态或复用为可信会话。CLI安装命令同样只接受`request_id`，下载地址、PowerShell路径、参数和目标目录均由Rust固定持有，且没有向WebView开放通用Shell或文件系统权限。详见[Codex只读助手架构](docs/architecture/codex-readonly-assistant.md)。
+Phase 6A的AI侧栏只接受Rust生成的结构化披露快照。默认发送当前Zone和草稿摘要，不发送绝对路径、PRJ正文、内部快照、manifest、SIM、原始日志或完整577条结果；上下文变化后必须重新预览。Codex Thread固定为只读沙箱和禁止审批，工具或权限事件会被中断并丢弃回答。连接、上下文失效和关闭均由Rust代际化管理：迟到连接、旧Turn和未完成关闭不能覆盖当前状态或复用为可信会话。Phase 6A-Beta-1只在同一可信绑定内以内存方式保留至多12条已完成的结构化问答；停止只丢弃未完成回答，项目、Revision、Zone、模型、推理强度、披露范围变化、断开、清空会话或应用重启都会清空可见记录。CLI安装命令同样只接受`request_id`，下载地址、PowerShell路径、参数和目标目录均由Rust固定持有，且没有向WebView开放通用Shell或文件系统权限。详见[Codex只读助手架构](docs/architecture/codex-readonly-assistant.md)。
 
 ## 开发启动
 

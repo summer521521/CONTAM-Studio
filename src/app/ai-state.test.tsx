@@ -7,6 +7,7 @@ import {
   INITIAL_AI_STATE,
   isSafeAiPreview,
   isStructuredAiAnswer,
+  type AiState,
   type AiContextDisclosureView,
   type CodexConnectionView,
 } from "./ai-state";
@@ -42,6 +43,13 @@ const preview: AiContextDisclosureView = {
     contains_complete_result_series: false,
     model_request_uses_network: true,
   },
+};
+
+const structuredAnswer = {
+  deterministic_facts: ["Volume is 600 m3."],
+  interpretation: "The disclosed Zone has a stable volume.",
+  limitations: ["No full result series was sent."],
+  suggested_questions: ["What does flag 3 mean?"],
 };
 
 beforeAll(async () => {
@@ -131,11 +139,24 @@ describe("read-only AI state", () => {
     expect(INITIAL_AI_STATE.scopes).toEqual(["selected_zone", "draft_summary"]);
   });
 
-  it("invalidates preview and answer when a scope, model, or trusted context changes", () => {
-    const populated = { ...INITIAL_AI_STATE, connection, status: "available" as const, preview, previewExpanded: true, answer: { deterministic_facts: ["x"], interpretation: "y", limitations: [], suggested_questions: [] } };
-    expect(aiReducer(populated, { type: "scope_toggled", scope: "run_summary" }).preview).toBeNull();
-    expect(aiReducer(populated, { type: "model_changed", modelId: "model-a", effort: "high" }).answer).toBeNull();
-    expect(aiReducer(populated, { type: "context_changed" }).question).toBe("");
+  it("invalidates preview and completed exchanges when a trusted binding changes", () => {
+    const populated = {
+      ...INITIAL_AI_STATE,
+      connection,
+      status: "available" as const,
+      preview,
+      previewExpanded: true,
+      question: "Keep this only in the same binding.",
+      conversation: [{ turn_id: "turn-1", question: "Explain One.", answer: structuredAnswer }],
+    };
+    const scoped = aiReducer(populated, { type: "scope_toggled", scope: "run_summary" });
+    expect(scoped.preview).toBeNull();
+    expect(scoped.conversation).toEqual([]);
+    expect(scoped.question).toBe("");
+    expect(aiReducer(populated, { type: "model_changed", modelId: "model-a", effort: "high" }).conversation).toEqual([]);
+    expect(aiReducer(populated, { type: "effort_changed", effort: "low" }).conversation).toEqual([]);
+    expect(aiReducer(populated, { type: "context_changed" }).conversation).toEqual([]);
+    expect(aiReducer(populated, { type: "session_cleared" }).conversation).toEqual([]);
   });
 
   it("collapses a confirmed preview without invalidating the approved disclosure", () => {
@@ -225,6 +246,7 @@ describe("read-only AI state", () => {
         connection,
         preview,
         question: "Explain this Zone.",
+        conversation: [{ turn_id: "turn-1", question: "Explain One.", answer: structuredAnswer }],
       },
       {
         type: "operation_failed",
@@ -236,15 +258,56 @@ describe("read-only AI state", () => {
     expect(disconnected.connection).toBeNull();
     expect(disconnected.preview).toBeNull();
     expect(disconnected.question).toBe("");
+    expect(disconnected.conversation).toEqual([]);
   });
 
   it("ignores stale connection and turn responses", () => {
     const connecting = aiReducer(INITIAL_AI_STATE, { type: "connect_started", requestId: "current" });
     expect(aiReducer(connecting, { type: "connect_succeeded", requestId: "old", connection })).toEqual(connecting);
-    const generating = aiReducer({ ...connecting, status: "available" }, { type: "turn_started", requestId: "turn-current" });
-    expect(aiReducer(generating, { type: "turn_succeeded", requestId: "turn-old", answer: { deterministic_facts: [], interpretation: "", limitations: [], suggested_questions: [] }, tokenUsage: null })).toEqual(generating);
+    const generating = aiReducer({ ...connecting, status: "available" }, { type: "turn_started", requestId: "turn-current", question: "Explain this Zone." });
+    expect(aiReducer(generating, { type: "turn_succeeded", requestId: "turn-old", answer: structuredAnswer })).toEqual(generating);
     const ready = { ...INITIAL_AI_STATE, status: "available" as const, connection };
     expect(aiReducer(ready, { type: "operation_failed", requestId: "old", issue: { code: "codex_app_server_disconnected", message: "hidden" } })).toEqual(ready);
+  });
+
+  it("retains completed exchanges in order and bounds the in-memory transcript", () => {
+    let state: AiState = { ...INITIAL_AI_STATE, status: "available", connection, preview };
+    for (let index = 0; index < 13; index += 1) {
+      const requestId = `turn-${index}`;
+      const question = `Question ${index}`;
+      state = aiReducer({ ...state, question }, { type: "turn_started", requestId, question });
+      state = aiReducer(state, { type: "turn_succeeded", requestId, answer: structuredAnswer });
+    }
+    expect(state.conversation).toHaveLength(12);
+    expect(state.conversation[0]?.question).toBe("Question 1");
+    expect(state.conversation.at(-1)?.question).toBe("Question 12");
+    expect(state.question).toBe("");
+    expect(state.pendingQuestion).toBeNull();
+    expect(state.preview).toEqual(preview);
+  });
+
+  it("keeps completed exchanges on preview refresh but discards an interrupted partial answer", () => {
+    const completed = {
+      ...INITIAL_AI_STATE,
+      status: "available" as const,
+      connection,
+      preview,
+      conversation: [{ turn_id: "turn-complete", question: "First question", answer: structuredAnswer }],
+    };
+    const previewing = aiReducer(completed, { type: "preview_started", requestId: "preview-next" });
+    expect(aiReducer(previewing, { type: "preview_succeeded", requestId: "preview-next", preview }).conversation).toEqual(completed.conversation);
+
+    const generating = aiReducer(
+      { ...completed, question: "Retry this question" },
+      { type: "turn_started", requestId: "turn-partial", question: "Retry this question" },
+    );
+    const interrupting = aiReducer(generating, { type: "interrupt_started" });
+    expect(interrupting.pendingQuestion).toBeNull();
+    expect(interrupting.activeRequestId).toBeNull();
+    expect(aiReducer(interrupting, { type: "turn_succeeded", requestId: "turn-partial", answer: structuredAnswer })).toEqual(interrupting);
+    const interrupted = aiReducer(interrupting, { type: "turn_interrupted" });
+    expect(interrupted.conversation).toEqual(completed.conversation);
+    expect(interrupted.question).toBe("Retry this question");
   });
 
   it("accepts only a path-free disclosure generated by Rust", () => {
@@ -260,7 +323,7 @@ describe("read-only AI state", () => {
     expect(isStructuredAiAnswer({ deterministic_facts: [], interpretation: "ok", limitations: [], suggested_questions: [], raw_path: "C:\\private" })).toBe(false);
   });
 
-  it("renders network disclosure, context preview, and separate answer sections", () => {
+  it("renders network disclosure, context preview, and completed structured exchanges", () => {
     const html = renderToStaticMarkup(
       <CodexAssistantPanel
         state={{
@@ -271,7 +334,7 @@ describe("read-only AI state", () => {
           reasoningEffort: "low",
           preview,
           previewExpanded: true,
-          answer: { deterministic_facts: ["Volume is 600 m3."], interpretation: "Large volume.", limitations: ["No full series."], suggested_questions: [] },
+          conversation: [{ turn_id: "turn-1", question: "Explain this Zone.", answer: structuredAnswer }],
         }}
         contextAvailable
         onConnect={() => undefined}
@@ -290,6 +353,9 @@ describe("read-only AI state", () => {
     );
     expect(html).toContain("Local client, online model");
     expect(html).toContain("Structured context preview");
+    expect(html).toContain("This session");
+    expect(html).toContain("Your question");
+    expect(html).toContain("Explain this Zone.");
     expect(html).toContain("Deterministic facts");
     expect(html).toContain("AI interpretation");
     expect(html).toContain("Limitations");
@@ -366,7 +432,7 @@ describe("read-only AI state", () => {
     expect(html).not.toContain(">Send<");
   });
 
-  it("clears the active turn and preview on interruption or disconnection", () => {
+  it("clears an active partial turn but preserves completed exchanges until disconnection", () => {
     const generating = {
       ...INITIAL_AI_STATE,
       status: "generating" as const,
@@ -374,11 +440,14 @@ describe("read-only AI state", () => {
       preview,
       question: "Explain this Zone.",
       activeRequestId: "turn-1",
+      pendingQuestion: "Explain this Zone.",
+      conversation: [{ turn_id: "turn-complete", question: "First question", answer: structuredAnswer }],
     };
     const interrupted = aiReducer(generating, { type: "turn_interrupted" });
     expect(interrupted.status).toBe("available");
     expect(interrupted.preview).toEqual(preview);
-    expect(interrupted.answer).toBeNull();
+    expect(interrupted.conversation).toEqual(generating.conversation);
+    expect(interrupted.pendingQuestion).toBeNull();
     const disconnected = aiReducer(interrupted, { type: "disconnected" });
     expect(disconnected).toEqual({ ...INITIAL_AI_STATE, status: "installed", cliProbe: connection.cli });
   });

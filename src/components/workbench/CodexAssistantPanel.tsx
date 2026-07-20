@@ -231,16 +231,26 @@ export function CodexAssistantPanel({
           </div>
 
           {state.status === "generating" ? <p className="assistant-progress" role="status">{t("assistant.generating")}</p> : null}
-          {state.answer ? (
-            <article className="assistant-answer">
-              <section><h3>{t("assistant.facts")}</h3><ul>{state.answer.deterministic_facts.map((item) => <li key={item}>{item}</li>)}</ul></section>
-              <section><h3>{t("assistant.interpretation")}</h3><p>{state.answer.interpretation}</p></section>
-              <section><h3>{t("assistant.limitations")}</h3><ul>{state.answer.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>
-              {state.answer.suggested_questions.length > 0 ? (
-                <section><h3>{t("assistant.suggestedQuestions")}</h3><ul>{state.answer.suggested_questions.map((item) => <li key={item}>{item}</li>)}</ul></section>
-              ) : null}
-              <p className="assistant-safe-note">{t("assistant.factsCaveat")}</p>
-            </article>
+          {state.conversation.length > 0 ? (
+            <section className="assistant-conversation" aria-labelledby="ai-conversation-title">
+              <h3 id="ai-conversation-title">{t("assistant.conversation")}</h3>
+              {state.conversation.map((entry, index) => (
+                <article className="assistant-answer" key={entry.turn_id}>
+                  <h4>{t("assistant.turn", { number: index + 1 })}</h4>
+                  <section>
+                    <h5>{t("assistant.completedQuestion")}</h5>
+                    <p>{entry.question}</p>
+                  </section>
+                  <section><h5>{t("assistant.facts")}</h5><ul>{entry.answer.deterministic_facts.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                  <section><h5>{t("assistant.interpretation")}</h5><p>{entry.answer.interpretation}</p></section>
+                  <section><h5>{t("assistant.limitations")}</h5><ul>{entry.answer.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                  {entry.answer.suggested_questions.length > 0 ? (
+                    <section><h5>{t("assistant.suggestedQuestions")}</h5><ul>{entry.answer.suggested_questions.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                  ) : null}
+                  <p className="assistant-safe-note">{t("assistant.factsCaveat")}</p>
+                </article>
+              ))}
+            </section>
           ) : null}
         </>
       ) : null}

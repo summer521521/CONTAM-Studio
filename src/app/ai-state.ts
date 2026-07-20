@@ -91,6 +91,14 @@ export interface AiTokenUsageView {
   total_tokens: number | null;
 }
 
+export interface AiConversationEntry {
+  turn_id: string;
+  question: string;
+  answer: StructuredAiAnswer;
+}
+
+export const MAX_AI_CONVERSATION_ENTRIES = 12;
+
 export interface DesktopCodexProbeResponse {
   request_id: string;
   probe: CodexCliProbeView | null;
@@ -140,8 +148,8 @@ export interface AiState {
   preview: AiContextDisclosureView | null;
   previewExpanded: boolean;
   question: string;
-  answer: StructuredAiAnswer | null;
-  tokenUsage: AiTokenUsageView | null;
+  pendingQuestion: string | null;
+  conversation: AiConversationEntry[];
   activeRequestId: string | null;
   issue: AiDiagnostic | null;
 }
@@ -158,8 +166,8 @@ export const INITIAL_AI_STATE: AiState = {
   preview: null,
   previewExpanded: false,
   question: "",
-  answer: null,
-  tokenUsage: null,
+  pendingQuestion: null,
+  conversation: [],
   activeRequestId: null,
   issue: null,
 };
@@ -180,8 +188,8 @@ export type AiAction =
   | { type: "preview_succeeded"; requestId: string; preview: AiContextDisclosureView }
   | { type: "preview_visibility_toggled" }
   | { type: "question_changed"; question: string }
-  | { type: "turn_started"; requestId: string }
-  | { type: "turn_succeeded"; requestId: string; answer: StructuredAiAnswer; tokenUsage: AiTokenUsageView | null }
+  | { type: "turn_started"; requestId: string; question: string }
+  | { type: "turn_succeeded"; requestId: string; answer: StructuredAiAnswer }
   | { type: "interrupt_started" }
   | { type: "turn_interrupted" }
   | { type: "context_changed" }
@@ -192,6 +200,19 @@ function selectValidModel(connection: CodexConnectionView) {
   return connection.models.find((model) => model.is_default && model.available)
     ?? connection.models.find((model) => model.available)
     ?? null;
+}
+
+function clearConversationForBindingChange(state: AiState): AiState {
+  return {
+    ...state,
+    preview: null,
+    previewExpanded: false,
+    question: "",
+    pendingQuestion: null,
+    conversation: [],
+    activeRequestId: null,
+    issue: null,
+  };
 }
 
 export function aiReducer(state: AiState, action: AiAction): AiState {
@@ -250,39 +271,63 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
           issue: action.issue,
         };
       }
-      return { ...state, status: "error", activeRequestId: null, issue: action.issue };
+      return { ...state, status: "error", activeRequestId: null, pendingQuestion: null, issue: action.issue };
     case "scope_toggled": {
       const scopes = state.scopes.includes(action.scope)
         ? state.scopes.filter((scope) => scope !== action.scope)
         : [...state.scopes, action.scope];
-      return { ...state, scopes, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
+      return { ...clearConversationForBindingChange(state), scopes };
     }
     case "model_changed":
-      return { ...state, modelId: action.modelId, reasoningEffort: action.effort, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
+      return { ...clearConversationForBindingChange(state), modelId: action.modelId, reasoningEffort: action.effort };
     case "effort_changed":
-      return { ...state, reasoningEffort: action.effort, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
+      return { ...clearConversationForBindingChange(state), reasoningEffort: action.effort };
     case "preview_started":
-      return { ...state, activeRequestId: action.requestId, preview: null, previewExpanded: false, answer: null, tokenUsage: null, issue: null };
+      return { ...state, activeRequestId: action.requestId, preview: null, previewExpanded: false, issue: null };
     case "preview_succeeded":
       if (state.activeRequestId !== action.requestId) return state;
-      return { ...state, status: "available", activeRequestId: null, preview: action.preview, previewExpanded: true, answer: null, tokenUsage: null, issue: null };
+      return { ...state, status: "available", activeRequestId: null, preview: action.preview, previewExpanded: true, issue: null };
     case "preview_visibility_toggled":
       return state.preview ? { ...state, previewExpanded: !state.previewExpanded } : state;
     case "question_changed":
       return { ...state, question: action.question };
-    case "turn_started":
-      return { ...state, status: "generating", activeRequestId: action.requestId, answer: null, tokenUsage: null, issue: null };
-    case "turn_succeeded":
+    case "turn_started": {
+      const question = action.question.trim();
+      if (!question) return state;
+      return {
+        ...state,
+        status: "generating",
+        activeRequestId: action.requestId,
+        pendingQuestion: question,
+        issue: null,
+      };
+    }
+    case "turn_succeeded": {
       if (state.activeRequestId !== action.requestId) return state;
-      return { ...state, status: "available", activeRequestId: null, answer: action.answer, tokenUsage: action.tokenUsage, issue: null };
+      const question = state.pendingQuestion;
+      if (!question) return { ...state, status: "available", activeRequestId: null, issue: null };
+      const conversation = [
+        ...state.conversation,
+        { turn_id: action.requestId, question, answer: action.answer },
+      ].slice(-MAX_AI_CONVERSATION_ENTRIES);
+      return {
+        ...state,
+        status: "available",
+        activeRequestId: null,
+        question: "",
+        pendingQuestion: null,
+        conversation,
+        issue: null,
+      };
+    }
     case "interrupt_started":
-      return { ...state, status: "interrupting" };
+      return { ...state, status: "interrupting", activeRequestId: null, pendingQuestion: null };
     case "turn_interrupted":
-      return { ...state, status: "available", activeRequestId: null, answer: null, tokenUsage: null, issue: null };
+      return { ...state, status: "available", activeRequestId: null, pendingQuestion: null, issue: null };
     case "context_changed":
-      return { ...state, preview: null, previewExpanded: false, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
+      return { ...clearConversationForBindingChange(state), status: state.connection?.account.authenticated ? "available" : state.status };
     case "session_cleared":
-      return { ...state, preview: null, previewExpanded: false, answer: null, tokenUsage: null, activeRequestId: null, question: "", issue: null, status: state.connection?.account.authenticated ? "available" : state.status };
+      return { ...clearConversationForBindingChange(state), status: state.connection?.account.authenticated ? "available" : state.status };
     case "disconnected": {
       const cliProbe = state.connection?.cli ?? state.cliProbe;
       return {

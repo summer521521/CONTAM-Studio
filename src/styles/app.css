@@ -1169,7 +1169,9 @@ input:focus-visible,
 
 .assistant-heading h2,
 .assistant-preview h3,
-.assistant-answer h3 {
+.assistant-conversation > h3,
+.assistant-answer h4,
+.assistant-answer h5 {
   margin: 0;
 }
 
@@ -1376,7 +1378,9 @@ input:focus-visible,
 }
 
 .assistant-preview h3,
-.assistant-answer h3 {
+.assistant-conversation > h3,
+.assistant-answer h4,
+.assistant-answer h5 {
   font-size: 12px;
 }
 
@@ -1419,6 +1423,23 @@ input:focus-visible,
 .assistant-answer {
   display: grid;
   gap: 12px;
+}
+
+.assistant-conversation {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-conversation > h3 {
+  color: var(--text-secondary);
+}
+
+.assistant-answer h4 {
+  color: var(--text-primary);
+}
+
+.assistant-answer h5 {
+  color: var(--text-secondary);
 }
 
 .assistant-answer p,

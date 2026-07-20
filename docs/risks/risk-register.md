@@ -49,3 +49,4 @@
 | R-6A-5 | Codex CLI缺失、安装或权限导致桌面无法启动App Server | 中高 | 环境变量绝对路径优先，其次精确官方用户安装位置和PATH；有界probe；缺失时仅在用户二次确认后执行固定官方入口、大小和SHA锁定的受控用户级安装；不提权、不自动登录 | Phase 6A、Beta |
 | R-6A-6 | OpenAI官方安装脚本变化或安装过程输出失控 | 高 | 固定HTTPS入口、128 KiB脚本上限、已审阅SHA-256、固定参数、180秒超时和流上限；任何漂移或安装后身份复核失败均闭合拒绝，等待Studio更新锁定值 | Phase 6A、Beta |
 | R-6A-7 | App Server替换、上下文失效或关闭期间遗留旧Turn/子进程 | 高 | 单调连接租约、Turn代际与取消标记、旧通知归属过滤、stdin/kill/双流线程有界收口、未完成连接保留并受控重试；Windows Job Object留作Beta验证 | Phase 6A、Beta |
+| R-6A-8 | 已完成AI回答在错误项目、Revision、Zone或模型绑定下继续可见 | 高 | 记录仅在React内存中保存最多12条已完成Schema回答；项目、Revision、Zone、模型、推理强度、披露范围、语言、连接或会话清空时同时废弃Thread、预览和记录；停止Turn不追加迟到回答 | Phase 6A-Beta |
