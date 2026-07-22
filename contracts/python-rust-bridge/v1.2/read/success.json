@@ -5,34 +5,59 @@
   "request_id": "read-success",
   "result": {
     "project": {
-      "declared_zone_count": 1,
-      "diagnostics": [],
+      "declared_zone_count": 3,
+      "diagnostics": [
+        {
+          "code": "strict_subset_read",
+          "context": {},
+          "message": "仅识别经验证的CONTAM 3.4简单Zone子集；未解析其他PRJ区块。",
+          "source_line_number": null
+        }
+      ],
       "first_zone": {
         "contam_number": 1,
-        "flags": 0,
+        "flags": 3,
         "level_number": 1,
-        "name": "Zone-1",
+        "name": "one",
         "relative_height": 0.0,
-        "source_line_number": 1,
-        "volume_m3": 100.0
+        "source_line_number": 362,
+        "volume_m3": 300.0
       },
-      "header_variant": 3,
+      "header_variant": 0,
       "header_version": "3.4.0.4",
       "reader_mode": "strict_contam_3_4_simple_zone_v1",
       "schema_version": "1.0",
       "source_path": "${SOURCE_PRJ}",
-      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "source_size_bytes": 1,
+      "source_sha256": "1cafb2f0fef511f19ef88358238a1c1175c593187691ff7545db982f5e6e75ed",
+      "source_size_bytes": 9932,
       "source_unchanged": true,
       "zones": [
         {
           "contam_number": 1,
-          "flags": 0,
+          "flags": 3,
           "level_number": 1,
-          "name": "Zone-1",
+          "name": "one",
           "relative_height": 0.0,
-          "source_line_number": 1,
-          "volume_m3": 100.0
+          "source_line_number": 362,
+          "volume_m3": 300.0
+        },
+        {
+          "contam_number": 2,
+          "flags": 3,
+          "level_number": 1,
+          "name": "two",
+          "relative_height": 0.0,
+          "source_line_number": 363,
+          "volume_m3": 600.0
+        },
+        {
+          "contam_number": 3,
+          "flags": 3,
+          "level_number": 1,
+          "name": "three",
+          "relative_height": 0.0,
+          "source_line_number": 364,
+          "volume_m3": 900.0
         }
       ]
     },

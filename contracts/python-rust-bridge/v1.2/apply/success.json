@@ -5,67 +5,99 @@
   "request_id": "apply-success",
   "result": {
     "application": {
-      "diagnostics": [],
+      "diagnostics": [
+        {
+          "code": "copy_only_patch_applied",
+          "context": {},
+          "message": "已创建并验证新的PRJ副本；源PRJ未修改。",
+          "source_line_number": 362
+        }
+      ],
       "generated_artifacts": [],
-      "new_token": "120",
-      "new_value": 120.0,
-      "old_token": "100",
-      "old_value": 100.0,
+      "new_token": "650",
+      "new_value": 650.0,
+      "old_token": "300",
+      "old_value": 300.0,
       "output_path": "${OUTPUT_PRJ}",
-      "output_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "output_size_bytes": 1,
+      "output_sha256": "2cb90c6026f515a9f3dcedf144297b87d99dd637093326f1bc34140c189ed4c9",
+      "output_size_bytes": 9932,
       "patch_type": "replace_zone_volume",
       "schema_version": "1.0",
       "source_path": "${SOURCE_PRJ}",
-      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "source_size_bytes": 1,
+      "source_sha256": "1cafb2f0fef511f19ef88358238a1c1175c593187691ff7545db982f5e6e75ed",
+      "source_size_bytes": 9932,
       "source_unchanged": true,
       "status": "applied",
       "target": {
-        "byte_end": 3,
-        "byte_start": 0,
+        "byte_end": 8760,
+        "byte_start": 8757,
         "contam_number": 1,
         "field": "volume_m3",
-        "source_line_number": 1,
-        "token_index": 0,
-        "zone_name": "Zone-1"
+        "source_line_number": 362,
+        "token_index": 7,
+        "zone_name": "one"
       },
       "verification": [
-        "source_hash_unchanged",
-        "output_hash_verified",
-        "output_strict_re_read",
-        "target_zone_verified"
+        "source_snapshot_unchanged",
+        "single_token_byte_replacement_verified",
+        "strict_zone_reread_verified",
+        "parsed_zone_fields_verified"
       ]
     },
     "project": {
-      "declared_zone_count": 1,
-      "diagnostics": [],
+      "declared_zone_count": 3,
+      "diagnostics": [
+        {
+          "code": "strict_subset_read",
+          "context": {},
+          "message": "仅识别经验证的CONTAM 3.4简单Zone子集；未解析其他PRJ区块。",
+          "source_line_number": null
+        }
+      ],
       "first_zone": {
         "contam_number": 1,
-        "flags": 0,
+        "flags": 3,
         "level_number": 1,
-        "name": "Zone-1",
+        "name": "one",
         "relative_height": 0.0,
-        "source_line_number": 1,
-        "volume_m3": 120.0
+        "source_line_number": 362,
+        "volume_m3": 650.0
       },
-      "header_variant": 3,
+      "header_variant": 0,
       "header_version": "3.4.0.4",
       "reader_mode": "strict_contam_3_4_simple_zone_v1",
       "schema_version": "1.0",
       "source_path": "${OUTPUT_PRJ}",
-      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "source_size_bytes": 1,
+      "source_sha256": "2cb90c6026f515a9f3dcedf144297b87d99dd637093326f1bc34140c189ed4c9",
+      "source_size_bytes": 9932,
       "source_unchanged": true,
       "zones": [
         {
           "contam_number": 1,
-          "flags": 0,
+          "flags": 3,
           "level_number": 1,
-          "name": "Zone-1",
+          "name": "one",
           "relative_height": 0.0,
-          "source_line_number": 1,
-          "volume_m3": 120.0
+          "source_line_number": 362,
+          "volume_m3": 650.0
+        },
+        {
+          "contam_number": 2,
+          "flags": 3,
+          "level_number": 1,
+          "name": "two",
+          "relative_height": 0.0,
+          "source_line_number": 363,
+          "volume_m3": 600.0
+        },
+        {
+          "contam_number": 3,
+          "flags": 3,
+          "level_number": 1,
+          "name": "three",
+          "relative_height": 0.0,
+          "source_line_number": 364,
+          "volume_m3": 900.0
         }
       ]
     },

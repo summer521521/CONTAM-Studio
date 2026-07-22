@@ -7,6 +7,65 @@
     "result_type": "contamx_run",
     "run": {
       "exit_code": 0,
+      "manifest": {
+        "artifacts": [],
+        "command": {
+          "arguments": [
+            "model.prj"
+          ],
+          "executable": "contamx3.exe"
+        },
+        "diagnostics": [],
+        "duration_ms": 1000,
+        "ended_at_utc": "2026-01-01T00:00:01Z",
+        "execution_mode": "isolated_contamx_process",
+        "exit_code": 0,
+        "input_snapshots": [
+          {
+            "classification": "input_snapshot",
+            "relative_path": "workspace/model.prj",
+            "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "snapshot_size_bytes": 1,
+            "source_path": "${SOURCE_PRJ}",
+            "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "source_size_bytes": 1,
+            "source_unchanged": true
+          }
+        ],
+        "run_id": "run-1",
+        "schema_version": "1.0",
+        "solver": {
+          "architecture": "x86",
+          "name": "contamx3.exe",
+          "path": "C:/tools/contamx3.exe",
+          "provenance": "deterministic contract mock",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size_bytes": 100,
+          "version": "3.4.0.3"
+        },
+        "source": {
+          "path": "${SOURCE_PRJ}",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 1,
+          "unchanged": true
+        },
+        "started_at_utc": "2026-01-01T00:00:00Z",
+        "status": "succeeded",
+        "stderr": {
+          "relative_path": "evidence/stderr.bin",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "size_bytes": 0,
+          "truncated": false
+        },
+        "stdout": {
+          "relative_path": "evidence/stdout.bin",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size_bytes": 0,
+          "truncated": false
+        },
+        "timed_out": false,
+        "working_directory": "${RUN_ROOT}"
+      },
       "manifest_path": "${MANIFEST}",
       "primary_artifacts": [],
       "run_directory": "${RUN_ROOT}",

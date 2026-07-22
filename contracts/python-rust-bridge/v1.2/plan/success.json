@@ -4,45 +4,45 @@
   "protocol_version": "1.2",
   "request_id": "plan-success",
   "result": {
-    "diff_text": "--- source.prj\n+++ proposed-copy.prj\n@@ Zone 1, source line 1, field volume_m3 @@\n-100\n+120",
+    "diff_text": "--- valThreeZonesWthCtm-UseApi.prj\n+++ proposed-copy.prj\n@@ Zone 1, source line 362, field volume_m3 @@\n-   1  3   0   0   0   1   0.000   300 293.15 0 one -1 0 2 0 0 0 0 0\n+   1  3   0   0   0   1   0.000   650 293.15 0 one -1 0 2 0 0 0 0 0",
     "patch": {
       "header_version": "3.4.0.4",
       "patch_type": "replace_zone_volume",
       "preconditions": {
         "contam_number": 1,
         "header_version": "3.4.0.4",
-        "old_token": "100",
-        "old_value": 100.0,
+        "old_token": "300",
+        "old_value": 300.0,
         "reader_mode": "strict_contam_3_4_simple_zone_v1",
-        "source_line_number": 1,
-        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-        "source_size_bytes": 1
+        "source_line_number": 362,
+        "source_sha256": "1cafb2f0fef511f19ef88358238a1c1175c593187691ff7545db982f5e6e75ed",
+        "source_size_bytes": 9932
       },
       "preview": {
-        "new_line": "120",
-        "new_token": "120",
-        "old_line": "100",
-        "old_token": "100",
-        "source_line_number": 1
+        "new_line": "   1  3   0   0   0   1   0.000   650 293.15 0 one -1 0 2 0 0 0 0 0",
+        "new_token": "650",
+        "old_line": "   1  3   0   0   0   1   0.000   300 293.15 0 one -1 0 2 0 0 0 0 0",
+        "old_token": "300",
+        "source_line_number": 362
       },
       "reader_mode": "strict_contam_3_4_simple_zone_v1",
       "replacement": {
-        "new_token": "120",
-        "new_value": 120.0
+        "new_token": "650",
+        "new_value": 650.0
       },
       "schema_version": "1.0",
       "source_path": "${SOURCE_PRJ}",
-      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "source_size_bytes": 1,
+      "source_sha256": "1cafb2f0fef511f19ef88358238a1c1175c593187691ff7545db982f5e6e75ed",
+      "source_size_bytes": 9932,
       "status": "planned",
       "target": {
-        "byte_end": 3,
-        "byte_start": 0,
+        "byte_end": 8760,
+        "byte_start": 8757,
         "contam_number": 1,
         "field": "volume_m3",
-        "source_line_number": 1,
-        "token_index": 0,
-        "zone_name": "Zone-1"
+        "source_line_number": 362,
+        "token_index": 7,
+        "zone_name": "one"
       }
     },
     "result_type": "zone_volume_patch_plan"

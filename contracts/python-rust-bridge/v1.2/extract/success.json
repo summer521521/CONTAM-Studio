@@ -16,7 +16,7 @@
       "schema_version": "1.0",
       "source_evidence": {
         "manifest": "${MANIFEST}",
-        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "source_unchanged": true
       },
       "source_line_number": 1,
@@ -29,11 +29,11 @@
     "result_type": "zone_air_state_extraction",
     "run_manifest": {
       "path": "${MANIFEST}",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "unchanged": true
     },
     "source_evidence": {
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
       "size_bytes": 1,
       "unchanged": true
     },
