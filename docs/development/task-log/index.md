@@ -17,6 +17,7 @@
 | [BATCH-02 ARCH-01 冻结三层职责与可信边界](records/batch-02-arch-01-layer-boundaries.md) | ARCH-01 | completed | live |
 | [BATCH-02 CONTRACT-01A Python/Rust黄金协议清单](records/batch-02-contract-01a-manifest.md) | CONTRACT-01A | completed | live |
 | [BATCH-02 CONTRACT-01B Python黄金桥接测试](records/batch-02-contract-01b-python-goldens.md) | CONTRACT-01B | completed | live |
+| [BATCH-02 CONTRACT-01C Rust严格桥接Raw模型](records/batch-02-contract-01c-rust-raw-models.md) | CONTRACT-01C | completed | live |
 | [SAFE-01修复草稿另存并发删除](records/safe-01-draft-export-race-fix.md) | SAFE-01 | automated_verified | live |
 | [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | completed | live |
 | [PH6-02结果审核与Phase 6A/SAFE-01独立交付](records/phase-6-02-review-and-delivery.md) | PH6-02 | completed | live |

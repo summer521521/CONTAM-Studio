@@ -44,6 +44,8 @@
           "version": "3.4.0.3"
         },
         "source": {
+          "directory_entries_after": [],
+          "directory_entries_before": [],
           "path": "${SOURCE_PRJ}",
           "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "size_bytes": 1,

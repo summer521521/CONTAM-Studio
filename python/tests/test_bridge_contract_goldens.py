@@ -14,7 +14,7 @@ from contam_studio_core.contamx_run_models import (
     RunInputSnapshot,
     RunStreamEvidence,
 )
-from contam_studio_core.simread_models import ZoneAirStateSeries
+from contam_studio_core.simread_models import ZoneAirStateSample, ZoneAirStateSeries
 from contam_studio_core.zone_bridge import (
     OPERATION_APPLY_ZONE_VOLUME_PATCH,
     OPERATION_EXTRACT_ZONE_AIR_STATE,
@@ -121,7 +121,14 @@ def _run_dataclass(source: Path, run_root: Path) -> ContamXRunResult:
         started_at_utc="2026-01-01T00:00:00Z",
         ended_at_utc="2026-01-01T00:00:01Z",
         duration_ms=1000,
-        source={"path": str(source), "sha256": source_sha256, "size_bytes": 1, "unchanged": True},
+        source={
+            "directory_entries_after": [],
+            "directory_entries_before": [],
+            "path": str(source),
+            "sha256": source_sha256,
+            "size_bytes": 1,
+            "unchanged": True,
+        },
         input_snapshots=(snapshot,),
         solver=solver,
         command={"arguments": ["model.prj"], "executable": "contamx3.exe"},
@@ -173,21 +180,30 @@ def test_run_bridge_envelope_matches_deterministic_dataclass_golden(tmp_path: Pa
 def test_extract_bridge_envelope_matches_deterministic_result_golden(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     manifest = tmp_path / "run" / "evidence" / "manifest.json"
     result_root = tmp_path / "results"
+    sample = ZoneAirStateSample(
+        index=0,
+        day_of_year=1,
+        day_type=None,
+        sim_time_seconds=0.0,
+        temperature_k=293.15,
+        reference_pressure_pa=101325.0,
+        air_density_kg_m3=1.2041,
+    )
     series = ZoneAirStateSeries(
         schema_version="1.0",
         result_type="zone_air_state",
         run_id="run-1",
         extraction_id="extract-1",
         zone_number=1,
-        zone_name="Zone-1",
-        source_line_number=1,
+        zone_name="one",
+        source_line_number=362,
         unit_system="SI",
-        sample_count=0,
-        samples=(),
+        sample_count=1,
+        samples=(sample,),
         source_evidence={
-            "manifest": str(manifest),
-            "source_sha256": "e" * 64,
-            "source_unchanged": True,
+            "relative_path": "workspace/zone.nfr",
+            "sha256": "e" * 64,
+            "size_bytes": 1,
         },
     )
     monkeypatch.setattr(
@@ -195,11 +211,14 @@ def test_extract_bridge_envelope_matches_deterministic_result_golden(tmp_path: P
         "extract_zone_air_state",
         lambda *args, **kwargs: {
             "extraction_id": "extract-1",
+            "first_sample": sample.to_dict(),
             "parsed_result": series.to_dict(),
             "result_manifest_path": str(manifest),
-            "run_manifest": {"path": str(manifest), "sha256": "f" * 64, "unchanged": True},
-            "source_evidence": {"sha256": "e" * 64, "size_bytes": 1, "unchanged": True},
+            "run_id": "run-1",
+            "sample_count": 1,
             "status": "succeeded",
+            "zone_name": "one",
+            "zone_number": 1,
         },
     )
     envelope = handle_request(

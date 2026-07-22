@@ -195,6 +195,7 @@ pub(crate) fn sha256_file(path: &Path) -> std::io::Result<(String, u64)> {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
+#[serde(deny_unknown_fields)]
 struct RawReaderDiagnostic {
     code: String,
     message: String,
@@ -210,9 +211,21 @@ pub struct ReaderDiagnostic {
     pub(crate) context: BTreeMap<String, Value>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(deny_unknown_fields)]
+struct RawZoneRecord {
+    contam_number: i64,
+    name: String,
+    flags: i64,
+    level_number: i64,
+    relative_height: f64,
+    volume_m3: f64,
+    source_line_number: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ZoneRecord {
-    #[serde(default)]
     zone_id: String,
     contam_number: i64,
     name: String,
@@ -223,8 +236,24 @@ pub struct ZoneRecord {
     source_line_number: u64,
 }
 
+impl From<RawZoneRecord> for ZoneRecord {
+    fn from(raw: RawZoneRecord) -> Self {
+        Self {
+            zone_id: String::new(),
+            contam_number: raw.contam_number,
+            name: raw.name,
+            flags: raw.flags,
+            level_number: raw.level_number,
+            relative_height: raw.relative_height,
+            volume_m3: raw.volume_m3,
+            source_line_number: raw.source_line_number,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
+#[serde(deny_unknown_fields)]
 struct RawProjectInspection {
     schema_version: String,
     reader_mode: String,
@@ -235,8 +264,8 @@ struct RawProjectInspection {
     header_version: String,
     header_variant: i64,
     declared_zone_count: u64,
-    zones: Vec<ZoneRecord>,
-    first_zone: Option<ZoneRecord>,
+    zones: Vec<RawZoneRecord>,
+    first_zone: Option<RawZoneRecord>,
     diagnostics: Vec<RawReaderDiagnostic>,
 }
 
@@ -257,12 +286,14 @@ pub struct ProjectInspection {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawReadZonesResult {
     result_type: String,
     project: RawProjectInspection,
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawBridgeEnvelope {
     protocol_version: String,
     request_id: String,
@@ -374,6 +405,7 @@ pub struct DraftSummary {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct PatchTarget {
     contam_number: i64,
     zone_name: String,
@@ -385,6 +417,7 @@ struct PatchTarget {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct PatchPreconditions {
     source_sha256: String,
     source_size_bytes: u64,
@@ -397,12 +430,14 @@ struct PatchPreconditions {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct PatchReplacement {
     new_token: String,
     new_value: f64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct PatchPreview {
     source_line_number: u64,
     old_token: String,
@@ -412,6 +447,7 @@ struct PatchPreview {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct ZoneVolumePatch {
     schema_version: String,
     patch_type: String,
@@ -428,6 +464,7 @@ struct ZoneVolumePatch {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawPatchPlanResult {
     result_type: String,
     patch: ZoneVolumePatch,
@@ -435,6 +472,7 @@ struct RawPatchPlanResult {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawPatchApplication {
     schema_version: String,
     patch_type: String,
@@ -457,6 +495,7 @@ struct RawPatchApplication {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawPatchApplicationResult {
     result_type: String,
     application: RawPatchApplication,
@@ -529,6 +568,7 @@ pub struct DesktopDraftExportResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct RawZoneAirStateSample {
     index: u64,
     day_of_year: u64,
@@ -540,6 +580,15 @@ struct RawZoneAirStateSample {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct RawZoneAirStateSourceEvidence {
+    relative_path: String,
+    sha256: String,
+    size_bytes: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct RawZoneAirStateSeries {
     schema_version: String,
     result_type: String,
@@ -551,12 +600,14 @@ struct RawZoneAirStateSeries {
     unit_system: String,
     sample_count: u64,
     samples: Vec<RawZoneAirStateSample>,
+    source_evidence: RawZoneAirStateSourceEvidence,
     day_type_source: String,
     time_contract: String,
     diagnostics: Vec<RawReaderDiagnostic>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct RawZoneAirStateExtraction {
     result_type: String,
     extraction_id: String,
@@ -567,6 +618,12 @@ struct RawZoneAirStateExtraction {
     sample_count: u64,
     first_sample: RawZoneAirStateSample,
     parsed_result: RawZoneAirStateSeries,
+    #[serde(default)]
+    result_manifest_path: Option<String>,
+    #[serde(default)]
+    source_evidence: Option<RawZoneAirStateSourceEvidence>,
+    #[serde(default)]
+    run_manifest: Option<RawRunManifestEvidence>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -627,26 +684,69 @@ pub struct DesktopZoneAirStateCsvExportResponse {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawRunSolver {
+    architecture: String,
     name: String,
+    path: String,
+    provenance: String,
+    sha256: String,
+    size_bytes: u64,
     version: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawRunSource {
+    directory_entries_after: Vec<String>,
+    directory_entries_before: Vec<String>,
+    path: String,
     sha256: String,
+    size_bytes: u64,
     unchanged: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct RawRunArtifact {
-    relative_path: String,
-    size_bytes: u64,
-    suffix: String,
+#[serde(deny_unknown_fields)]
+struct RawRunInputSnapshot {
     classification: String,
+    relative_path: String,
+    snapshot_sha256: String,
+    snapshot_size_bytes: u64,
+    source_path: String,
+    source_sha256: String,
+    source_size_bytes: u64,
+    source_unchanged: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRunArtifact {
+    classification: String,
+    relative_path: String,
+    sha256: String,
+    size_bytes: u64,
+    suffix: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRunStreamEvidence {
+    relative_path: String,
+    sha256: String,
+    size_bytes: u64,
+    truncated: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRunCommand {
+    arguments: Vec<String>,
+    executable: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawRunManifest {
     schema_version: String,
     run_id: String,
@@ -656,14 +756,28 @@ struct RawRunManifest {
     ended_at_utc: String,
     duration_ms: u64,
     source: RawRunSource,
+    input_snapshots: Vec<RawRunInputSnapshot>,
     solver: RawRunSolver,
+    command: RawRunCommand,
+    working_directory: String,
     exit_code: Option<i32>,
     timed_out: bool,
+    stdout: RawRunStreamEvidence,
+    stderr: RawRunStreamEvidence,
     artifacts: Vec<RawRunArtifact>,
     diagnostics: Vec<RawReaderDiagnostic>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct RawRunManifestEvidence {
+    path: String,
+    sha256: String,
+    unchanged: bool,
+}
+
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawContamXRun {
     run_id: String,
     status: String,
@@ -677,6 +791,7 @@ struct RawContamXRun {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawContamXRunResult {
     result_type: String,
     run: RawContamXRun,
@@ -1766,7 +1881,7 @@ fn sanitize_python_error(
 }
 
 fn validate_raw_project(
-    mut raw: RawProjectInspection,
+    raw: RawProjectInspection,
     expected_path: &Path,
 ) -> Result<ProjectInspection, ReaderDiagnostic> {
     let valid = raw.schema_version == RESULT_SCHEMA_VERSION
@@ -1812,8 +1927,13 @@ fn validate_raw_project(
                 BTreeMap::new(),
             )
         })?;
-    assign_baseline_zone_ids(&mut raw.zones, &raw.source_sha256);
-    raw.first_zone = raw.zones.first().cloned();
+    let mut zones = raw
+        .zones
+        .into_iter()
+        .map(ZoneRecord::from)
+        .collect::<Vec<_>>();
+    assign_baseline_zone_ids(&mut zones, &raw.source_sha256);
+    let first_zone = zones.first().cloned();
     Ok(ProjectInspection {
         schema_version: raw.schema_version,
         reader_mode: raw.reader_mode,
@@ -1824,8 +1944,8 @@ fn validate_raw_project(
         header_version: raw.header_version,
         header_variant: raw.header_variant,
         declared_zone_count: raw.declared_zone_count,
-        zones: raw.zones,
-        first_zone: raw.first_zone,
+        zones,
+        first_zone,
         diagnostics,
     })
 }
@@ -2386,6 +2506,29 @@ fn safe_run_relative_path(value: &str) -> bool {
             .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
 }
 
+fn safe_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn raw_run_stream_is_valid(stream: &RawRunStreamEvidence) -> bool {
+    safe_run_relative_path(&stream.relative_path)
+        && safe_sha256(&stream.sha256)
+        && stream.size_bytes <= MAX_STDOUT_BYTES.max(MAX_STDERR_BYTES) as u64
+        && !stream.truncated
+}
+
+fn raw_run_artifact_is_valid(artifact: &RawRunArtifact) -> bool {
+    safe_run_relative_path(&artifact.relative_path)
+        && safe_sha256(&artifact.sha256)
+        && artifact.size_bytes > 0
+}
+
+fn raw_zone_air_state_source_evidence_is_valid(evidence: &RawZoneAirStateSourceEvidence) -> bool {
+    safe_run_relative_path(&evidence.relative_path)
+        && safe_sha256(&evidence.sha256)
+        && evidence.size_bytes > 0
+}
+
 fn run_id_is_valid(run_id: &str) -> bool {
     !run_id.is_empty()
         && run_id.len() <= 80
@@ -2407,8 +2550,7 @@ fn validate_contamx_run_result(
         && run.primary_artifacts.iter().all(|artifact| {
             artifact.suffix.eq_ignore_ascii_case(".sim")
                 && artifact.classification == "simulation_result"
-                && artifact.size_bytes > 0
-                && safe_run_relative_path(&artifact.relative_path)
+                && raw_run_artifact_is_valid(artifact)
         });
     let manifest_sim_count = manifest
         .artifacts
@@ -2416,10 +2558,36 @@ fn validate_contamx_run_result(
         .filter(|artifact| {
             artifact.suffix.eq_ignore_ascii_case(".sim")
                 && artifact.classification == "simulation_result"
-                && artifact.size_bytes > 0
-                && safe_run_relative_path(&artifact.relative_path)
+                && raw_run_artifact_is_valid(artifact)
         })
         .count();
+    let source = &manifest.source;
+    let solver = &manifest.solver;
+    let snapshots_valid = !manifest.input_snapshots.is_empty()
+        && manifest.input_snapshots.len() <= 256
+        && manifest.input_snapshots.iter().all(|snapshot| {
+            snapshot.classification == "input_snapshot"
+                && safe_run_relative_path(&snapshot.relative_path)
+                && !snapshot.source_path.is_empty()
+                && snapshot
+                    .source_sha256
+                    .eq_ignore_ascii_case(&active.source_sha256)
+                && snapshot
+                    .snapshot_sha256
+                    .eq_ignore_ascii_case(&active.source_sha256)
+                && snapshot.source_size_bytes == active.source_size_bytes
+                && snapshot.snapshot_size_bytes == active.source_size_bytes
+                && snapshot.source_unchanged
+        });
+    let source_evidence_valid = !source.path.is_empty()
+        && source.size_bytes == active.source_size_bytes
+        && source.directory_entries_before.len() <= 4096
+        && source.directory_entries_after.len() <= 4096;
+    let solver_evidence_valid = solver.architecture == "x86"
+        && !solver.path.is_empty()
+        && !solver.provenance.is_empty()
+        && safe_sha256(&solver.sha256)
+        && solver.size_bytes > 0;
     let contract_valid = raw.result_type == "contamx_run"
         && run_id_valid
         && run.status == "succeeded"
@@ -2430,17 +2598,24 @@ fn validate_contamx_run_result(
         && manifest.schema_version == RESULT_SCHEMA_VERSION
         && manifest.status == "succeeded"
         && manifest.execution_mode == "isolated_contamx_process"
-        && manifest
-            .source
-            .sha256
-            .eq_ignore_ascii_case(&active.source_sha256)
-        && manifest.source.unchanged
-        && manifest.solver.name.eq_ignore_ascii_case("contamx3.exe")
-        && manifest.solver.version == "3.4.0.3"
+        && source.sha256.eq_ignore_ascii_case(&active.source_sha256)
+        && source.unchanged
+        && source_evidence_valid
+        && solver.name.eq_ignore_ascii_case("contamx3.exe")
+        && solver.version == "3.4.0.3"
+        && solver_evidence_valid
+        && manifest.command.executable == solver.name
+        && !manifest.command.arguments.is_empty()
+        && manifest.command.arguments.len() <= 16
+        && manifest.working_directory == "workspace"
+        && snapshots_valid
+        && raw_run_stream_is_valid(&manifest.stdout)
+        && raw_run_stream_is_valid(&manifest.stderr)
         && manifest.exit_code == Some(0)
         && !manifest.timed_out
         && manifest.diagnostics.is_empty()
         && manifest.artifacts.len() <= 256
+        && manifest.artifacts.iter().all(raw_run_artifact_is_valid)
         && primary_valid
         && manifest_sim_count == run.primary_artifacts.len()
         && !manifest.started_at_utc.is_empty()
@@ -2534,6 +2709,17 @@ fn validate_zone_air_state_result(
             BTreeMap::new(),
         ));
     };
+    let optional_manifest_evidence_valid = raw
+        .result_manifest_path
+        .as_ref()
+        .is_none_or(|path| !path.is_empty())
+        && raw
+            .source_evidence
+            .as_ref()
+            .is_none_or(raw_zone_air_state_source_evidence_is_valid)
+        && raw.run_manifest.as_ref().is_none_or(|manifest| {
+            !manifest.path.is_empty() && safe_sha256(&manifest.sha256) && manifest.unchanged
+        });
     let valid = raw.result_type == "zone_air_state_extraction"
         && raw.status == "succeeded"
         && raw.zone_number == zone_number
@@ -2556,6 +2742,8 @@ fn validate_zone_air_state_result(
         && raw.parsed_result.unit_system == "SI"
         && raw.parsed_result.day_type_source == "not_available_in_simread_nfr_v1"
         && raw.parsed_result.time_contract == "elapsed_seconds_from_first_sample"
+        && raw_zone_air_state_source_evidence_is_valid(&raw.parsed_result.source_evidence)
+        && optional_manifest_evidence_valid
         && raw.first_sample == raw.parsed_result.samples[0];
     if expected_run_id.is_some_and(|run_id| raw.run_id != run_id) {
         return Err(host_diagnostic(
@@ -4819,6 +5007,44 @@ mod tests {
     }
 
     #[test]
+    fn python_rust_bridge_goldens_use_closed_raw_models() {
+        let read: RawBridgeEnvelope = serde_json::from_str(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/read/success.json"
+        ))
+        .unwrap();
+        let read_result: RawReadZonesResult = serde_json::from_value(read.result.unwrap()).unwrap();
+        assert!(read_result
+            .project
+            .zones
+            .iter()
+            .all(|zone| { serde_json::to_value(zone).unwrap().get("zone_id").is_none() }));
+
+        let plan: RawBridgeEnvelope = serde_json::from_str(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/plan/success.json"
+        ))
+        .unwrap();
+        let _: RawPatchPlanResult = serde_json::from_value(plan.result.unwrap()).unwrap();
+
+        let apply: RawBridgeEnvelope = serde_json::from_str(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/apply/success.json"
+        ))
+        .unwrap();
+        let _: RawPatchApplicationResult = serde_json::from_value(apply.result.unwrap()).unwrap();
+
+        let extract: RawBridgeEnvelope = serde_json::from_str(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/extract/success.json"
+        ))
+        .unwrap();
+        let _: RawZoneAirStateExtraction = serde_json::from_value(extract.result.unwrap()).unwrap();
+
+        let run: RawBridgeEnvelope = serde_json::from_str(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/run/success.json"
+        ))
+        .unwrap();
+        let _: RawContamXRunResult = serde_json::from_value(run.result.unwrap()).unwrap();
+    }
+
+    #[test]
     fn nonempty_stderr_and_transport_failures_are_rejected() {
         let mut value = outcome(b"{}".to_vec());
         value.stderr.bytes = b"unexpected".to_vec();
@@ -5267,10 +5493,18 @@ mod tests {
                 unit_system: "SI".into(),
                 sample_count: 1,
                 samples: vec![sample],
+                source_evidence: RawZoneAirStateSourceEvidence {
+                    relative_path: "workspace/zone.nfr".into(),
+                    sha256: "a".repeat(64),
+                    size_bytes: 10,
+                },
                 day_type_source: "not_available_in_simread_nfr_v1".into(),
                 time_contract: "elapsed_seconds_from_first_sample".into(),
                 diagnostics: Vec::new(),
             },
+            result_manifest_path: None,
+            source_evidence: None,
+            run_manifest: None,
         }
     }
 
@@ -5282,10 +5516,21 @@ mod tests {
         let manifest_path = evidence.join("manifest.json");
         fs::write(&manifest_path, b"{}").unwrap();
         let artifact = RawRunArtifact {
+            classification: "simulation_result".into(),
             relative_path: "workspace/test_GetPrjInfo.sim".into(),
+            sha256: "b".repeat(64),
             size_bytes: 3,
             suffix: ".sim".into(),
-            classification: "simulation_result".into(),
+        };
+        let snapshot = RawRunInputSnapshot {
+            classification: "input_snapshot".into(),
+            relative_path: "workspace/test_GetPrjInfo.prj".into(),
+            snapshot_sha256: active.source_sha256.clone(),
+            snapshot_size_bytes: active.source_size_bytes,
+            source_path: active.source_path.to_string_lossy().into_owned(),
+            source_sha256: active.source_sha256.clone(),
+            source_size_bytes: active.source_size_bytes,
+            source_unchanged: true,
         };
         RawContamXRunResult {
             result_type: "contamx_run".into(),
@@ -5307,15 +5552,42 @@ mod tests {
                     ended_at_utc: "2026-07-18T12:00:01Z".into(),
                     duration_ms: 1000,
                     source: RawRunSource {
+                        directory_entries_after: Vec::new(),
+                        directory_entries_before: Vec::new(),
+                        path: active.source_path.to_string_lossy().into_owned(),
                         sha256: active.source_sha256.clone(),
+                        size_bytes: active.source_size_bytes,
                         unchanged: true,
                     },
+                    input_snapshots: vec![snapshot],
                     solver: RawRunSolver {
+                        architecture: "x86".into(),
                         name: "contamx3.exe".into(),
+                        path: "C:/tools/contamx3.exe".into(),
+                        provenance: "NIST official package".into(),
+                        sha256: "c".repeat(64),
+                        size_bytes: 100,
                         version: "3.4.0.3".into(),
                     },
+                    command: RawRunCommand {
+                        arguments: vec!["test_GetPrjInfo.prj".into()],
+                        executable: "contamx3.exe".into(),
+                    },
+                    working_directory: "workspace".into(),
                     exit_code: Some(0),
                     timed_out: false,
+                    stdout: RawRunStreamEvidence {
+                        relative_path: "evidence/stdout.bin".into(),
+                        sha256: "d".repeat(64),
+                        size_bytes: 0,
+                        truncated: false,
+                    },
+                    stderr: RawRunStreamEvidence {
+                        relative_path: "evidence/stderr.bin".into(),
+                        sha256: "e".repeat(64),
+                        size_bytes: 0,
+                        truncated: false,
+                    },
                     artifacts: vec![artifact],
                     diagnostics: vec![],
                 },
