@@ -4361,6 +4361,19 @@ fn validate_draft_export_destination(
 }
 
 fn copy_draft_atomically(source: &Path, output: &Path) -> Result<(), &'static str> {
+    copy_draft_atomically_with_commit(source, output, |temporary, output| {
+        std::fs::hard_link(temporary, output)
+    })
+}
+
+fn copy_draft_atomically_with_commit<CommitStep>(
+    source: &Path,
+    output: &Path,
+    commit_step: CommitStep,
+) -> Result<(), &'static str>
+where
+    CommitStep: FnOnce(&Path, &Path) -> std::io::Result<()>,
+{
     if output.exists() {
         return Err("draft_export_destination_exists");
     }
@@ -4385,7 +4398,7 @@ fn copy_draft_atomically(source: &Path, output: &Path) -> Result<(), &'static st
         target.flush().map_err(|_| "draft_export_write_failed")?;
         target.sync_all().map_err(|_| "draft_export_write_failed")?;
         drop(target);
-        std::fs::hard_link(&temporary, output).map_err(|error| {
+        commit_step(&temporary, output).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 "draft_export_destination_exists"
             } else {
@@ -4395,9 +4408,6 @@ fn copy_draft_atomically(source: &Path, output: &Path) -> Result<(), &'static st
         Ok(())
     })();
     let _ = std::fs::remove_file(&temporary);
-    if result.is_err() {
-        let _ = std::fs::remove_file(output);
-    }
     result
 }
 
@@ -5043,6 +5053,46 @@ mod tests {
         }
         fs::remove_dir_all(root).unwrap();
         fs::remove_dir_all(&active.draft_root).unwrap();
+    }
+
+    #[test]
+    fn draft_copy_commit_race_preserves_competing_target_and_cleans_temporary_file() {
+        let fixture = primary_fixture();
+        let project = execute_read(&fixture, "draft-copy-race").result.unwrap();
+        let active = active_context("draft-copy-race", fixture, &project);
+        let _ = fs::remove_dir_all(&active.draft_root);
+        let root =
+            std::env::temp_dir().join(format!("contam-studio-copy-race-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let output = root.join("draft-copy-race.prj");
+        let sentinel_path = root.join("sentinel.bin");
+        let sentinel = b"concurrent target must survive";
+        fs::write(&sentinel_path, sentinel).unwrap();
+        let expected = sha256_file(&sentinel_path).unwrap();
+
+        let result =
+            copy_draft_atomically_with_commit(&active.source_path, &output, |_, output| {
+                fs::write(output, sentinel)?;
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    "target was created concurrently",
+                ))
+            });
+
+        assert_eq!(result, Err("draft_export_destination_exists"));
+        assert_eq!(sha256_file(&output).unwrap(), expected);
+        assert_eq!(fs::read(&output).unwrap(), sentinel);
+        assert!(!fs::read_dir(&root).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".draft.tmp")
+        }));
+
+        fs::remove_dir_all(root).unwrap();
+        let _ = fs::remove_dir_all(&active.draft_root);
     }
 
     #[test]

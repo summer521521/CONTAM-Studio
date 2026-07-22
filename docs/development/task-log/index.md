@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [SAFE-01修复草稿另存并发删除](records/safe-01-draft-export-race-fix.md) | SAFE-01 | automated_verified | live |
 | [Phase 6A-Beta-2本地只读对话档案](records/phase-6a-beta-local-conversation-archive.md) | Phase 6A-Beta-2 | completed | live |
 | [Phase 6A Codex连接可靠性修复](records/phase-6a-codex-connection-reliability-fix.md) | Phase 6A | completed | live |
 | [Phase 6A-Beta-1同会话对话记录与上下文失效体验](records/phase-6a-beta-session-transcript.md) | Phase 6A-Beta-1 | completed | live |
