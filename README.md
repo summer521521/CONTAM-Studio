@@ -114,6 +114,7 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 
 - [2026-07-22全项目审计](docs/development/2026-07-22-project-wide-audit.md)
 - [下一阶段执行任务书](docs/roadmap/next-development-execution-plan.md)
+- [能力状态矩阵](docs/capability-status-matrix.json)
 - [当前状态](docs/current-state.md)
 - [产品愿景](docs/product/vision.md)
 - [范围与非目标](docs/product/scope.md)

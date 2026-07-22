@@ -3,8 +3,9 @@
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
 | [SAFE-01修复草稿另存并发删除](records/safe-01-draft-export-race-fix.md) | SAFE-01 | automated_verified | live |
-| [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | in_progress | live |
+| [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | completed | live |
 | [PH6-02结果审核与Phase 6A/SAFE-01独立交付](records/phase-6-02-review-and-delivery.md) | PH6-02 | completed | live |
+| [TRUTH-01唯一能力状态矩阵](records/truth-01-capability-status-matrix.md) | TRUTH-01 | in_progress | live |
 | [CONTAM Studio全项目审计与执行计划](records/project-wide-audit-and-execution-plan.md) | Cross-phase planning | completed | live |
 | [Phase 6A-Beta-2本地只读对话档案](records/phase-6a-beta-local-conversation-archive.md) | Phase 6A-Beta-2 | completed | live |
 | [Phase 6A Codex连接可靠性修复](records/phase-6a-codex-connection-reliability-fix.md) | Phase 6A | completed | live |

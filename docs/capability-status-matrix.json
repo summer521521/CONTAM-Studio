@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "matrix_id": "contam-studio-capability-status",
+  "title": "CONTAM Studio能力状态矩阵",
+  "last_updated_utc": "2026-07-22T03:09:08.6510783Z",
+  "source_of_truth": true,
+  "evidence_root": "repository",
+  "status_vocabulary": {
+    "implemented": ["complete", "partial", "not_started", "unknown"],
+    "automated_verified": ["passed", "partial", "not_run", "failed", "not_required", "unknown"],
+    "manual_gui": ["passed", "pending_user", "not_run", "not_required", "failed", "unknown"],
+    "merged_to_main": ["yes", "no", "unknown"],
+    "packaged": ["yes", "no", "not_run", "unknown"],
+    "user_validated": ["passed", "pending_user", "not_run", "not_required", "unknown"]
+  },
+  "rules": [
+    "implemented不等于automated_verified、manual_gui、merged_to_main、packaged或user_validated。",
+    "没有证据时使用unknown；明确未执行时使用not_run；不适用时使用not_required。",
+    "Phase 6A的实现和自动检查已合并到main，但Beta-2本地档案GUI逐项验收仍保持pending_user。",
+    "完整PRJ、分发和AI写入是能力边界行，不把未实现能力写成阶段完成。"
+  ],
+  "capabilities": [
+    {
+      "id": "phase-0-foundation",
+      "name": "Phase 0项目文档与仓库基础",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/task-log/historical-backfill.md", "docs/roadmap/phases.md"]
+    },
+    {
+      "id": "phase-1-workbench-shell",
+      "name": "Phase 1现代GUI空壳",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "unknown",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "unknown",
+      "evidence": ["docs/development/task-log/historical-backfill.md", "docs/ui/phase-1-workbench-shell.png"]
+    },
+    {
+      "id": "phase-2a-contamxpy-spike",
+      "name": "Phase 2A官方contamxpy读取技术Spike",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/task-log/historical-backfill.md", "docs/spikes/phase-2-contamxpy-zone-read.md"]
+    },
+    {
+      "id": "phase-2b-minimal-zone-reader",
+      "name": "Phase 2B-1严格简单Zone纯文档读取",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/task-log/historical-backfill.md", "docs/architecture/prj-zone-reader-support.md"]
+    },
+    {
+      "id": "phase-2c-zone-gui",
+      "name": "Phase 2C真实PRJ只读Zone工作台",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/development/phase-2c-verification.md", "docs/ui/phase-2c-real-zone-project.png"]
+    },
+    {
+      "id": "phase-3a-zone-volume-patch",
+      "name": "Phase 3A-0哈希绑定的Zone体积副本Patch",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/phase-3a-zone-volume-patch-verification.md", "docs/architecture/zone-volume-patch.md"]
+    },
+    {
+      "id": "phase-3b-zone-diff-copy",
+      "name": "Phase 3B桌面Diff审阅与副本闭环",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/development/phase-3b-zone-volume-gui-verification.md", "docs/ui/phase-3b-zone-volume-copy-success.png"]
+    },
+    {
+      "id": "phase-3c-draft-revisions",
+      "name": "Phase 3C不可变草稿Revision与撤销/重做",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/development/phase-3c-draft-snapshots-undo-verification.md", "docs/development/task-log/records/phase-3c-draft-snapshots-undo.md"]
+    },
+    {
+      "id": "phase-4a-contamx-run-core",
+      "name": "Phase 4A官方ContamX隔离运行核心",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/task-log/historical-backfill.md", "docs/development/phase-4a-contamx-run-core-verification.md"]
+    },
+    {
+      "id": "phase-4b-desktop-contamx",
+      "name": "Phase 4B-1受控桌面ContamX运行",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/development/phase-4b-desktop-contamx-run-verification.md", "docs/development/task-log/records/phase-4b-desktop-contamx-run.md"]
+    },
+    {
+      "id": "phase-5a-simread-zone-air-state",
+      "name": "Phase 5A官方SimRead Zone空气状态提取",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/phase-5a-zone-air-state-results-verification.md", "docs/architecture/simread-result-extraction.md"]
+    },
+    {
+      "id": "phase-5b1-zone-summary",
+      "name": "Phase 5B-1桌面Zone结果摘要",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/development/phase-5b-zone-result-summary-verification.md", "docs/current-state.md"]
+    },
+    {
+      "id": "phase-5b2-active-run-results",
+      "name": "Phase 5B-2最新成功运行直达结果",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/development/phase-5b-active-run-results-verification.md", "docs/development/task-log/records/phase-5b-active-run-results.md"]
+    },
+    {
+      "id": "phase-5c-zone-analysis-csv",
+      "name": "Phase 5C Zone分析与受控CSV导出",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/development/phase-5c-zone-analysis-workspace-verification.md", "docs/development/task-log/records/phase-5c-zone-analysis-gui-feedback.md"]
+    },
+    {
+      "id": "safe-01-draft-export-race",
+      "name": "SAFE-01草稿另存并发目标保护",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/task-log/records/safe-01-draft-export-race-fix.md", "src-tauri/src/zone_bridge.rs"]
+    },
+    {
+      "id": "phase-6a-readonly-ai",
+      "name": "Phase 6A Codex只读AI助手与Beta档案",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "pending_user",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "pending_user",
+      "evidence": ["docs/development/phase-6a-codex-readonly-assistant-verification.md", "docs/development/task-log/records/phase-6-02-review-and-delivery.md"]
+    },
+    {
+      "id": "distribution",
+      "name": "Windows分发、安装、签名与工具捆绑",
+      "implemented": "not_started",
+      "automated_verified": "not_run",
+      "manual_gui": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "unknown",
+      "evidence": ["docs/development/2026-07-22-project-wide-audit.md", "docs/roadmap/next-development-execution-plan.md"]
+    },
+    {
+      "id": "full-prj",
+      "name": "完整PRJ解析、无损回写与复杂引用",
+      "implemented": "not_started",
+      "automated_verified": "not_run",
+      "manual_gui": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "unknown",
+      "evidence": ["docs/architecture/prj-zone-reader-support.md", "docs/development/2026-07-22-project-wide-audit.md"]
+    },
+    {
+      "id": "ai-write",
+      "name": "Phase 7 AI Patch与审批写入",
+      "implemented": "not_started",
+      "automated_verified": "not_run",
+      "manual_gui": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "unknown",
+      "evidence": ["docs/roadmap/phases.md", "docs/roadmap/next-development-execution-plan.md"]
+    }
+  ]
+}
