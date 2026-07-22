@@ -2,7 +2,7 @@
 
 ## 决策状态
 
-Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Phase 6A增加用户主动启用的本地Codex App Server适配器，AI只读取Rust披露的结构化上下文。Python冻结、安装包路径及长期进程形式仍未定型。
+Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Phase 6A增加用户主动启用的本地Codex App Server适配器，AI只读取Rust披露的结构化上下文。当前职责、可信身份、错误和所有权以[ADR-011](../adr/ADR-011-freeze-layer-responsibilities-and-trust-boundaries.md)为准；Python冻结、安装包路径及长期进程形式仍未定型。
 
 ## 概念架构
 
@@ -80,11 +80,11 @@ Phase 4B-1将同一运行核心接入受控桌面命令：React只提交request�
 
 | 层 | 主要职责 | 不承担的职责 |
 |---|---|---|
-| React GUI | 双语交互、领域对象呈现、Diff与审批界面 | 直接编辑原始PRJ、直接调用求解器 |
-| Tauri桌面宿主 | 窗口、文件选择、能力控制、进程生命周期、可信AI上下文和桌面打包 | CONTAM领域规则和数值求解 |
+| React GUI | 双语交互、领域对象呈现、Diff与审批界面、非可信第二道检查 | 直接编辑原始PRJ、直接调用求解器、决定可信身份或文件所有权 |
+| Tauri桌面宿主 | 规范化路径、ACL、session/revision/UUID、文件提交、进程生命周期、持久化身份、可信AI上下文和桌面打包 | CONTAM领域规则、PRJ语义和数值求解 |
 | 受控通信接口 | 暴露有限、结构化、可验证的领域操作 | 任意Shell或任意文件写入 |
-| Python领域核心 | 领域模型、文件处理、验证、快照、运行清单和结果边界 | 重写CONTAM数值算法 |
-| 官方ContamX | 数值求解 | Studio交互、AI审批和项目版本管理 |
+| Python领域核心 | PRJ语义、字节Patch、严格验证、工具适配和科学结果语义 | 桌面路径权限、ACL、session/revision/UUID、最终提交和进程生命周期 |
+| 官方ContamX/SimRead | 官方数值求解和受控结果转换 | Studio交互、AI审批、项目版本管理和可信身份 |
 
 ## GUI与AI边界
 

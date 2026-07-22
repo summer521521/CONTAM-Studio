@@ -45,3 +45,7 @@ React GUI → Tauri桌面宿主 → 受控通信接口 → Python领域核心 �
 - Python运行时及sidecar的构建、签名、更新和故障恢复。
 - 前端状态与领域模型的一致性、长任务事件流和取消机制。
 - Windows 10/11 64位目标机上的安装体积、启动性能和依赖兼容。
+
+## 后续ADR指针
+
+当前三层职责、可信身份、错误归属和数据所有权由[ADR-011：冻结三层职责与可信边界](ADR-011-freeze-layer-responsibilities-and-trust-boundaries.md)统一冻结。本历史ADR的方向、理由和后果保持不变。

@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-`BATCH-01`已按`QA-01A → QA-02 → FE-01 → FE-02`完成自动收口并推送；FE-01与FE-02仍等待联合GUI验收。用户已明确授权`BATCH-02`从`origin/main=07312f3`开始，按20个顺序检查点连续执行；当前执行任务为`ARCH-01`。`QA-03A-01`、`QA-03A-02`、`QA-03B-01`、`QA-03B-02`、`QA-03B-03`和`QA-03B-04`自动检查已完成，`QA-03`总状态为`pending_user`。本批次内一次只允许一张卡为`in_progress`，每项必须有独立日志、定向验证和独立commit；检查点通过后自动继续，不逐项汇报；每张正式卡结束运行`Full`，阶段末再运行`Full`。阶段A允许推送`main`，阶段B只能保留本地`codex/safe-02-commit-last`，不得推送；批次末统一汇报。旧目录、原工作区、用户PRJ/CSV、全局环境和凭据均不触碰。
+`BATCH-01`已按`QA-01A → QA-02 → FE-01 → FE-02`完成自动收口并推送；FE-01与FE-02仍等待联合GUI验收。用户已明确授权`BATCH-02`从`origin/main=07312f3`开始，按20个顺序检查点连续执行；当前执行任务为`CONTRACT-01A`。`QA-03A-01`、`QA-03A-02`、`QA-03B-01`、`QA-03B-02`、`QA-03B-03`和`QA-03B-04`自动检查已完成，`QA-03`总状态为`pending_user`；`ARCH-01`已完成。所有批次规则保持不变：一次只允许一张卡为`in_progress`，每项必须有独立日志、定向验证和独立commit；检查点通过后自动继续，不逐项汇报；每张正式卡结束运行`Full`，阶段末再运行`Full`。阶段A允许推送`main`，阶段B只能保留本地`codex/safe-02-commit-last`，不得推送；批次末统一汇报。旧目录、原工作区、用户PRJ/CSV、全局环境和凭据均不触碰。
 
 ```text
 安全收口
@@ -129,8 +129,8 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 | 7A | `QA-01A` | Python验证环境隔离 | `L` | `completed` | `QA-01` |
 | 8 | `QA-02` | 清零Clippy并设为门禁 | `L` | `completed` | `QA-01` |
 | 9 | `QA-03` | Windows CI和主分支检查 | `L+U` | `pending_user` | `QA-02` |
-| 10 | `ARCH-01` | 冻结三层职责与可信边界ADR | `H→L` | `blocked` | `TRUTH-01` |
-| 11 | `CONTRACT-01` | Python/Rust黄金协议契约 | `H→L` | `blocked` | `ARCH-01`,`QA-01` |
+| 10 | `ARCH-01` | 冻结三层职责与可信边界ADR | `H→L` | `completed` | `TRUTH-01` |
+| 11 | `CONTRACT-01` | Python/Rust黄金协议契约 | `H→L` | `in_progress` | `ARCH-01`,`QA-01` |
 | 12 | `CONTRACT-02` | Tauri命令、权限和前端载荷一致性门 | `L` | `blocked` | `CONTRACT-01` |
 | 13 | `FE-01` | 打开失败或取消后恢复旧项目可操作状态 | `L` | `pending_user` | `QA-02` |
 | 14 | `FE-02` | 统一命令可用性并封闭Patch审阅期 | `L` | `pending_user` | `FE-01` |
