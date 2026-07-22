@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { CommandAvailability } from "../../app/command-availability";
 import type { ProjectState } from "../../app/project-state";
 import { projectFileName } from "../../app/project-state";
 import type { ResultState } from "../../app/result-state";
@@ -24,9 +25,9 @@ interface WelcomePageProps {
   bottomCollapsed: boolean;
   onToggleContext: () => void;
   onToggleBottom: () => void;
+  onNewProject: () => void;
   onOpenProject: () => void;
-  openDisabled: boolean;
-  onPlaceholder: (action: string) => void;
+  availability?: Pick<CommandAvailability, "newProject" | "openProject" | "loadActiveResult" | "selectManifest" | "exportResult">;
   resultState: ResultState;
   resultExportState: ResultExportState;
   activeRunId: string | null;
@@ -42,9 +43,9 @@ export function WelcomePage({
   bottomCollapsed,
   onToggleContext,
   onToggleBottom,
+  onNewProject,
   onOpenProject,
-  openDisabled,
-  onPlaceholder,
+  availability = { newProject: true, openProject: true, loadActiveResult: true, selectManifest: true, exportResult: true },
   resultState,
   resultExportState,
   activeRunId,
@@ -131,7 +132,7 @@ export function WelcomePage({
             </section>
 
             <div className="project-summary-actions">
-              <button className="secondary-action" type="button" disabled={openDisabled} onClick={onOpenProject}>
+              <button className="secondary-action" type="button" disabled={!availability.openProject} onClick={onOpenProject}>
                 <FolderOpen size={17} />
                 <span>{t("project.openAnother")}</span>
               </button>
@@ -144,7 +145,7 @@ export function WelcomePage({
               onLoadLatest={onLoadLatestResults}
               onSelectManifest={onSelectManifestResults}
               onExport={onExportResults}
-              disabled={openDisabled}
+              availability={availability}
             />
           </div>
         ) : (
@@ -156,17 +157,13 @@ export function WelcomePage({
               <button
                 className="primary-action"
                 type="button"
-                disabled={openDisabled}
+                disabled={!availability.openProject}
                 onClick={onOpenProject}
               >
                 <FolderOpen size={18} />
                 <span>{t("welcome.openProject")}</span>
               </button>
-              <button
-                className="secondary-action"
-                type="button"
-                onClick={() => onPlaceholder(t("welcome.newProject"))}
-              >
+              <button className="secondary-action" type="button" disabled={!availability.newProject} onClick={onNewProject}>
                 <FilePlus2 size={18} />
                 <span>{t("welcome.newProject")}</span>
               </button>

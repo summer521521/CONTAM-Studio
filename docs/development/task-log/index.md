@@ -7,6 +7,7 @@
 | [QA-01A Python验证环境隔离](records/qa-01a-python-package-origin.md) | QA-01A | completed | live |
 | [QA-02 清零Clippy并设为门禁](records/qa-02-clippy-gate.md) | QA-02 | completed | live |
 | [FE-01 打开失败或取消后恢复旧项目可操作状态](records/fe-01-open-failure-restores-project.md) | FE-01 | pending_user | live |
+| [FE-02 统一命令可用性并封闭Patch审阅期](records/fe-02-command-availability.md) | FE-02 | pending_user | live |
 | [SAFE-01修复草稿另存并发删除](records/safe-01-draft-export-race-fix.md) | SAFE-01 | automated_verified | live |
 | [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | completed | live |
 | [PH6-02结果审核与Phase 6A/SAFE-01独立交付](records/phase-6-02-review-and-delivery.md) | PH6-02 | completed | live |

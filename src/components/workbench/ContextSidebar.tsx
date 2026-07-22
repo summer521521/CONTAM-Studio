@@ -1,5 +1,6 @@
 import { Eye, Info, PanelRightClose, Pencil, SlidersHorizontal, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { CommandAvailability } from "../../app/command-availability";
 import type { PatchState } from "../../app/patch-state";
 import type { ContextTab } from "../../app/workbench-state";
 import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
@@ -12,6 +13,7 @@ interface ContextSidebarProps {
   selectedZone: ZoneRecord | null;
   selectedObject: string;
   patchState: PatchState;
+  availability?: Pick<CommandAvailability, "startEditing" | "patchInput" | "planPatch" | "patchCancel">;
   onStartVolumeEdit: () => void;
   onVolumeTokenChange: (token: string) => void;
   onPlanVolumePatch: () => void;
@@ -45,6 +47,7 @@ export function ContextSidebar({
   selectedZone,
   selectedObject,
   patchState,
+  availability = { startEditing: true, patchInput: true, planPatch: true, patchCancel: true },
   onStartVolumeEdit,
   onVolumeTokenChange,
   onPlanVolumePatch,
@@ -126,7 +129,7 @@ export function ContextSidebar({
                 <dd>
                   <span>{t("inspector.volumeUnit", { value: selectedZone.volume_m3 })}</span>
                   {patchState.status === "idle" || patchState.status === "success" ? (
-                    <button type="button" className="property-action" onClick={onStartVolumeEdit}>
+                    <button type="button" className="property-action" onClick={onStartVolumeEdit} disabled={!availability.startEditing}>
                       <Pencil size={13} />{t("patch.editVolume")}
                     </button>
                   ) : null}
@@ -148,7 +151,7 @@ export function ContextSidebar({
                   autoComplete="off"
                   maxLength={80}
                   value={patchState.newVolumeToken}
-                  disabled={patchState.status === "planning"}
+                  disabled={!availability.patchInput}
                   onChange={(event) => onVolumeTokenChange(event.target.value)}
                 />
                 <span>m³</span>
@@ -160,14 +163,14 @@ export function ContextSidebar({
                 </p>
               ) : null}
               <div className="volume-edit-actions">
-                <button type="button" className="secondary-action" onClick={onCancelVolumeEdit} disabled={patchState.status === "planning"}>
+                <button type="button" className="secondary-action" onClick={onCancelVolumeEdit} disabled={!availability.patchCancel}>
                   <X size={15} />{t("patch.cancel")}
                 </button>
                 <button
                   type="button"
                   className="primary-action"
                   onClick={onPlanVolumePatch}
-                  disabled={patchState.status === "planning" || !patchState.newVolumeToken.trim()}
+                  disabled={!availability.planPatch || !patchState.newVolumeToken.trim()}
                 >
                   {patchState.status === "planning" ? <span className="loading-indicator" /> : <Eye size={15} />}
                   {t(patchState.status === "planning" ? "patch.planning" : "patch.generatePreview")}

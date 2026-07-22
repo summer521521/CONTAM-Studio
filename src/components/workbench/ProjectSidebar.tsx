@@ -12,6 +12,7 @@ import {
   PanelLeftClose,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { CommandAvailability } from "../../app/command-availability";
 import type { ProjectState, ZoneRecord } from "../../app/project-state";
 import { projectFileName, zoneSelectionKey } from "../../app/project-state";
 
@@ -19,6 +20,7 @@ interface ProjectSidebarProps {
   projectState: ProjectState;
   selectedObject: string;
   selectedZoneKey: string | null;
+  availability?: Pick<CommandAvailability, "zoneSelect">;
   onSelectObject: (translationKey: string) => void;
   onSelectZone: (zone: ZoneRecord) => void;
   onCollapse: () => void;
@@ -29,16 +31,18 @@ interface TreeRowProps {
   label: string;
   level?: number;
   selected?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }
 
-function TreeRow({ icon: Icon, label, level = 0, selected, onClick }: TreeRowProps) {
+function TreeRow({ icon: Icon, label, level = 0, selected, disabled = false, onClick }: TreeRowProps) {
   return (
     <li>
       <button
         className={`tree-row ${selected ? "is-selected" : ""}`}
         style={{ paddingInlineStart: `${10 + level * 18}px` }}
         type="button"
+        disabled={disabled}
         onClick={onClick}
       >
         <Icon size={15} aria-hidden="true" />
@@ -52,6 +56,7 @@ export function ProjectSidebar({
   projectState,
   selectedObject,
   selectedZoneKey,
+  availability = { zoneSelect: true },
   onSelectObject,
   onSelectZone,
   onCollapse,
@@ -103,6 +108,7 @@ export function ProjectSidebar({
                     })}
                     level={1}
                     selected={selectedZoneKey === key}
+                    disabled={!availability.zoneSelect}
                     onClick={() => onSelectZone(zone)}
                   />
                 );

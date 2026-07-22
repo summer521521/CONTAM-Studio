@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-用户已明确授权`BATCH-01`按`QA-01A → QA-02 → FE-01 → FE-02`连续批处理；当前执行任务为`FE-01`。本批次内一次只允许一张卡为`in_progress`，每卡必须有独立日志、定向验证和独立commit，批次结束后统一push和汇报。`TRUTH-01`、`TRUTH-02`、`PROD-01`、`QA-01`、`QA-01A`和`QA-02`已完成；`QA-03`及其他非本批次任务保持暂停。Phase 7 AI Patch保持暂停。
+用户已明确授权`BATCH-01`按`QA-01A → QA-02 → FE-01 → FE-02`连续批处理；当前执行任务为`FE-02`。本批次内一次只允许一张卡为`in_progress`，每卡必须有独立日志、定向验证和独立commit，批次结束后统一push和汇报。`TRUTH-01`、`TRUTH-02`、`PROD-01`、`QA-01`、`QA-01A`、`QA-02`和`FE-01`自动验证已完成；`FE-01`与`FE-02`等待联合GUI验收，`QA-03`及其他非本批次任务保持暂停。Phase 7 AI Patch保持暂停。
 
 ```text
 安全收口
@@ -125,7 +125,7 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 | 11 | `CONTRACT-01` | Python/Rust黄金协议契约 | `H→L` | `blocked` | `ARCH-01`,`QA-01` |
 | 12 | `CONTRACT-02` | Tauri命令、权限和前端载荷一致性门 | `L` | `blocked` | `CONTRACT-01` |
 | 13 | `FE-01` | 打开失败或取消后恢复旧项目可操作状态 | `L` | `pending_user` | `QA-02` |
-| 14 | `FE-02` | 统一命令可用性并封闭Patch审阅期 | `L` | `blocked` | `FE-01` |
+| 14 | `FE-02` | 统一命令可用性并封闭Patch审阅期 | `L` | `pending_user` | `FE-01` |
 | 15 | `FE-03` | 建立真正的Patch审批模态 | `H→L+U` | `blocked` | `FE-02` |
 | 16 | `DRAFT-01` | 项目切换时保护未导出草稿 | `H+U→L` | `blocked` | `FE-03` |
 | 17 | `DRAFT-02` | 应用退出时保护未导出草稿 | `H+U→L` | `blocked` | `DRAFT-01` |

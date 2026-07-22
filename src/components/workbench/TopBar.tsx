@@ -11,23 +11,23 @@ import {
   Wind,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { CommandAvailability } from "../../app/command-availability";
 import type { AppLanguage, AppTheme } from "../../app/workbench-state";
+
+type TopBarAvailability = Pick<CommandAvailability, "newProject" | "openProject" | "runProject" | "undoDraft" | "redoDraft" | "exportDraft" | "language">;
 
 interface TopBarProps {
   language: AppLanguage;
   theme: AppTheme;
   onLanguageChange: (language: AppLanguage) => void;
+  availability?: TopBarAvailability;
   onThemeToggle: () => void;
+  onNewProject: () => void;
   onOpenProject: () => void;
-  openDisabled: boolean;
   onRunProject: () => void;
-  runDisabled: boolean;
   onUndoDraft: () => void;
-  undoDisabled: boolean;
   onRedoDraft: () => void;
-  redoDisabled: boolean;
   onExportDraft: () => void;
-  exportDraftDisabled: boolean;
   onPlaceholder: (action: string) => void;
 }
 
@@ -35,22 +35,19 @@ export function TopBar({
   language,
   theme,
   onLanguageChange,
+  availability = { newProject: true, openProject: true, runProject: true, undoDraft: true, redoDraft: true, exportDraft: true, language: true },
   onThemeToggle,
+  onNewProject,
   onOpenProject,
-  openDisabled,
   onRunProject,
-  runDisabled,
   onUndoDraft,
-  undoDisabled,
   onRedoDraft,
-  redoDisabled,
   onExportDraft,
-  exportDraftDisabled,
   onPlaceholder,
 }: TopBarProps) {
   const { t } = useTranslation();
   const actions = [
-    { key: "newProject", icon: Plus, onClick: () => onPlaceholder(t("toolbar.newProject")) },
+    { key: "newProject", icon: Plus, onClick: onNewProject },
     { key: "openProject", icon: FolderOpen, onClick: onOpenProject },
     { key: "run", icon: Play, onClick: onRunProject },
   ] as const;
@@ -70,7 +67,7 @@ export function TopBar({
             className={`tool-button ${key === "run" ? "tool-button-run" : ""}`}
             key={key}
             type="button"
-            disabled={(key === "openProject" && openDisabled) || (key === "run" && runDisabled)}
+            disabled={key === "newProject" ? !availability.newProject : key === "openProject" ? !availability.openProject : !availability.runProject}
             onClick={onClick}
           >
             <Icon size={16} aria-hidden="true" />
@@ -80,9 +77,9 @@ export function TopBar({
       </div>
 
       <div className="toolbar-actions draft-toolbar-actions" role="toolbar" aria-label={t("draft.toolbarLabel")}>
-        <button className="tool-button" type="button" disabled={undoDisabled} onClick={onUndoDraft} title={t("draft.undo")} aria-label={t("draft.undo")}><Undo2 size={16} /><span>{t("draft.undo")}</span></button>
-        <button className="tool-button" type="button" disabled={redoDisabled} onClick={onRedoDraft} title={t("draft.redo")} aria-label={t("draft.redo")}><Redo2 size={16} /><span>{t("draft.redo")}</span></button>
-        <button className="tool-button" type="button" disabled={exportDraftDisabled} onClick={onExportDraft} title={t("draft.export")} aria-label={t("draft.export")}><Download size={16} /><span>{t("draft.export")}</span></button>
+        <button className="tool-button" type="button" disabled={!availability.undoDraft} onClick={onUndoDraft} title={t("draft.undo")} aria-label={t("draft.undo")}><Undo2 size={16} /><span>{t("draft.undo")}</span></button>
+        <button className="tool-button" type="button" disabled={!availability.redoDraft} onClick={onRedoDraft} title={t("draft.redo")} aria-label={t("draft.redo")}><Redo2 size={16} /><span>{t("draft.redo")}</span></button>
+        <button className="tool-button" type="button" disabled={!availability.exportDraft} onClick={onExportDraft} title={t("draft.export")} aria-label={t("draft.export")}><Download size={16} /><span>{t("draft.export")}</span></button>
       </div>
 
       <div className="toolbar-spacer" />
@@ -92,6 +89,7 @@ export function TopBar({
         <select
           aria-label={t("toolbar.language")}
           value={language}
+          disabled={!availability.language}
           onChange={(event) => onLanguageChange(event.target.value as AppLanguage)}
         >
           <option value="zh-CN">简体中文</option>

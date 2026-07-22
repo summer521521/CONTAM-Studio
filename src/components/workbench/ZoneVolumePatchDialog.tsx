@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 import { ArrowLeft, FileCheck2, ShieldCheck, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { CommandAvailability } from "../../app/command-availability";
 import type { PatchReviewView } from "../../app/patch-state";
 
 interface ZoneVolumePatchDialogProps {
   projectFileName: string;
   review: PatchReviewView;
-  applying: boolean;
+  availability?: Pick<CommandAvailability, "patchBack" | "patchCancel" | "patchApply">;
   issueCode: string | null;
   onBack: () => void;
   onCancel: () => void;
@@ -16,7 +17,7 @@ interface ZoneVolumePatchDialogProps {
 export function ZoneVolumePatchDialog({
   projectFileName,
   review,
-  applying,
+  availability = { patchBack: true, patchCancel: true, patchApply: true },
   issueCode,
   onBack,
   onCancel,
@@ -31,11 +32,11 @@ export function ZoneVolumePatchDialog({
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !applying) onCancel();
+      if (event.key === "Escape" && availability.patchCancel) onCancel();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [applying, onCancel]);
+  }, [availability.patchCancel, onCancel]);
 
   return (
     <div className="patch-dialog-backdrop">
@@ -52,7 +53,7 @@ export function ZoneVolumePatchDialog({
             <span>{t("patch.reviewEyebrow")}</span>
             <h2 id="patch-review-title">{t("patch.reviewTitle")}</h2>
           </div>
-          <button type="button" className="panel-icon-button" onClick={onCancel} disabled={applying} aria-label={t("patch.cancel")}>
+          <button type="button" className="panel-icon-button" onClick={onCancel} disabled={!availability.patchCancel} aria-label={t("patch.cancel")}>
             <X size={17} />
           </button>
         </header>
@@ -90,13 +91,13 @@ export function ZoneVolumePatchDialog({
         </div>
 
         <footer className="patch-dialog-actions">
-          <button type="button" className="secondary-action" onClick={onBack} disabled={applying}>
+          <button type="button" className="secondary-action" onClick={onBack} disabled={!availability.patchBack}>
             <ArrowLeft size={16} />{t("patch.backToEdit")}
           </button>
-          <button type="button" className="secondary-action" onClick={onCancel} disabled={applying}>{t("patch.cancel")}</button>
-          <button type="button" className="primary-action" onClick={onApply} disabled={applying}>
-            {applying ? <span className="loading-indicator" /> : <FileCheck2 size={16} />}
-            {t(applying ? "patch.applyingDraft" : "patch.applyToDraft")}
+          <button type="button" className="secondary-action" onClick={onCancel} disabled={!availability.patchCancel}>{t("patch.cancel")}</button>
+          <button type="button" className="primary-action" onClick={onApply} disabled={!availability.patchApply}>
+            {availability.patchApply ? <FileCheck2 size={16} /> : <span className="loading-indicator" />}
+            {t(availability.patchApply ? "patch.applyToDraft" : "patch.applyingDraft")}
           </button>
         </footer>
       </div>

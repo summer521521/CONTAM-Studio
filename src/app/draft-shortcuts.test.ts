@@ -7,7 +7,6 @@ const shortcut = (key: string, overrides = {}) => draftShortcutAction({
   shiftKey: false,
   altKey: false,
   editableTarget: false,
-  patchWorkflowActive: false,
   ...overrides,
 });
 
@@ -19,9 +18,8 @@ describe("draft shortcuts", () => {
     expect(shortcut("s", { shiftKey: true })).toBe("export");
   });
 
-  it("leaves text editing and the patch workflow in control of their shortcuts", () => {
+  it("leaves text editing in control of its shortcuts", () => {
     expect(shortcut("z", { editableTarget: true })).toBeNull();
-    expect(shortcut("z", { patchWorkflowActive: true })).toBeNull();
     expect(shortcut("z", { altKey: true })).toBeNull();
     expect(shortcut("z", { ctrlKey: false })).toBeNull();
   });

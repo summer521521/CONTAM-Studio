@@ -6,11 +6,10 @@ export interface DraftShortcutInput {
   shiftKey: boolean;
   altKey: boolean;
   editableTarget: boolean;
-  patchWorkflowActive: boolean;
 }
 
 export function draftShortcutAction(input: DraftShortcutInput): DraftShortcutAction | null {
-  if (input.editableTarget || input.patchWorkflowActive || !input.ctrlKey || input.altKey) return null;
+  if (input.editableTarget || !input.ctrlKey || input.altKey) return null;
   const key = input.key.toLowerCase();
   if (key === "s" && input.shiftKey) return "export";
   if (key === "y" || (key === "z" && input.shiftKey)) return "redo";

@@ -88,17 +88,14 @@ describe("real project components", () => {
         language="zh-CN"
         theme="light"
         onLanguageChange={() => undefined}
+        availability={{ newProject: true, openProject: true, runProject: false, undoDraft: false, redoDraft: false, exportDraft: false, language: true }}
         onThemeToggle={() => undefined}
+        onNewProject={() => undefined}
         onOpenProject={() => undefined}
-        openDisabled={false}
         onRunProject={() => undefined}
-        runDisabled={true}
         onUndoDraft={() => undefined}
-        undoDisabled={true}
         onRedoDraft={() => undefined}
-        redoDisabled={true}
         onExportDraft={() => undefined}
-        exportDraftDisabled={true}
         onPlaceholder={() => undefined}
       />,
     );
@@ -114,17 +111,14 @@ describe("real project components", () => {
           language="en"
           theme="dark"
           onLanguageChange={() => undefined}
+          availability={{ newProject: true, openProject: true, runProject: true, undoDraft: true, redoDraft: true, exportDraft: true, language: true }}
           onThemeToggle={() => undefined}
+          onNewProject={() => undefined}
           onOpenProject={() => undefined}
-          openDisabled={false}
           onRunProject={() => undefined}
-          runDisabled={false}
           onUndoDraft={() => undefined}
-          undoDisabled={false}
           onRedoDraft={() => undefined}
-          redoDisabled={false}
           onExportDraft={() => undefined}
-          exportDraftDisabled={false}
           onPlaceholder={() => undefined}
         />,
       );
@@ -252,7 +246,7 @@ describe("real project components", () => {
           new_line: "1 ... 650.0 ... One",
           diff_text: "--- real.prj\n+++ proposed-copy.prj\n@@ Zone 1 @@\n-old\n+new",
         }}
-        applying={false}
+        availability={{ patchBack: true, patchCancel: true, patchApply: true }}
         issueCode={null}
         onBack={() => undefined}
         onCancel={() => undefined}
@@ -309,7 +303,7 @@ describe("real project components", () => {
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
         onExport={() => undefined}
-        disabled={false}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: true }}
       />,
     );
     expect(markup).toContain("Zone空气状态分析");
@@ -409,7 +403,7 @@ describe("real project components", () => {
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
         onExport={() => undefined}
-        disabled={false}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: true }}
       />,
     );
     expect(markup).toContain("zone-1-air-state-run-1.csv");
@@ -429,7 +423,7 @@ describe("real project components", () => {
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
         onExport={() => undefined}
-        disabled={false}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: true }}
       />,
     );
     expect(markup).toContain("已取消运行清单选择，未加载结果");
@@ -446,7 +440,7 @@ describe("real project components", () => {
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
         onExport={() => undefined}
-        disabled={false}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: true }}
       />,
     );
     expect(cancelled).toContain("本次加载已取消");
@@ -472,7 +466,7 @@ describe("real project components", () => {
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
         onExport={() => undefined}
-        disabled={false}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: true }}
       />,
     );
     expect(failed).toContain("本次加载失败");
@@ -500,7 +494,7 @@ describe("real project components", () => {
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
         onExport={() => undefined}
-        disabled={false}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: true }}
       />,
     );
     expect(empty).toContain("Load latest run results");
@@ -515,7 +509,7 @@ describe("real project components", () => {
         onLoadLatest={() => undefined}
         onSelectManifest={() => undefined}
         onExport={() => undefined}
-        disabled={false}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: true }}
       />,
     );
     expect(stale).toContain("This table still comes from an earlier run");

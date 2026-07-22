@@ -9,6 +9,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { CommandAvailability } from "../../app/command-availability";
 import type { ResultExportState } from "../../app/result-export-state";
 import {
   resultIsOlderThanActiveRun,
@@ -37,7 +38,7 @@ interface ZoneAirStateResultsProps {
   onLoadLatest: () => void;
   onSelectManifest: () => void;
   onExport: () => void;
-  disabled: boolean;
+  availability?: Pick<CommandAvailability, "loadActiveResult" | "selectManifest" | "exportResult">;
 }
 
 type ResultView = "charts" | "table";
@@ -90,7 +91,7 @@ export function ZoneAirStateResults({
   onLoadLatest,
   onSelectManifest,
   onExport,
-  disabled,
+  availability = { loadActiveResult: true, selectManifest: true, exportResult: true },
 }: ZoneAirStateResultsProps) {
   const { t, i18n } = useTranslation();
   const result = state.result;
@@ -109,15 +110,15 @@ export function ZoneAirStateResults({
   const loadActions = (other = false) => (
     <div className="results-actions">
       {latestAvailable ? (
-        <button className="primary-action" type="button" onClick={onLoadLatest} disabled={disabled}>
+        <button className="primary-action" type="button" onClick={onLoadLatest} disabled={!availability.loadActiveResult}>
           <RefreshCw size={15} />{t("results.loadLatest")}
         </button>
       ) : null}
-      <button className="secondary-action" type="button" onClick={onSelectManifest} disabled={disabled}>
+      <button className="secondary-action" type="button" onClick={onSelectManifest} disabled={!availability.selectManifest}>
         <FileSearch size={15} />{t(other ? "results.selectOtherManifest" : "results.selectManifest")}
       </button>
       {result ? (
-        <button className="secondary-action" type="button" onClick={onExport} disabled={disabled || exportBusy}>
+        <button className="secondary-action" type="button" onClick={onExport} disabled={!availability.exportResult || exportBusy}>
           {exportBusy ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />}
           {t(exportState.status === "selecting_destination"
             ? "results.export.selecting"
