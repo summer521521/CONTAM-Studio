@@ -15,3 +15,11 @@
 ## 记录结构
 
 阶段回填见[`historical-backfill.md`](historical-backfill.md)，当前任务和后续任务记录放在[`records/`](records/)中，索引见[`index.md`](index.md)。正式任务先写`in_progress`，结束时更新为`completed`或`blocked`。
+
+## 状态词
+
+- `in_progress`：当前正在执行的唯一任务卡。
+- `completed`：本卡规定的自动和人工证据均已满足。
+- `blocked`：等待前置任务、用户证据或规格决策。
+- `automated_verified`：规定的自动检查已通过，但不代表GUI、安装或用户验证通过。
+- `pending_user`：实现和自动检查完成，等待用户手动验收。

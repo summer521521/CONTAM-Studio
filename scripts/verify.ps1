@@ -155,6 +155,102 @@ function Check-ToolVersion {
     return $true
 }
 
+function Get-SafeRelativePath {
+    param([string]$Candidate)
+
+    if ([string]::IsNullOrWhiteSpace($Candidate)) {
+        return "<missing>"
+    }
+
+    try {
+        $fullCandidate = [System.IO.Path]::GetFullPath($Candidate).TrimEnd("\")
+        $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd("\")
+        if ($fullCandidate.Equals($fullRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return "."
+        }
+        $rootPrefix = $fullRoot + "\"
+        if ($fullCandidate.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $fullCandidate.Substring($rootPrefix.Length).Replace("\", "/")
+        }
+    }
+    catch {
+        return "<invalid-path>"
+    }
+
+    return "<outside-clone>"
+}
+
+function Test-PathWithin {
+    param(
+        [string]$Candidate,
+        [string]$ExpectedRoot
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Candidate)) {
+        return $false
+    }
+
+    try {
+        $fullCandidate = [System.IO.Path]::GetFullPath($Candidate).TrimEnd("\")
+        $fullExpectedRoot = [System.IO.Path]::GetFullPath($ExpectedRoot).TrimEnd("\")
+        $prefix = $fullExpectedRoot + "\"
+        return $fullCandidate.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Check-ProjectPythonOrigin {
+    param([string]$PythonPath)
+
+    Write-Host "[RUN ] Python package origin"
+    $probe = 'import sys; import contam_studio_core; print(sys.executable); print(contam_studio_core.__file__)'
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $probeOutput = @(& $PythonPath -c $probe 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    catch {
+        Add-Failure "Python package origin" "Origin probe failed."
+        return $false
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -ne 0) {
+        Add-Failure "Python package origin" "Origin probe failed."
+        return $false
+    }
+
+    $probeLines = @($probeOutput | ForEach-Object { $_.ToString() } | Where-Object { $_.Trim().Length -gt 0 })
+    if ($probeLines.Count -lt 2) {
+        Add-Failure "Python package origin" "Origin probe returned invalid metadata."
+        return $false
+    }
+
+    $executable = $probeLines[0].Trim()
+    $package = $probeLines[1].Trim()
+
+    $safeExecutable = Get-SafeRelativePath $executable
+    $safePackage = Get-SafeRelativePath $package
+    Write-Host "Python origin: executable=${safeExecutable}; package=${safePackage}"
+
+    $venvRoot = Join-Path $Root "python\.venv"
+    $sourceRoot = Join-Path $Root "python\src"
+    $executableOk = Test-PathWithin $executable $venvRoot
+    $packageOk = Test-PathWithin $package $sourceRoot
+    if (-not $executableOk -or -not $packageOk) {
+        Add-Failure "Python package origin" "Expected executable under python/.venv and package under python/src; actual executable=${safeExecutable}, package=${safePackage}."
+        return $false
+    }
+
+    Add-Passed "Python package origin"
+    return $true
+}
+
 function Check-Docs {
     Write-Host "== Docs ==" -ForegroundColor Cyan
 
@@ -276,6 +372,7 @@ function Check-Toolchain {
     if (Test-Path -LiteralPath $pythonPath -PathType Leaf) {
         $pythonVersion = [regex]::Escape([string]$Baseline.tools.python.version)
         Check-ToolVersion "project Python" $pythonPath @("--version") ("Python " + $Baseline.tools.python.version) "^Python ${pythonVersion}$" | Out-Null
+        Check-ProjectPythonOrigin $pythonPath | Out-Null
     }
     else {
         Add-Failure "project Python" "Expected interpreter ${pythonPath} is missing; install it outside this script."
@@ -316,11 +413,14 @@ Write-Host "QA-01 verification mode: ${Mode}" -ForegroundColor Cyan
 $baseline = Check-Docs
 if ($null -ne $baseline -and $Mode -in @("Fast", "Full")) {
     $pythonPath = Check-Toolchain $baseline
-    if ($Failures.Count -eq 0 -or $null -ne $pythonPath) {
+    if ($Failures.Count -eq 0) {
         Check-Fast $pythonPath
         if ($Mode -eq "Full") {
             Check-Full $pythonPath
         }
+    }
+    else {
+        Write-Host "Skipping Fast/Full checks because the toolchain gate failed." -ForegroundColor Yellow
     }
 }
 

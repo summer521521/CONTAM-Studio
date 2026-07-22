@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-本次已依次完成`TRUTH-01`、`TRUTH-02`、`PROD-01`和`QA-01`。`SAFE-01`已完成规定的自动验证，`PH6-01`和`PH6-02`已完成；下一张`QA-02`保持`blocked`，未因本次指令开始。Phase 7 AI Patch保持暂停。
+用户已明确授权`BATCH-01`按`QA-01A → QA-02 → FE-01 → FE-02`连续批处理；当前执行任务为`QA-01A`。本批次内一次只允许一张卡为`in_progress`，每卡必须有独立日志、定向验证和独立commit，批次结束后统一push和汇报。`TRUTH-01`、`TRUTH-02`、`PROD-01`和`QA-01`已完成；`QA-02`及其后续任务保持暂停。Phase 7 AI Patch保持暂停。
 
 ```text
 安全收口
@@ -59,6 +59,13 @@
 8. GUI验收默认由用户手动完成。没有用户证据时必须写`pending_user`，不得写“全部通过”。
 9. 出现本节第3项的文件归属冲突、未定义协议语义、安全边界需要放宽、许可不确定、数据迁移、进程树/竞态设计、连续三次同类失败时，停止并交给`H`或`U`。
 10. 完成时更新任务日志的UTC时间、耗时、实际文件、验证结果和剩余风险。未获得明确指令时不得提交、推送、合并或创建PR。
+
+### BATCH-01批次规则
+
+- 本批次严格按`QA-01A → QA-02 → FE-01 → FE-02`顺序执行；当前卡完成并提交后才可开始下一卡。
+- 任意时刻只能有一张卡处于`in_progress`；每张卡单独维护任务日志、验证结果和commit。
+- 批次期间不逐卡汇报；全部卡完成或遇到硬停止条件后统一执行最终`Full`、`git diff --check`、远端核对、一次性push和一次性汇报。
+- `FE-01`与`FE-02`共享一次联合GUI验收；没有用户逐项GUI证据时，相关状态保持`pending_user`。
 
 建议给后续模型的指令格式：
 
@@ -111,6 +118,7 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 | 5 | `TRUTH-02` | 同步漂移文档与研究证据标签 | `L` | `completed` | `TRUTH-01` |
 | 6 | `PROD-01` | 冻结v0.1产品契约和旗舰任务选择方法 | `H+U` | `completed` | `TRUTH-01` |
 | 7 | `QA-01` | 固定工具链和统一验证入口 | `L` | `completed` | `TRUTH-02` |
+| 7A | `QA-01A` | Python验证环境隔离 | `L` | `completed` | `QA-01` |
 | 8 | `QA-02` | 清零Clippy并设为门禁 | `L` | `blocked` | `QA-01` |
 | 9 | `QA-03` | Windows CI和主分支检查 | `L+U` | `blocked` | `QA-02` |
 | 10 | `ARCH-01` | 冻结三层职责与可信边界ADR | `H→L` | `blocked` | `TRUTH-01` |
@@ -225,6 +233,14 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 - **步骤**：实现`Docs/Fast/Full`模式；检查预期Python解释器、Node/pnpm/Rust版本、Python/Rust/前端测试、构建、已跟踪JSON、Markdown相对链接、锁文件和`git diff --check`；任一失败返回非零。
 - **验收**：干净PowerShell中单命令可复现；错误指出具体子检查；不读取未跟踪用户文件。
 - **交付**：工具链基线见`docs/development/toolchain-baseline.json`和`docs/development/toolchain-baseline.md`；统一入口为`powershell -NoProfile -File scripts\verify.ps1 -Mode Full`。
+
+### QA-01A Python验证环境隔离
+
+- **角色/前置**：`L`；`QA-01`完成。
+- **允许**：`scripts/verify.ps1`的Python来源检查、无依赖脚本测试、任务书和任务日志状态同步。
+- **步骤**：验证`sys.executable`位于当前克隆的`python/.venv`，`contam_studio_core.__file__`位于当前克隆的`python/src`；来源不符时以安全相对诊断立即失败。
+- **禁止**：修改依赖、全局环境、原工作区、用户PRJ/CSV、产品行为或后续任务。
+- **验收**：正确来源的`Full`通过；外部`PYTHONPATH`负例失败且不泄露绝对路径；任务日志和状态词同步。
 
 ### QA-02 清零Clippy并设为门禁
 
