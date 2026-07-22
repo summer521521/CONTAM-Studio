@@ -12,6 +12,7 @@
 | [BATCH-02 QA-03A-02 Python锁隔离验证](records/batch-02-qa-03a-02-python-lock-isolation.md) | QA-03A-02 | completed | live |
 | [BATCH-02 QA-03B-01 Windows CI工作流骨架](records/batch-02-qa-03b-01-windows-workflow.md) | QA-03B-01 | completed | live |
 | [BATCH-02 QA-03B-02 Windows CI工具链固定](records/batch-02-qa-03b-02-windows-toolchain.md) | QA-03B-02 | completed | live |
+| [BATCH-02 QA-03B-03 Windows CI Action固定与缓存](records/batch-02-qa-03b-03-windows-actions-cache.md) | QA-03B-03 | completed | live |
 | [SAFE-01修复草稿另存并发删除](records/safe-01-draft-export-race-fix.md) | SAFE-01 | automated_verified | live |
 | [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | completed | live |
 | [PH6-02结果审核与Phase 6A/SAFE-01独立交付](records/phase-6-02-review-and-delivery.md) | PH6-02 | completed | live |
