@@ -386,8 +386,46 @@ function Check-Toolchain {
     Check-ToolVersion "pnpm" "pnpm" @("--version") ([string]$Baseline.tools.pnpm.version) "^${pnpmVersion}$" | Out-Null
     Check-ToolVersion "rustc" "rustc" @("--version") ([string]$Baseline.tools.rustc.version) "^rustc ${rustVersion}(?:\s|$)" | Out-Null
     Check-ToolVersion "cargo" "cargo" @("--version") ([string]$Baseline.tools.cargo.version) "^cargo ${cargoVersion}(?:\s|$)" | Out-Null
-    Check-ToolVersion "Rust host toolchain" "rustup" @("show", "active-toolchain") ([string]$Baseline.tools.rustup_toolchain.version) "^$([regex]::Escape([string]$Baseline.tools.rustup_toolchain.version))\s" | Out-Null
+    Check-RustToolchain $Baseline | Out-Null
     return $pythonPath
+}
+
+function Check-RustToolchain {
+    param($Baseline)
+
+    $rustInfo = Get-ToolOutput "rustc verbose" "rustc" @("--version", "--verbose")
+    if ($null -eq $rustInfo) {
+        return $false
+    }
+
+    $expectedRelease = [string]$Baseline.tools.rustc.version
+    $expectedHost = [string]$Baseline.tools.rustc.host
+    $expectedCommit = [string]$Baseline.tools.rustc.commit
+    $releaseOk = $rustInfo -match "(?m)^release:\s+$([regex]::Escape($expectedRelease))$"
+    $hostOk = $rustInfo -match "(?m)^host:\s+$([regex]::Escape($expectedHost))$"
+    $commitOk = $rustInfo -match "(?m)^commit-hash:\s+$([regex]::Escape($expectedCommit))$"
+    if (-not $releaseOk -or -not $hostOk -or -not $commitOk) {
+        Add-Failure "Rust compiler identity" "Expected release=${expectedRelease}, host=${expectedHost}, commit=${expectedCommit}."
+        return $false
+    }
+    Add-Passed "Rust compiler identity"
+
+    $rustfmt = Get-ToolOutput "rustfmt" ([string]$Baseline.tools.rustfmt.command) @("--version")
+    $rustfmtCommit = [regex]::Escape($expectedCommit.Substring(0, 10))
+    if ($null -eq $rustfmt -or $rustfmt -notmatch $rustfmtCommit) {
+        Add-Failure "rustfmt identity" "rustfmt is not from the pinned Rust compiler commit."
+        return $false
+    }
+    Add-Passed "rustfmt identity"
+
+    $clippy = Get-ToolOutput "clippy" "cargo" @("clippy", "--version")
+    $expectedClippyVersion = [regex]::Escape([string]$Baseline.tools.clippy.version)
+    if ($null -eq $clippy -or $clippy -notmatch "(?m)^clippy ${expectedClippyVersion}(?:\s|$)" -or $clippy -notmatch $rustfmtCommit) {
+        Add-Failure "clippy identity" "Clippy is not the pinned version/compiler component."
+        return $false
+    }
+    Add-Passed "clippy identity"
+    return $true
 }
 
 function Check-Fast {

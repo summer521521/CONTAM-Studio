@@ -8,7 +8,8 @@ QA-01在2026-07-22记录当前Windows x64开发基线，机器可读版本见[to
 | Node.js | 24.13.0 |
 | pnpm | 11.14.0 |
 | rustc/cargo | 1.97.1 |
-| Rust host toolchain | `stable-x86_64-pc-windows-msvc` |
+| Rust compiler | `1.97.1`, host `x86_64-pc-windows-msvc`, release commit `8bab26f4f68e0e26f0bb7960be334d5b520ea452` |
+| Rust components | `rustfmt`和`clippy`与上述编译器commit一致；验证不依赖`stable`别名 |
 | 锁文件 | `pnpm-lock.yaml`、`src-tauri/Cargo.lock`、`python/requirements-ci.lock` |
 
 ## 统一入口

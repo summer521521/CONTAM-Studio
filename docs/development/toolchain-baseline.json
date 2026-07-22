@@ -17,15 +17,22 @@
     },
     "rustc": {
       "command": "rustc",
-      "version": "1.97.1"
+      "version": "1.97.1",
+      "host": "x86_64-pc-windows-msvc",
+      "commit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452"
     },
     "cargo": {
       "command": "cargo",
       "version": "1.97.1"
     },
-    "rustup_toolchain": {
-      "command": "rustup",
-      "version": "stable-x86_64-pc-windows-msvc"
+    "rustfmt": {
+      "command": "rustfmt",
+      "commit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452"
+    },
+    "clippy": {
+      "command": "cargo clippy",
+      "version": "0.1.97",
+      "commit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452"
     }
   },
   "lock_files": [
