@@ -1,0 +1,41 @@
+{
+  "bounds": {
+    "request_bytes": 131072,
+    "stderr_bytes": 16384,
+    "stdout_bytes": 2097152
+  },
+  "operations": {
+    "apply": {
+      "contract_revision": "apply.v1.2",
+      "domain_error_fixture": "apply/domain-error.json",
+      "success_fixture": "apply/success.json"
+    },
+    "extract": {
+      "contract_revision": "extract.v1.2",
+      "domain_error_fixture": "extract/domain-error.json",
+      "success_fixture": "extract/success.json"
+    },
+    "plan": {
+      "contract_revision": "plan.v1.2",
+      "domain_error_fixture": "plan/domain-error.json",
+      "success_fixture": "plan/success.json"
+    },
+    "read": {
+      "contract_revision": "read.v1.2",
+      "domain_error_fixture": "read/domain-error.json",
+      "success_fixture": "read/success.json"
+    },
+    "run": {
+      "contract_revision": "run.v1.2",
+      "domain_error_fixture": "run/domain-error.json",
+      "success_fixture": "run/success.json"
+    }
+  },
+  "path_placeholders": [
+    "${MANIFEST}",
+    "${OUTPUT_PRJ}",
+    "${RUN_ROOT}",
+    "${SOURCE_PRJ}"
+  ],
+  "protocol_version": "1.2"
+}

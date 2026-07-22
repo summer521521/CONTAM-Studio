@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "run_source_changed",
+    "context": {},
+    "message": "运行前源项目文件发生变化。",
+    "source_line_number": null
+  },
+  "ok": false,
+  "protocol_version": "1.2",
+  "request_id": "run-domain-error",
+  "result": null
+}

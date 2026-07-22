@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "result_manifest_invalid",
+    "context": {},
+    "message": "结果清单无效。",
+    "source_line_number": null
+  },
+  "ok": false,
+  "protocol_version": "1.2",
+  "request_id": "extract-domain-error",
+  "result": null
+}

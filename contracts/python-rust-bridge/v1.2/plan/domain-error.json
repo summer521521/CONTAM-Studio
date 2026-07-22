@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "zone_not_found",
+    "context": {},
+    "message": "未找到请求的Zone。",
+    "source_line_number": null
+  },
+  "ok": false,
+  "protocol_version": "1.2",
+  "request_id": "plan-domain-error",
+  "result": null
+}

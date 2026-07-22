@@ -1,0 +1,50 @@
+{
+  "error": null,
+  "ok": true,
+  "protocol_version": "1.2",
+  "request_id": "plan-success",
+  "result": {
+    "diff_text": "--- source.prj\n+++ proposed-copy.prj\n@@ Zone 1, source line 1, field volume_m3 @@\n-100\n+120",
+    "patch": {
+      "header_version": "3.4.0.4",
+      "patch_type": "replace_zone_volume",
+      "preconditions": {
+        "contam_number": 1,
+        "header_version": "3.4.0.4",
+        "old_token": "100",
+        "old_value": 100.0,
+        "reader_mode": "strict_contam_3_4_simple_zone_v1",
+        "source_line_number": 1,
+        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_size_bytes": 1
+      },
+      "preview": {
+        "new_line": "120",
+        "new_token": "120",
+        "old_line": "100",
+        "old_token": "100",
+        "source_line_number": 1
+      },
+      "reader_mode": "strict_contam_3_4_simple_zone_v1",
+      "replacement": {
+        "new_token": "120",
+        "new_value": 120.0
+      },
+      "schema_version": "1.0",
+      "source_path": "${SOURCE_PRJ}",
+      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_size_bytes": 1,
+      "status": "planned",
+      "target": {
+        "byte_end": 3,
+        "byte_start": 0,
+        "contam_number": 1,
+        "field": "volume_m3",
+        "source_line_number": 1,
+        "token_index": 0,
+        "zone_name": "Zone-1"
+      }
+    },
+    "result_type": "zone_volume_patch_plan"
+  }
+}

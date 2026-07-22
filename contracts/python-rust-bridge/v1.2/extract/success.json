@@ -1,0 +1,42 @@
+{
+  "error": null,
+  "ok": true,
+  "protocol_version": "1.2",
+  "request_id": "extract-success",
+  "result": {
+    "extraction_id": "extract-1",
+    "parsed_result": {
+      "day_type_source": "not_available_in_simread_nfr_v1",
+      "diagnostics": [],
+      "extraction_id": "extract-1",
+      "result_type": "zone_air_state",
+      "run_id": "run-1",
+      "sample_count": 0,
+      "samples": [],
+      "schema_version": "1.0",
+      "source_evidence": {
+        "manifest": "${MANIFEST}",
+        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_unchanged": true
+      },
+      "source_line_number": 1,
+      "time_contract": "elapsed_seconds_from_first_sample",
+      "unit_system": "SI",
+      "zone_name": "Zone-1",
+      "zone_number": 1
+    },
+    "result_manifest_path": "${MANIFEST}",
+    "result_type": "zone_air_state_extraction",
+    "run_manifest": {
+      "path": "${MANIFEST}",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "unchanged": true
+    },
+    "source_evidence": {
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size_bytes": 1,
+      "unchanged": true
+    },
+    "status": "succeeded"
+  }
+}

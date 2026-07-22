@@ -1,0 +1,41 @@
+{
+  "error": null,
+  "ok": true,
+  "protocol_version": "1.2",
+  "request_id": "read-success",
+  "result": {
+    "project": {
+      "declared_zone_count": 1,
+      "diagnostics": [],
+      "first_zone": {
+        "contam_number": 1,
+        "flags": 0,
+        "level_number": 1,
+        "name": "Zone-1",
+        "relative_height": 0.0,
+        "source_line_number": 1,
+        "volume_m3": 100.0
+      },
+      "header_variant": 3,
+      "header_version": "3.4.0.4",
+      "reader_mode": "strict_contam_3_4_simple_zone_v1",
+      "schema_version": "1.0",
+      "source_path": "${SOURCE_PRJ}",
+      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_size_bytes": 1,
+      "source_unchanged": true,
+      "zones": [
+        {
+          "contam_number": 1,
+          "flags": 0,
+          "level_number": 1,
+          "name": "Zone-1",
+          "relative_height": 0.0,
+          "source_line_number": 1,
+          "volume_m3": 100.0
+        }
+      ]
+    },
+    "result_type": "read_zones"
+  }
+}

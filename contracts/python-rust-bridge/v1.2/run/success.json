@@ -1,0 +1,19 @@
+{
+  "error": null,
+  "ok": true,
+  "protocol_version": "1.2",
+  "request_id": "run-success",
+  "result": {
+    "result_type": "contamx_run",
+    "run": {
+      "exit_code": 0,
+      "manifest_path": "${MANIFEST}",
+      "primary_artifacts": [],
+      "run_directory": "${RUN_ROOT}",
+      "run_id": "run-1",
+      "solver_version": "3.4.0.3",
+      "status": "succeeded",
+      "timed_out": false
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "source_not_found",
+    "context": {},
+    "message": "源项目文件不存在。",
+    "source_line_number": null
+  },
+  "ok": false,
+  "protocol_version": "1.2",
+  "request_id": "read-domain-error",
+  "result": null
+}

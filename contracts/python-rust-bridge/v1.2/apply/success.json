@@ -1,0 +1,74 @@
+{
+  "error": null,
+  "ok": true,
+  "protocol_version": "1.2",
+  "request_id": "apply-success",
+  "result": {
+    "application": {
+      "diagnostics": [],
+      "generated_artifacts": [],
+      "new_token": "120",
+      "new_value": 120.0,
+      "old_token": "100",
+      "old_value": 100.0,
+      "output_path": "${OUTPUT_PRJ}",
+      "output_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "output_size_bytes": 1,
+      "patch_type": "replace_zone_volume",
+      "schema_version": "1.0",
+      "source_path": "${SOURCE_PRJ}",
+      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_size_bytes": 1,
+      "source_unchanged": true,
+      "status": "applied",
+      "target": {
+        "byte_end": 3,
+        "byte_start": 0,
+        "contam_number": 1,
+        "field": "volume_m3",
+        "source_line_number": 1,
+        "token_index": 0,
+        "zone_name": "Zone-1"
+      },
+      "verification": [
+        "source_hash_unchanged",
+        "output_hash_verified",
+        "output_strict_re_read",
+        "target_zone_verified"
+      ]
+    },
+    "project": {
+      "declared_zone_count": 1,
+      "diagnostics": [],
+      "first_zone": {
+        "contam_number": 1,
+        "flags": 0,
+        "level_number": 1,
+        "name": "Zone-1",
+        "relative_height": 0.0,
+        "source_line_number": 1,
+        "volume_m3": 120.0
+      },
+      "header_variant": 3,
+      "header_version": "3.4.0.4",
+      "reader_mode": "strict_contam_3_4_simple_zone_v1",
+      "schema_version": "1.0",
+      "source_path": "${OUTPUT_PRJ}",
+      "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_size_bytes": 1,
+      "source_unchanged": true,
+      "zones": [
+        {
+          "contam_number": 1,
+          "flags": 0,
+          "level_number": 1,
+          "name": "Zone-1",
+          "relative_height": 0.0,
+          "source_line_number": 1,
+          "volume_m3": 120.0
+        }
+      ]
+    },
+    "result_type": "zone_volume_patch_application"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "source_changed",
+    "context": {},
+    "message": "源项目文件在应用前发生变化。",
+    "source_line_number": null
+  },
+  "ok": false,
+  "protocol_version": "1.2",
+  "request_id": "apply-domain-error",
+  "result": null
+}
