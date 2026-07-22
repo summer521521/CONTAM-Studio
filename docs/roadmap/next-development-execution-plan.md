@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-当前执行任务为`TRUTH-02`。`SAFE-01`已完成规定的自动验证，`PH6-01`、`PH6-02`和`TRUTH-01`已完成；其余任务只有在前置门禁完成、状态矩阵更新后才可转为`ready`。Phase 7 AI Patch保持暂停。
+本次已依次完成`TRUTH-01`和`TRUTH-02`。`SAFE-01`已完成规定的自动验证，`PH6-01`和`PH6-02`已完成；下一张满足前置条件的`QA-01`已转为`ready`，但未因本次指令自动开始。Phase 7 AI Patch保持暂停。
 
 ```text
 安全收口
@@ -108,9 +108,9 @@ pwsh -NoProfile -File scripts\verify.ps1 -Mode Full
 | 2 | `PH6-01` | Phase 6A当前分支真实GUI收口 | `U` | `completed` | `SAFE-01`自动验证 |
 | 3 | `PH6-02` | 记录验收并收口当前分支 | `L+U` | `completed` | `PH6-01` |
 | 4 | `TRUTH-01` | 建立唯一能力状态矩阵 | `L` | `completed` | `PH6-02` |
-| 5 | `TRUTH-02` | 同步漂移文档与研究证据标签 | `L` | `in_progress` | `TRUTH-01` |
+| 5 | `TRUTH-02` | 同步漂移文档与研究证据标签 | `L` | `completed` | `TRUTH-01` |
 | 6 | `PROD-01` | 冻结v0.1产品契约和旗舰任务选择方法 | `H+U` | `blocked` | `TRUTH-01` |
-| 7 | `QA-01` | 固定工具链和统一验证入口 | `L` | `blocked` | `TRUTH-02` |
+| 7 | `QA-01` | 固定工具链和统一验证入口 | `L` | `ready` | `TRUTH-02` |
 | 8 | `QA-02` | 清零Clippy并设为门禁 | `L` | `blocked` | `QA-01` |
 | 9 | `QA-03` | Windows CI和主分支检查 | `L+U` | `blocked` | `QA-02` |
 | 10 | `ARCH-01` | 冻结三层职责与可信边界ADR | `H→L` | `blocked` | `TRUTH-01` |

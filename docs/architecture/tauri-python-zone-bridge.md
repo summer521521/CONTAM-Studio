@@ -25,7 +25,7 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / e
 
 ## JSON协议
 
-协议版本为`1.2`。相对`1.1`新增显式白名单操作`extract_zone_air_state`及其结果类型，原有读取和Patch字段语义不变。Python从stdin读取一条不超过128 KiB的UTF-8 JSON请求，stdout只输出一条完整JSON响应并换行。
+协议版本为`1.2`。当前显式白名单覆盖读取、Zone体积Patch、Zone空气状态提取和受控活动项目运行；Python从stdin读取一条不超过128 KiB的UTF-8 JSON请求，stdout只输出一条完整JSON响应并换行。
 
 ```json
 {

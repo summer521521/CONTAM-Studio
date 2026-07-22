@@ -1,6 +1,6 @@
 # CONTAM Studio Python核心
 
-本目录包含Phase 2B-1严格Zone纯文档读取器、Phase 2A隔离contamxpy检查入口、Phase 2C一次性JSON桥、Phase 3A-0 Zone体积副本Patch和Phase 4A独立ContamX运行核心。Phase 2C桥由Tauri按请求启动后退出，不是HTTP服务或长期Python sidecar；Phase 3A-0 Patch尚未接入桌面桥。
+本目录包含Phase 2B-1严格Zone纯文档读取器、Phase 2A隔离contamxpy检查入口、Phase 2C一次性JSON桥、Phase 3A-0 Zone体积副本Patch、Phase 4A独立ContamX运行核心和Phase 5A官方SimRead结果提取核心。Phase 2C桥由Tauri按请求启动后退出，不是HTTP服务或长期Python sidecar；Phase 3A-0 Patch已由Phase 3B/3C通过Rust/Tauri接入Diff审阅、不可变草稿Revision和安全副本闭环。
 
 ## 环境
 
@@ -38,9 +38,9 @@ python\.venv\Scripts\python.exe -m contam_studio_core.zone_volume_patch apply SO
 
 ## Phase 2C JSON桥
 
-`contam_studio_core.zone_bridge`从stdin读取一条协议`1.0`请求，从stdout输出一条成功/失败共用的JSON Envelope。桌面宿主以`python -I -m contam_studio_core.zone_bridge`启动它；请求只允许`read_simple_zones`操作，并复用上面的严格读取器。
+`contam_studio_core.zone_bridge`从stdin读取一条协议`1.2`请求，从stdout输出一条成功/失败共用的JSON Envelope。桌面宿主以`python -I -m contam_studio_core.zone_bridge`启动它；请求只允许`read_simple_zones`、`plan_zone_volume_patch`、`apply_zone_volume_patch_to_copy`、`extract_zone_air_state`和`run_active_project`白名单操作，并复用相应的严格领域接口。
 
-桥接器限制请求为64 KiB、`request_id`为可打印ASCII且不超过128字符、路径不超过32768字符。用户输入错误结构化返回，stdout不混入调试文本，stderr只保留给真正的运行诊断；未处理异常不会泄露Traceback。完整协议和Rust进程边界见[Tauri-Python Zone桥](../docs/architecture/tauri-python-zone-bridge.md)。
+桥接器限制请求为128 KiB、`request_id`为可打印ASCII且不超过128字符、路径不超过32768字符。用户输入错误结构化返回，stdout不混入调试文本，stderr只保留给真正的运行诊断；未处理异常不会泄露Traceback。完整协议和Rust进程边界见[Tauri-Python Zone桥](../docs/architecture/tauri-python-zone-bridge.md)。
 
 ## 隔离Zone检查
 

@@ -1,6 +1,8 @@
 # 当前状态
 
-记录日期：2026-07-19。
+记录日期：2026-07-22。
+
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文只保留按阶段组织的摘要。当前已落地顺序为Phase 2只读Zone、Phase 3安全草稿、Phase 4受控运行、Phase 5A/5B/5C官方结果提取与Zone分析、Phase 6A只读AI助手；完整PRJ、AI写入、分发和用户验证状态不从阶段名称推断。
 
 ## Phase 6A Codex只读AI助手
 
@@ -39,6 +41,21 @@
 - ContamX异常进程经过有界wait/terminate/kill/管道关闭和流线程冻结。无法确认退出时保留不可信残留目录，但不写Phase 5A可接受manifest或最终生成物哈希。
 - Rust验证成功响应与活动项目、官方3.4.0.3身份、受控manifest路径和非空SIM一致，只向WebView发送安全摘要；最新成功manifest路径仅存Rust内存，项目或Patch副本切换时清除。
 - 非GUI官方运行已成功并由Phase 5A验证器接受。自动验证与真实桌面手动验收均已完成；用户验收证据见[PR #11评论](https://github.com/summer521521/CONTAM-Studio/pull/11#issuecomment-5011099169)。Phase 4B-1已完成。
+
+## Phase 5A官方SimRead结果提取
+
+- 已验证与Phase 4相同NIST官方包中的`simread.exe`：3.4.0.3、Windows x64、34816字节，SHA-256为`85AF9B559DEBB6ECF9BA2F73705CEF60F14D32C5F8ED9B524823FA3AC85A6958`。
+- 结果入口绑定成功的Phase 4 manifest，复制PRJ和SIM到全新提取工作区；不接受任意SIM路径，不修改Phase 4运行证据。
+- 首个结果类型为`zone_air_state`，通过官方`.nfr`文本严格读取Zone空气状态，单位为K、Pa和kg/m³。真实Zone 1 `One`得到577个样本，首样本为293.15 K、-1.4222 Pa、1.2041 kg/m³。
+- Phase 5B/5C已在桌面展示当前Zone并支持受控CSV副本导出；当前仍没有路径流量、污染物浓度、直接SIM二进制解析或其他结果类型。
+
+## Phase 5A加固状态
+
+- Phase 4 manifest现在以单次bytes快照严格验证，完整绑定官方ContamX身份、PRJ/SIM哈希和运行目录；主PRJ的source与snapshot字段必须逐项一致，成功清单diagnostics必须为空。
+- 提取阶段在多个时点复核Phase 4证据、工作区PRJ/SIM和SimRead二进制身份；工作区创建后成功和失败均通过同一result-manifest模型保留进程、流证据和SimRead生成物。工作区创建前的拒绝不写伪造清单。
+- Zone在启动SimRead前预验证；公开CLI不接受直接NFR或SIM。
+- `day_type`返回null并标注不可用来源；累计时间从首个样本起算。当前仍只支持`zone_air_state`，桌面分析不改变这一领域边界。
+- 当前Phase 5A Python测试共255项通过，新增编排级TOCTOU、进程收口、父管道关闭、流证据冻结、最终证据和清单Schema验证；真实Zone 1仍为577个样本。
 
 ## Phase 5B-1桌面Zone空气状态摘要
 
@@ -143,7 +160,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 文件选择和读取合并为Rust侧唯一的`select_and_read_prj_zones`命令。React只提交`request_id`，无法向命令指定源路径；Rust打开原生对话框，验证本地文件、`.prj`扩展名并规范化路径后才调用Python。
 - `build.rs`通过`AppManifest`登记该命令，main窗口capability只授予`core:default`与`allow-select-and-read-prj-zones`；前端dialog依赖和权限已移除，未开放文件系统、Shell、HTTP、远程URL或自动更新能力。
 - React不读取文件、不启动进程；Rust宿主把内部持有的规范化选择路径作为JSON请求字段，通过参数数组启动一次性Python进程，并将结构化Envelope返回前端。取消选择以独立`cancelled`响应返回，不伪装为读取错误。
-- Python桥现使用协议`1.2`，显式允许读取、计划Zone体积Patch、应用到副本和提取Zone空气状态四个操作；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
+- Python桥现使用协议`1.2`，显式允许读取、计划Zone体积Patch、应用到副本、提取Zone空气状态和受控活动项目运行五个操作；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
 - Python解释器按`CONTAM_STUDIO_PYTHON`绝对路径、仓库内`python/.venv/Scripts/python.exe`顺序发现；缺失时返回`python_runtime_not_found`，不回退到PATH、全局Python或Microsoft Store别名。
 - Rust端超时为10秒，stdout上限2 MiB、stderr上限16 KiB；超时终止进程，并拒绝非UTF-8、无效JSON、协议不匹配、request_id不匹配、非零退出、超大输出及任意非空stderr。
 - Python响应先进入不可序列化到WebView的Raw类型；Rust验证诊断code，以固定消息替换Python原始message，并对白名单context执行类型检查与120字符截断。成功diagnostics和失败error使用同一规则，TypeScript清理保留为第二道防线。
@@ -191,7 +208,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。Phase 6A正在接入用户主动启用、只读取Rust披露上下文的Codex助手；Beta-2可选本地档案只保存经验证的已完成问答，不能恢复Thread、自动继续聊天或自动重放给模型。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、AI写入、其他AI后端、网络服务或Python打包分发；Phase 3C、Phase 5C和Phase 6A不得解释为完整编辑、完整结果分析或自主Agent系统。
+桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。Phase 6A已实现并已合并到`main`；自动验证已通过，真实GUI和用户验证仍待用户确认。Beta-2可选本地档案只保存经验证的已完成问答，不能恢复Thread、自动继续聊天或自动重放给模型。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、AI写入、其他AI后端、网络服务或Python打包分发；Phase 3C、Phase 5C和Phase 6A不得解释为完整编辑、完整结果分析或自主Agent系统。
 
 ## 待验证问题
 
@@ -199,18 +216,3 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - 一次性Python进程方案在安装包中的运行时冻结、定位、升级、签名和取消策略；是否需要在后续阶段改为长期受控sidecar仍待证据。
 - ContamX支持版本、发现方式、捆绑方式及对应许可和第三方声明。
 - Windows 10/11 64位安装、签名、sidecar生命周期和依赖兼容性。
-- 中英文CONTAM术语表及其与官方术语的一致性。
-- AI提供方的本地/联网边界、上下文披露、审批协议和确定性验证契约。
-## Phase 5A官方SimRead结果提取
-
-- 已验证与Phase 4相同NIST官方包中的`simread.exe`：3.4.0.3、Windows x64、34816字节，SHA-256为`85AF9B559DEBB6ECF9BA2F73705CEF60F14D32C5F8ED9B524823FA3AC85A6958`。
-- 结果入口绑定成功的Phase 4 manifest，复制PRJ和SIM到全新提取工作区；不接受任意SIM路径，不修改Phase 4运行证据。
-- 首个结果类型为`zone_air_state`，通过官方`.nfr`文本严格读取Zone空气状态，单位为K、Pa和kg/m³。真实Zone 1 `One`得到577个样本，首样本为293.15 K、-1.4222 Pa、1.2041 kg/m³。
-- Phase 5B/5C已在桌面展示当前Zone并支持受控CSV副本导出；当前仍没有路径流量、污染物浓度、直接SIM二进制解析或其他结果类型。
-## Phase 5A加固状态
-
-- Phase 4 manifest现在以单次bytes快照严格验证，完整绑定官方ContamX身份、PRJ/SIM哈希和运行目录；主PRJ的source与snapshot字段必须逐项一致，成功清单diagnostics必须为空。
-- 提取阶段在多个时点复核Phase 4证据、工作区PRJ/SIM和SimRead二进制身份；工作区创建后成功和失败均通过同一result-manifest模型保留进程、流证据和SimRead生成物。工作区创建前的拒绝不写伪造清单。
-- Zone在启动SimRead前预验证；公开CLI不接受直接NFR或SIM。
-- `day_type`返回null并标注不可用来源；累计时间从首个样本起算。当前仍只支持`zone_air_state`，桌面分析不改变这一领域边界。
-- 当前Phase 5A Python测试共255项通过，新增编排级TOCTOU、进程收口、父管道关闭、流证据冻结、最终证据和清单Schema验证；真实Zone 1仍为577个样本。
