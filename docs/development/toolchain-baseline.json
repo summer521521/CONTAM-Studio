@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-07-22",
+  "platform": "Windows x64",
+  "tools": {
+    "python": {
+      "path": "python/.venv/Scripts/python.exe",
+      "version": "3.12.10"
+    },
+    "node": {
+      "command": "node",
+      "version": "24.13.0"
+    },
+    "pnpm": {
+      "command": "pnpm",
+      "version": "11.14.0"
+    },
+    "rustc": {
+      "command": "rustc",
+      "version": "1.97.1"
+    },
+    "cargo": {
+      "command": "cargo",
+      "version": "1.97.1"
+    },
+    "rustup_toolchain": {
+      "command": "rustup",
+      "version": "stable-x86_64-pc-windows-msvc"
+    }
+  },
+  "lock_files": [
+    "pnpm-lock.yaml",
+    "src-tauri/Cargo.lock"
+  ]
+}

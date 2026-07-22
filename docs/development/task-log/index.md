@@ -3,6 +3,7 @@
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
 | [PROD-01冻结v0.1产品契约](records/prod-01-v0-1-product-contract.md) | PROD-01 | completed | live |
+| [QA-01工具链基线与统一验证入口](records/qa-01-toolchain-and-verify.md) | QA-01 | completed | live |
 | [SAFE-01修复草稿另存并发删除](records/safe-01-draft-export-race-fix.md) | SAFE-01 | automated_verified | live |
 | [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | completed | live |
 | [PH6-02结果审核与Phase 6A/SAFE-01独立交付](records/phase-6-02-review-and-delivery.md) | PH6-02 | completed | live |

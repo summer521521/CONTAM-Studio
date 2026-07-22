@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-本次已依次完成`TRUTH-01`、`TRUTH-02`和`PROD-01`。`SAFE-01`已完成规定的自动验证，`PH6-01`和`PH6-02`已完成；下一张满足前置条件的`QA-01`保持`ready`，但未因本次指令自动开始。Phase 7 AI Patch保持暂停。
+本次已依次完成`TRUTH-01`、`TRUTH-02`、`PROD-01`和`QA-01`。`SAFE-01`已完成规定的自动验证，`PH6-01`和`PH6-02`已完成；下一张`QA-02`保持`blocked`，未因本次指令开始。Phase 7 AI Patch保持暂停。
 
 ```text
 安全收口
@@ -95,7 +95,7 @@ Pop-Location
 `QA-01`完成后，统一改用：
 
 ```powershell
-pwsh -NoProfile -File scripts\verify.ps1 -Mode Full
+powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 ```
 
 检查结果必须分别报告；“脚本通过”“自动检查通过”“关键缺陷修复”“GUI通过”“安装验证通过”和“完整审计完成”不能互相替代。
@@ -110,7 +110,7 @@ pwsh -NoProfile -File scripts\verify.ps1 -Mode Full
 | 4 | `TRUTH-01` | 建立唯一能力状态矩阵 | `L` | `completed` | `PH6-02` |
 | 5 | `TRUTH-02` | 同步漂移文档与研究证据标签 | `L` | `completed` | `TRUTH-01` |
 | 6 | `PROD-01` | 冻结v0.1产品契约和旗舰任务选择方法 | `H+U` | `completed` | `TRUTH-01` |
-| 7 | `QA-01` | 固定工具链和统一验证入口 | `L` | `ready` | `TRUTH-02` |
+| 7 | `QA-01` | 固定工具链和统一验证入口 | `L` | `completed` | `TRUTH-02` |
 | 8 | `QA-02` | 清零Clippy并设为门禁 | `L` | `blocked` | `QA-01` |
 | 9 | `QA-03` | Windows CI和主分支检查 | `L+U` | `blocked` | `QA-02` |
 | 10 | `ARCH-01` | 冻结三层职责与可信边界ADR | `H→L` | `blocked` | `TRUTH-01` |
@@ -224,6 +224,7 @@ pwsh -NoProfile -File scripts\verify.ps1 -Mode Full
 - **允许**：`scripts/verify.ps1`、工具链版本声明、开发文档和脚本测试；不得自动安装工具。
 - **步骤**：实现`Docs/Fast/Full`模式；检查预期Python解释器、Node/pnpm/Rust版本、Python/Rust/前端测试、构建、已跟踪JSON、Markdown相对链接、锁文件和`git diff --check`；任一失败返回非零。
 - **验收**：干净PowerShell中单命令可复现；错误指出具体子检查；不读取未跟踪用户文件。
+- **交付**：工具链基线见`docs/development/toolchain-baseline.json`和`docs/development/toolchain-baseline.md`；统一入口为`powershell -NoProfile -File scripts\verify.ps1 -Mode Full`。
 
 ### QA-02 清零Clippy并设为门禁
 

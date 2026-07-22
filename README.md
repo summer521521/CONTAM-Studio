@@ -57,6 +57,8 @@ pnpm tauri dev
 
 仅构建前端可运行`pnpm build`，前端单元测试运行`pnpm test`。开发环境可通过`CONTAM_STUDIO_PYTHON`显式指定一个绝对Python解释器路径；未配置时只检查仓库内`python\.venv\Scripts\python.exe`，不会回退到系统PATH。
 
+QA-01工具链基线和统一验证入口见[工具链基线](docs/development/toolchain-baseline.md)。依赖已安装后，可从仓库根目录运行`powershell -NoProfile -File scripts\verify.ps1 -Mode Full`；脚本不会自动安装工具或读取未跟踪用户文件。
+
 ![Phase 2C真实PRJ只读Zone工作台](docs/ui/phase-2c-real-zone-project.png)
 
 Phase 3B的桌面审阅流程和验证状态见[开发与验证记录](docs/development/phase-3b-zone-volume-gui-verification.md)。
