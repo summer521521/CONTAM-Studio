@@ -5045,6 +5045,100 @@ mod tests {
     }
 
     #[test]
+    fn contract_mutations_reject_unknown_fields_at_every_depth_and_stream_limits() {
+        let read_json = || {
+            serde_json::from_str::<Value>(include_str!(
+                "../../contracts/python-rust-bridge/v1.2/read/success.json"
+            ))
+            .unwrap()
+        };
+        let mut envelope = read_json();
+        envelope["unexpected"] = json!(true);
+        assert!(serde_json::from_value::<RawBridgeEnvelope>(envelope).is_err());
+
+        let mut result = read_json();
+        result["result"]["unexpected"] = json!(true);
+        let result_envelope: RawBridgeEnvelope = serde_json::from_value(result).unwrap();
+        assert!(
+            serde_json::from_value::<RawReadZonesResult>(result_envelope.result.unwrap()).is_err()
+        );
+
+        let mut plan = serde_json::from_str::<Value>(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/plan/success.json"
+        ))
+        .unwrap();
+        plan["result"]["patch"]["target"]["unexpected"] = json!(true);
+        let plan_envelope: RawBridgeEnvelope = serde_json::from_value(plan).unwrap();
+        assert!(
+            serde_json::from_value::<RawPatchPlanResult>(plan_envelope.result.unwrap()).is_err()
+        );
+
+        let mut extract = serde_json::from_str::<Value>(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/extract/success.json"
+        ))
+        .unwrap();
+        extract["result"]["parsed_result"]["source_evidence"]["unexpected"] = json!(true);
+        let extract_envelope: RawBridgeEnvelope = serde_json::from_value(extract).unwrap();
+        assert!(serde_json::from_value::<RawZoneAirStateExtraction>(
+            extract_envelope.result.unwrap()
+        )
+        .is_err());
+
+        let mut schema = serde_json::from_str::<Value>(include_str!(
+            "../../contracts/python-rust-bridge/v1.2/plan/success.json"
+        ))
+        .unwrap();
+        schema["result"]["patch"]["schema_version"] = json!("9.9");
+        let schema_envelope: RawBridgeEnvelope = serde_json::from_value(schema).unwrap();
+        let schema_result: RawPatchPlanResult =
+            serde_json::from_value(schema_envelope.result.unwrap()).unwrap();
+        assert_ne!(schema_result.patch.schema_version, RESULT_SCHEMA_VERSION);
+
+        let exact_stdout = read_limited(
+            std::io::Cursor::new(vec![0_u8; MAX_STDOUT_BYTES]),
+            MAX_STDOUT_BYTES,
+        );
+        assert_eq!(exact_stdout.bytes.len(), MAX_STDOUT_BYTES);
+        assert!(!exact_stdout.exceeded);
+        let oversized_stdout = read_limited(
+            std::io::Cursor::new(vec![0_u8; MAX_STDOUT_BYTES + 1]),
+            MAX_STDOUT_BYTES,
+        );
+        assert_eq!(oversized_stdout.bytes.len(), MAX_STDOUT_BYTES);
+        assert!(oversized_stdout.exceeded);
+
+        let exact_stderr = read_limited(
+            std::io::Cursor::new(vec![0_u8; MAX_STDERR_BYTES]),
+            MAX_STDERR_BYTES,
+        );
+        assert_eq!(exact_stderr.bytes.len(), MAX_STDERR_BYTES);
+        assert!(!exact_stderr.exceeded);
+        let oversized_stderr = read_limited(
+            std::io::Cursor::new(vec![0_u8; MAX_STDERR_BYTES + 1]),
+            MAX_STDERR_BYTES,
+        );
+        assert_eq!(oversized_stderr.bytes.len(), MAX_STDERR_BYTES);
+        assert!(oversized_stderr.exceeded);
+
+        let raw = RawReaderDiagnostic {
+            code: "bridge_request_invalid".into(),
+            message: "C:/secret/model.prj token=secret".into(),
+            source_line_number: Some(1),
+            context: Some(BTreeMap::from([
+                ("source_path".into(), json!("C:/secret/model.prj")),
+                ("credential".into(), json!("secret")),
+                ("token".into(), json!("safe-token")),
+                ("field".into(), json!("volume_m3")),
+            ])),
+        };
+        let safe = sanitize_raw_diagnostic(raw).unwrap();
+        let serialized = serde_json::to_string(&safe).unwrap();
+        assert!(!serialized.contains("model.prj"));
+        assert!(!serialized.contains("credential"));
+        assert!(serialized.contains("safe-token"));
+    }
+
+    #[test]
     fn nonempty_stderr_and_transport_failures_are_rejected() {
         let mut value = outcome(b"{}".to_vec());
         value.stderr.bytes = b"unexpected".to_vec();
