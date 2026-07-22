@@ -22,6 +22,7 @@
 | [BATCH-02 CONTRACT-02A Tauri命令契约登记](records/batch-02-contract-02a-tauri-command-registry.md) | CONTRACT-02A | completed | live |
 | [BATCH-02 CONTRACT-02B Tauri wrapper真实调用测试](records/batch-02-contract-02b-tauri-wrapper-tests.md) | CONTRACT-02B | completed | live |
 | [BATCH-02 CONTRACT-02C 契约检查器变异自测](records/batch-02-contract-02c-tauri-contract-mutation-selftest.md) | CONTRACT-02C | completed | live |
+| [BATCH-02 MOD-01 Rust测试模块机械拆分](records/batch-02-mod-01-rust-test-module-split.md) | MOD-01 | completed | live |
 | [SAFE-01修复草稿另存并发删除](records/safe-01-draft-export-race-fix.md) | SAFE-01 | automated_verified | live |
 | [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | completed | live |
 | [PH6-02结果审核与Phase 6A/SAFE-01独立交付](records/phase-6-02-review-and-delivery.md) | PH6-02 | completed | live |
