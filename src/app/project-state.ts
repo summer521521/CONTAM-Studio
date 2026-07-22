@@ -271,7 +271,7 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
       if (!isCurrentRequest(state, action.sequence)) return state;
       return {
         ...state,
-        status: "cancelled",
+        status: state.project ? "loaded" : "cancelled",
         activeSequence: null,
         activeRequestId: null,
         issue: null,
@@ -280,7 +280,7 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
       if (!isCurrentRequest(state, action.sequence)) return state;
       return {
         ...state,
-        status: "error",
+        status: state.project ? "loaded" : "error",
         activeSequence: null,
         activeRequestId: null,
         issue: sanitizeDiagnostic(action.issue),
@@ -311,7 +311,9 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
       if (!isCurrentRequest(state, action.sequence, action.requestId)) return state;
       return {
         ...state,
-        status: UNSUPPORTED_CODES.has(action.issue.code) ? "unsupported" : "error",
+        status: state.project
+          ? "loaded"
+          : UNSUPPORTED_CODES.has(action.issue.code) ? "unsupported" : "error",
         activeSequence: null,
         activeRequestId: null,
         issue: sanitizeDiagnostic(action.issue),

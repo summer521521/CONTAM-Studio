@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   desktopOpenIssue,
+  envelopeIssue,
   INITIAL_PROJECT_STATE,
   isDraftExportSummaryValid,
   isDraftSummaryValid,
@@ -48,6 +49,20 @@ const issue: ReaderDiagnostic = {
 const draft = { revision_id: "00000000-0000-5000-8000-000000000099", revision_number: 0, history_tip: 0, dirty: false, exported: false, can_undo: false, can_redo: false };
 
 describe("projectReducer", () => {
+  it("keeps first-open cancellation as a cancelled state", () => {
+    const selecting = projectReducer(INITIAL_PROJECT_STATE, {
+      type: "selection_started",
+      sequence: 1,
+    });
+    const cancelled = projectReducer(selecting, {
+      type: "selection_cancelled",
+      sequence: 1,
+    });
+    expect(cancelled.status).toBe("cancelled");
+    expect(cancelled.project).toBeNull();
+    expect(cancelled.issue).toBeNull();
+  });
+
   it("moves from idle through loading to loaded", () => {
     const selecting = projectReducer(INITIAL_PROJECT_STATE, {
       type: "selection_started",
@@ -75,13 +90,16 @@ describe("projectReducer", () => {
     expect(selectedZone(loaded)?.name).toBe("Zone1");
   });
 
-  it("maps reader rejection to unsupported and keeps a previous project", () => {
+  it("restores a previous project after an unsupported open", () => {
     const loadedProject = project();
     const previous = {
       ...INITIAL_PROJECT_STATE,
-      status: "selecting" as const,
+      status: "loaded" as const,
       activeSequence: 2,
+      activeRequestId: null,
       project: loadedProject,
+      projectSessionId: "session-1",
+      draft,
       selectedZoneKey: zoneSelectionKey(loadedProject, loadedProject.zones[1]),
     };
     const loading = projectReducer(previous, {
@@ -95,9 +113,67 @@ describe("projectReducer", () => {
       requestId: "request-2",
       issue,
     });
-    expect(failed.status).toBe("unsupported");
+    expect(failed.status).toBe("loaded");
     expect(failed.project).toBe(loadedProject);
+    expect(failed.projectSessionId).toBe("session-1");
+    expect(failed.draft).toBe(draft);
     expect(selectedZone(failed)?.name).toBe("Zone2");
+    expect(failed.issue?.code).toBe("invalid_zone_field");
+  });
+
+  it("restores a previous project after a non-unsupported open failure", () => {
+    const loadedProject = project();
+    const loading = {
+      ...INITIAL_PROJECT_STATE,
+      status: "loading" as const,
+      activeSequence: 2,
+      activeRequestId: "request-2",
+      project: loadedProject,
+      projectSessionId: "session-1",
+      draft,
+      selectedZoneKey: loadedProject.zones[0].zone_id,
+    };
+    const failed = projectReducer(loading, {
+      type: "loading_failed",
+      sequence: 2,
+      requestId: "request-2",
+      issue: {
+        code: "python_process_timeout",
+        message: "timed out",
+        source_line_number: null,
+        context: {},
+      },
+    });
+    expect(failed.status).toBe("loaded");
+    expect(failed.project).toBe(loadedProject);
+    expect(failed.projectSessionId).toBe("session-1");
+    expect(failed.draft).toBe(draft);
+    expect(failed.selectedZoneKey).toBe(loadedProject.zones[0].zone_id);
+    expect(failed.issue?.code).toBe("python_process_timeout");
+  });
+
+  it("restores the loaded project after a new open is cancelled", () => {
+    const loadedProject = project();
+    const loading = {
+      ...INITIAL_PROJECT_STATE,
+      status: "loading" as const,
+      activeSequence: 2,
+      activeRequestId: "request-2",
+      project: loadedProject,
+      projectSessionId: "session-1",
+      draft,
+      selectedZoneKey: zoneSelectionKey(loadedProject, loadedProject.zones[1]),
+    };
+    const cancelled = projectReducer(loading, {
+      type: "selection_cancelled",
+      sequence: 2,
+    });
+    expect(cancelled.status).toBe("loaded");
+    expect(cancelled.project).toBe(loadedProject);
+    expect(cancelled.projectSessionId).toBe("session-1");
+    expect(cancelled.draft).toBe(draft);
+    expect(cancelled.selectedZoneKey).toBe(loadedProject.zones[1].zone_id);
+    expect(cancelled.issue).toBeNull();
   });
 
   it("moves from loading to error for a bridge failure", () => {
@@ -123,6 +199,26 @@ describe("projectReducer", () => {
     });
     expect(failed.status).toBe("error");
     expect(failed.issue?.code).toBe("python_process_timeout");
+  });
+
+  it("keeps a first-open selection failure as an error", () => {
+    const selecting = projectReducer(INITIAL_PROJECT_STATE, {
+      type: "selection_started",
+      sequence: 1,
+    });
+    const failed = projectReducer(selecting, {
+      type: "selection_failed",
+      sequence: 1,
+      issue: {
+        code: "desktop_bridge_invoke_failed",
+        message: "failed",
+        source_line_number: null,
+        context: {},
+      },
+    });
+    expect(failed.status).toBe("error");
+    expect(failed.project).toBeNull();
+    expect(failed.issue?.code).toBe("desktop_bridge_invoke_failed");
   });
 
   it("ignores stale responses from an older request", () => {
@@ -253,6 +349,24 @@ describe("desktop open response", () => {
       "request-1",
     );
     expect(invalid?.code).toBe("desktop_response_request_mismatch");
+  });
+
+  it("keeps a domain rejection on the App Problems path", () => {
+    const response = {
+      request_id: "request-1",
+      cancelled: false,
+      project_session_id: null,
+      draft: null,
+      envelope: {
+        protocol_version: "1.2",
+        request_id: "request-1",
+        ok: false,
+        result: null,
+        error: issue,
+      },
+    };
+    expect(desktopOpenIssue(response, "request-1")).toBeNull();
+    expect(envelopeIssue(response.envelope, "request-1")?.code).toBe("invalid_zone_field");
   });
 
   it("rejects paths and inconsistent draft metadata at the WebView boundary", () => {
