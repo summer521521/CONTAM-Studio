@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-`BATCH-01`已按`QA-01A → QA-02 → FE-01 → FE-02`完成自动收口并推送；FE-01与FE-02仍等待联合GUI验收。用户已明确授权`BATCH-02`从`origin/main=07312f3`开始，按20个顺序检查点连续执行；当前执行任务为`ARCH-01`。`QA-03A-01`、`QA-03A-02`、`QA-03B-01`、`QA-03B-02`和`QA-03B-03`已完成。本批次内一次只允许一张卡为`in_progress`，每项必须有独立日志、定向验证和独立commit；检查点通过后自动继续，不逐项汇报；每张正式卡结束运行`Full`，阶段末再运行`Full`。阶段A允许推送`main`，阶段B只能保留本地`codex/safe-02-commit-last`，不得推送；批次末统一汇报。旧目录、原工作区、用户PRJ/CSV、全局环境和凭据均不触碰。
+`BATCH-01`已按`QA-01A → QA-02 → FE-01 → FE-02`完成自动收口并推送；FE-01与FE-02仍等待联合GUI验收。用户已明确授权`BATCH-02`从`origin/main=07312f3`开始，按20个顺序检查点连续执行；当前执行任务为`ARCH-01`。`QA-03A-01`、`QA-03A-02`、`QA-03B-01`、`QA-03B-02`、`QA-03B-03`和`QA-03B-04`自动检查已完成，`QA-03`总状态为`pending_user`。本批次内一次只允许一张卡为`in_progress`，每项必须有独立日志、定向验证和独立commit；检查点通过后自动继续，不逐项汇报；每张正式卡结束运行`Full`，阶段末再运行`Full`。阶段A允许推送`main`，阶段B只能保留本地`codex/safe-02-commit-last`，不得推送；批次末统一汇报。旧目录、原工作区、用户PRJ/CSV、全局环境和凭据均不触碰。
 
 ```text
 安全收口
@@ -128,7 +128,7 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 | 7 | `QA-01` | 固定工具链和统一验证入口 | `L` | `completed` | `TRUTH-02` |
 | 7A | `QA-01A` | Python验证环境隔离 | `L` | `completed` | `QA-01` |
 | 8 | `QA-02` | 清零Clippy并设为门禁 | `L` | `completed` | `QA-01` |
-| 9 | `QA-03` | Windows CI和主分支检查 | `L+U` | `blocked` | `QA-02` |
+| 9 | `QA-03` | Windows CI和主分支检查 | `L+U` | `pending_user` | `QA-02` |
 | 10 | `ARCH-01` | 冻结三层职责与可信边界ADR | `H→L` | `blocked` | `TRUTH-01` |
 | 11 | `CONTRACT-01` | Python/Rust黄金协议契约 | `H→L` | `blocked` | `ARCH-01`,`QA-01` |
 | 12 | `CONTRACT-02` | Tauri命令、权限和前端载荷一致性门 | `L` | `blocked` | `CONTRACT-01` |
@@ -264,6 +264,7 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 - **禁止**：真实Codex/ContamX联网运行、Secrets、自动发布、依赖隐含开发机状态。
 - **步骤**：干净检出后按锁文件安装，运行`Full`；连续两次PR执行稳定后，由用户在托管平台设置为主分支必需检查。
 - **验收**：人为破坏任一子检查时CI失败；恢复后通过；分支保护状态由用户或平台证据确认。
+- **当前状态**：自动工作流、工具链、Action固定、锁安装和契约检查已通过；总状态保持`pending_user`，等待QA-03C两次PR稳定证据和QA-03D分支保护设置。
 
 ### ARCH-01 冻结三层职责与可信边界ADR
 

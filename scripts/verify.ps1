@@ -442,6 +442,7 @@ function Check-Full {
     param([string]$PythonPath)
 
     Write-Host "== Full ==" -ForegroundColor Cyan
+    Invoke-Tool "Windows CI contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-windows-ci-contract.ps1")) $Root | Out-Null
     Invoke-Tool "Frontend production build" "pnpm" @("build") | Out-Null
     Invoke-Tool "Rust format check" "cargo" @("fmt", "--check") (Join-Path $Root "src-tauri") | Out-Null
     Invoke-Tool "Rust Clippy" "cargo" @("clippy", "--locked", "--all-targets", "--", "-D", "warnings") (Join-Path $Root "src-tauri") | Out-Null
