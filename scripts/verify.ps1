@@ -406,6 +406,7 @@ function Check-Full {
     Write-Host "== Full ==" -ForegroundColor Cyan
     Invoke-Tool "Frontend production build" "pnpm" @("build") | Out-Null
     Invoke-Tool "Rust format check" "cargo" @("fmt", "--check") (Join-Path $Root "src-tauri") | Out-Null
+    Invoke-Tool "Rust Clippy" "cargo" @("clippy", "--locked", "--all-targets", "--", "-D", "warnings") (Join-Path $Root "src-tauri") | Out-Null
     Invoke-Tool "Cargo check" "cargo" @("check", "--locked") (Join-Path $Root "src-tauri") | Out-Null
 }
 

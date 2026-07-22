@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-用户已明确授权`BATCH-01`按`QA-01A → QA-02 → FE-01 → FE-02`连续批处理；当前执行任务为`QA-01A`。本批次内一次只允许一张卡为`in_progress`，每卡必须有独立日志、定向验证和独立commit，批次结束后统一push和汇报。`TRUTH-01`、`TRUTH-02`、`PROD-01`和`QA-01`已完成；`QA-02`及其后续任务保持暂停。Phase 7 AI Patch保持暂停。
+用户已明确授权`BATCH-01`按`QA-01A → QA-02 → FE-01 → FE-02`连续批处理；当前执行任务为`QA-02`。本批次内一次只允许一张卡为`in_progress`，每卡必须有独立日志、定向验证和独立commit，批次结束后统一push和汇报。`TRUTH-01`、`TRUTH-02`、`PROD-01`、`QA-01`和`QA-01A`已完成；`QA-03`及其他非本批次任务保持暂停。Phase 7 AI Patch保持暂停。
 
 ```text
 安全收口
@@ -119,7 +119,7 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 | 6 | `PROD-01` | 冻结v0.1产品契约和旗舰任务选择方法 | `H+U` | `completed` | `TRUTH-01` |
 | 7 | `QA-01` | 固定工具链和统一验证入口 | `L` | `completed` | `TRUTH-02` |
 | 7A | `QA-01A` | Python验证环境隔离 | `L` | `completed` | `QA-01` |
-| 8 | `QA-02` | 清零Clippy并设为门禁 | `L` | `blocked` | `QA-01` |
+| 8 | `QA-02` | 清零Clippy并设为门禁 | `L` | `completed` | `QA-01` |
 | 9 | `QA-03` | Windows CI和主分支检查 | `L+U` | `blocked` | `QA-02` |
 | 10 | `ARCH-01` | 冻结三层职责与可信边界ADR | `H→L` | `blocked` | `TRUTH-01` |
 | 11 | `CONTRACT-01` | Python/Rust黄金协议契约 | `H→L` | `blocked` | `ARCH-01`,`QA-01` |

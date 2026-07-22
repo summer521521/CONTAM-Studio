@@ -1,6 +1,7 @@
 use crate::zone_bridge::{sha256_file, AiTrustedContext, DesktopProjectSessionStore};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
@@ -197,21 +198,11 @@ pub struct DesktopAiTurnResponse {
     error: Option<AiDiagnostic>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct AiArchiveSaveView {
     saved: bool,
     entry_id: Option<String>,
     warning: Option<AiDiagnostic>,
-}
-
-impl Default for AiArchiveSaveView {
-    fn default() -> Self {
-        Self {
-            saved: false,
-            entry_id: None,
-            warning: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -518,13 +509,13 @@ impl CodexAssistantStore {
             if !claim_turn_interrupt(&interrupt_requested) {
                 return;
             }
-            let _ = tauri::async_runtime::spawn_blocking(move || {
+            drop(tauri::async_runtime::spawn_blocking(move || {
                 let _ = connection.request(
                     "turn/interrupt",
                     json!({"threadId": thread_id, "turnId": turn_id}),
                     RPC_TIMEOUT,
                 );
-            });
+            }));
         }
     }
 }
@@ -552,10 +543,10 @@ impl Drop for CodexAssistantStore {
 
 fn retry_retired_connections_async(app: &AppHandle) {
     let app = app.clone();
-    let _ = tauri::async_runtime::spawn_blocking(move || {
+    drop(tauri::async_runtime::spawn_blocking(move || {
         app.state::<CodexAssistantStore>()
             .retry_retired_connections();
-    });
+    }));
 }
 
 async fn close_connection_for_app(
@@ -766,10 +757,7 @@ impl AppServerConnection {
         let stderr_handle = thread::spawn(move || {
             let mut stream = stderr;
             let mut buffer = [0u8; 4096];
-            loop {
-                let Ok(count) = stream.read(&mut buffer) else {
-                    break;
-                };
+            while let Ok(count) = stream.read(&mut buffer) {
                 if count == 0 {
                     break;
                 }
@@ -1078,10 +1066,7 @@ fn capture_limited<R: Read + Send + 'static>(
         let mut retained = Vec::new();
         let mut truncated = false;
         let mut buffer = [0u8; 4096];
-        loop {
-            let Ok(count) = stream.read(&mut buffer) else {
-                break;
-            };
+        while let Ok(count) = stream.read(&mut buffer) {
             if count == 0 {
                 break;
             }
@@ -1094,11 +1079,14 @@ fn capture_limited<R: Read + Send + 'static>(
     })
 }
 
+type CaptureResult = (Vec<u8>, bool);
+type CapturePair = (CaptureResult, CaptureResult);
+
 fn join_capture_pair_bounded(
     first: thread::JoinHandle<(Vec<u8>, bool)>,
     second: thread::JoinHandle<(Vec<u8>, bool)>,
     timeout: Duration,
-) -> Option<((Vec<u8>, bool), (Vec<u8>, bool))> {
+) -> Option<CapturePair> {
     let deadline = Instant::now() + timeout;
     while (!first.is_finished() || !second.is_finished()) && Instant::now() < deadline {
         thread::sleep(POLL_INTERVAL);
@@ -2029,7 +2017,7 @@ fn archive_view_for_context(
             answer: entry.answer.clone(),
         })
         .collect();
-    entries.sort_by(|left, right| right.completed_at_unix_ms.cmp(&left.completed_at_unix_ms));
+    entries.sort_by_key(|entry| Reverse(entry.completed_at_unix_ms));
     AiConversationArchiveView {
         persistence_enabled: archive.persistence_enabled,
         entries,
@@ -2048,17 +2036,30 @@ fn archive_now_unix_ms() -> Result<u64, AiDiagnostic> {
         .map(|duration| duration.as_millis().try_into().unwrap_or(u64::MAX))
 }
 
-fn archive_save_completed_turn(
-    store: &AiConversationArchiveStore,
-    path: &Path,
-    trusted: &AiTrustedContext,
-    preview: &AiContextDisclosureView,
-    language: &str,
-    model_id: &str,
-    reasoning_effort: &str,
-    question: &str,
-    answer: &StructuredAiAnswer,
-) -> AiArchiveSaveView {
+struct ArchiveSaveCompletedTurnInput<'a> {
+    store: &'a AiConversationArchiveStore,
+    path: &'a Path,
+    trusted: &'a AiTrustedContext,
+    preview: &'a AiContextDisclosureView,
+    language: &'a str,
+    model_id: &'a str,
+    reasoning_effort: &'a str,
+    question: &'a str,
+    answer: &'a StructuredAiAnswer,
+}
+
+fn archive_save_completed_turn(input: ArchiveSaveCompletedTurnInput<'_>) -> AiArchiveSaveView {
+    let ArchiveSaveCompletedTurnInput {
+        store,
+        path,
+        trusted,
+        preview,
+        language,
+        model_id,
+        reasoning_effort,
+        question,
+        answer,
+    } = input;
     let _gate = store
         .operation_gate
         .lock()
@@ -2124,8 +2125,7 @@ fn archive_save_completed_turn(
     }
 }
 
-async fn persist_completed_ai_answer(
-    app: &AppHandle,
+struct PersistCompletedAiAnswerInput {
     trusted: AiTrustedContext,
     preview: AiContextDisclosureView,
     language: String,
@@ -2133,7 +2133,21 @@ async fn persist_completed_ai_answer(
     reasoning_effort: String,
     question: String,
     answer: StructuredAiAnswer,
+}
+
+async fn persist_completed_ai_answer(
+    app: &AppHandle,
+    input: PersistCompletedAiAnswerInput,
 ) -> AiArchiveSaveView {
+    let PersistCompletedAiAnswerInput {
+        trusted,
+        preview,
+        language,
+        model_id,
+        reasoning_effort,
+        question,
+        answer,
+    } = input;
     let path = match archive_file_path(app) {
         Ok(path) => path,
         Err(error) => {
@@ -2147,17 +2161,17 @@ async fn persist_completed_ai_answer(
     let app_for_task = app.clone();
     match tauri::async_runtime::spawn_blocking(move || {
         let store = app_for_task.state::<AiConversationArchiveStore>();
-        archive_save_completed_turn(
-            &store,
-            &path,
-            &trusted,
-            &preview,
-            &language,
-            &model_id,
-            &reasoning_effort,
-            &question,
-            &answer,
-        )
+        archive_save_completed_turn(ArchiveSaveCompletedTurnInput {
+            store: &store,
+            path: &path,
+            trusted: &trusted,
+            preview: &preview,
+            language: &language,
+            model_id: &model_id,
+            reasoning_effort: &reasoning_effort,
+            question: &question,
+            answer: &answer,
+        })
     })
     .await
     {
@@ -3823,13 +3837,15 @@ pub async fn start_readonly_ai_turn(
                         .token_usage = token_usage.clone();
                     let archive = persist_completed_ai_answer(
                         &app,
-                        archive_trusted,
-                        archive_preview,
-                        archive_language,
-                        archive_model_id,
-                        archive_reasoning_effort,
-                        archive_question,
-                        answer.clone(),
+                        PersistCompletedAiAnswerInput {
+                            trusted: archive_trusted,
+                            preview: archive_preview,
+                            language: archive_language,
+                            model_id: archive_model_id,
+                            reasoning_effort: archive_reasoning_effort,
+                            question: archive_question,
+                            answer: answer.clone(),
+                        },
                     )
                     .await;
                     DesktopAiTurnResponse {
@@ -4485,33 +4501,33 @@ mod tests {
         let preview = archive_test_preview(&context);
         let answer = archive_test_answer();
 
-        let disabled = archive_save_completed_turn(
-            &store,
-            &path,
-            &context,
-            &preview,
-            "en",
-            "model-a",
-            "low",
-            "What does this Zone mean?",
-            &answer,
-        );
+        let disabled = archive_save_completed_turn(ArchiveSaveCompletedTurnInput {
+            store: &store,
+            path: &path,
+            trusted: &context,
+            preview: &preview,
+            language: "en",
+            model_id: "model-a",
+            reasoning_effort: "low",
+            question: "What does this Zone mean?",
+            answer: &answer,
+        });
         assert!(!disabled.saved);
         assert!(disabled.entry_id.is_none());
         assert!(!path.exists());
 
         archive_test_file(&path, true);
-        let saved = archive_save_completed_turn(
-            &store,
-            &path,
-            &context,
-            &preview,
-            "en",
-            "model-a",
-            "low",
-            "What does this Zone mean?",
-            &answer,
-        );
+        let saved = archive_save_completed_turn(ArchiveSaveCompletedTurnInput {
+            store: &store,
+            path: &path,
+            trusted: &context,
+            preview: &preview,
+            language: "en",
+            model_id: "model-a",
+            reasoning_effort: "low",
+            question: "What does this Zone mean?",
+            answer: &answer,
+        });
         assert!(saved.saved);
         assert!(saved.entry_id.is_some());
 
@@ -4571,17 +4587,17 @@ mod tests {
         archive_test_file(&path, true);
         for context in [&revision_one, &revision_two, &other_baseline, &other_zone] {
             let preview = archive_test_preview(context);
-            let saved = archive_save_completed_turn(
-                &store,
-                &path,
-                context,
-                &preview,
-                "en",
-                "model-a",
-                "medium",
-                "Explain the selected Zone.",
-                &archive_test_answer(),
-            );
+            let saved = archive_save_completed_turn(ArchiveSaveCompletedTurnInput {
+                store: &store,
+                path: &path,
+                trusted: context,
+                preview: &preview,
+                language: "en",
+                model_id: "model-a",
+                reasoning_effort: "medium",
+                question: "Explain the selected Zone.",
+                answer: &archive_test_answer(),
+            });
             assert!(saved.saved);
         }
 
@@ -4614,17 +4630,19 @@ mod tests {
         let preview = archive_test_preview(&context);
         archive_test_file(&path, true);
         for index in 0..=MAX_ARCHIVE_ENTRIES {
-            let saved = archive_save_completed_turn(
-                &store,
-                &path,
-                &context,
-                &preview,
-                "en",
-                "model-a",
-                "low",
-                &format!("Question {index}"),
-                &archive_test_answer(),
-            );
+            let question = format!("Question {index}");
+            let answer = archive_test_answer();
+            let saved = archive_save_completed_turn(ArchiveSaveCompletedTurnInput {
+                store: &store,
+                path: &path,
+                trusted: &context,
+                preview: &preview,
+                language: "en",
+                model_id: "model-a",
+                reasoning_effort: "low",
+                question: &question,
+                answer: &answer,
+            });
             assert!(saved.saved);
         }
         let archive = read_archive_file(&path).unwrap();
@@ -4655,17 +4673,17 @@ mod tests {
         let preview = archive_test_preview(&context);
         archive_test_file(&path, true);
         assert!(
-            archive_save_completed_turn(
-                &store,
-                &path,
-                &context,
-                &preview,
-                "en",
-                "model-a",
-                "low",
-                "Explain this Zone.",
-                &archive_test_answer(),
-            )
+            archive_save_completed_turn(ArchiveSaveCompletedTurnInput {
+                store: &store,
+                path: &path,
+                trusted: &context,
+                preview: &preview,
+                language: "en",
+                model_id: "model-a",
+                reasoning_effort: "low",
+                question: "Explain this Zone.",
+                answer: &archive_test_answer(),
+            })
             .saved
         );
 
@@ -4752,8 +4770,10 @@ mod tests {
 
     #[test]
     fn protocol_constants_are_bounded() {
-        assert!(MAX_RPC_LINE_BYTES <= 256 * 1024);
-        assert!(MAX_RPC_TOTAL_BYTES <= 8 * 1024 * 1024);
+        const {
+            assert!(MAX_RPC_LINE_BYTES <= 256 * 1024);
+            assert!(MAX_RPC_TOTAL_BYTES <= 8 * 1024 * 1024);
+        }
         assert!(RPC_TIMEOUT <= Duration::from_secs(10));
         assert!(TURN_TIMEOUT <= Duration::from_secs(90));
         assert!(TURN_INTERRUPT_REQUEST_TIMEOUT <= Duration::from_secs(3));
@@ -5369,8 +5389,10 @@ mod tests {
         assert!(script.contains("Get-FileHash"));
         assert!(!script.contains("request_id"));
         assert!(!script.contains("Invoke-Expression"));
-        assert!(INSTALL_TIMEOUT <= Duration::from_secs(180));
-        assert!(MAX_INSTALLER_SCRIPT_BYTES <= 128 * 1024);
+        assert!(INSTALL_TIMEOUT.as_secs() <= 180);
+        const {
+            assert!(MAX_INSTALLER_SCRIPT_BYTES <= 128 * 1024);
+        }
     }
 
     #[test]
