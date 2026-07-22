@@ -9,7 +9,7 @@ QA-01在2026-07-22记录当前Windows x64开发基线，机器可读版本见[to
 | pnpm | 11.14.0 |
 | rustc/cargo | 1.97.1 |
 | Rust host toolchain | `stable-x86_64-pc-windows-msvc` |
-| 锁文件 | `pnpm-lock.yaml`、`src-tauri/Cargo.lock` |
+| 锁文件 | `pnpm-lock.yaml`、`src-tauri/Cargo.lock`、`python/requirements-ci.lock` |
 
 ## 统一入口
 
@@ -23,6 +23,6 @@ powershell -NoProfile -File scripts\verify.ps1 -Mode Full
 
 - `Docs`：只读取Git已跟踪的JSON和Markdown，检查相对链接、锁文件和工作树差异。
 - `Fast`：增加工具链版本、Python测试与Ruff、前端测试和Rust测试。
-- `Full`：在`Fast`基础上增加前端生产构建、Rust格式检查和Cargo检查。
+- `Full`：在`Fast`基础上增加前端生产构建、Rust格式检查、Clippy和Cargo检查。
 
-入口只使用已跟踪路径或项目约定的工具目录，不枚举或读取未跟踪用户文件；不执行`pnpm install`、pip安装、工具链安装或Clippy检查。任何子检查失败都会返回非零，并保留具体检查名称。
+入口只使用已跟踪路径或项目约定的工具目录，不枚举或读取未跟踪用户文件；不执行`pnpm install`、pip安装或工具链安装。任何子检查失败都会返回非零，并保留具体检查名称。

@@ -2,7 +2,7 @@
 
 制定日期：2026-07-22
 
-适用基线：`8de5b189e3a0dc5c37dc7cec9a14d4df87072f52`
+适用基线：`07312f31c780a9e44fcc19c640962348663739c7`
 
 配套审计：[CONTAM Studio全项目审计](../development/2026-07-22-project-wide-audit.md)
 
@@ -10,7 +10,7 @@
 
 本任务书用于把当前工程质量较高的Developer Alpha，逐步推进为普通目标用户可安装、可理解、可追溯完成一个真实任务的User Beta。它不是功能愿望清单，而是带前置依赖、允许范围、禁止范围、验收证据和停止条件的执行队列。
 
-用户已明确授权`BATCH-01`按`QA-01A → QA-02 → FE-01 → FE-02`连续批处理；当前执行任务为`FE-02`。本批次内一次只允许一张卡为`in_progress`，每卡必须有独立日志、定向验证和独立commit，批次结束后统一push和汇报。`TRUTH-01`、`TRUTH-02`、`PROD-01`、`QA-01`、`QA-01A`、`QA-02`和`FE-01`自动验证已完成；`FE-01`与`FE-02`等待联合GUI验收，`QA-03`及其他非本批次任务保持暂停。Phase 7 AI Patch保持暂停。
+`BATCH-01`已按`QA-01A → QA-02 → FE-01 → FE-02`完成自动收口并推送；FE-01与FE-02仍等待联合GUI验收。用户已明确授权`BATCH-02`从`origin/main=07312f3`开始，按20个顺序检查点连续执行；当前执行任务为`QA-03A-02`。`QA-03A-01`已完成。本批次内一次只允许一张卡为`in_progress`，每项必须有独立日志、定向验证和独立commit；检查点通过后自动继续，不逐项汇报；每张正式卡结束运行`Full`，阶段末再运行`Full`。阶段A允许推送`main`，阶段B只能保留本地`codex/safe-02-commit-last`，不得推送；批次末统一汇报。旧目录、原工作区、用户PRJ/CSV、全局环境和凭据均不触碰。
 
 ```text
 安全收口
@@ -73,6 +73,14 @@
 严格执行docs/roadmap/next-development-execution-plan.md中的<任务ID>，只做这一张卡。
 先维护任务日志；保护现有工作树；按卡片验证；GUI未由我验收时保持pending_user；不要提交或推送，除非我另行要求。
 ```
+
+### BATCH-02批次规则
+
+- 基线固定为`origin/main=07312f31c780a9e44fcc19c640962348663739c7`且工作树干净；从该基线建立新的干净克隆和该克隆专属`python/.venv`，不得复用、删除旧目录或Junction。
+- 严格按`QA-03A-01 → QA-03A-02 → QA-03B-01 → QA-03B-02 → QA-03B-03 → QA-03B-04 → ARCH-01 → CONTRACT-01A → CONTRACT-01B → CONTRACT-01C → CONTRACT-01D → CONTRACT-02A → CONTRACT-02B → CONTRACT-02C → MOD-01 → SAFE-02A → SAFE-02B → SAFE-02C → SAFE-02D → SAFE-02E/F`执行；始终只有一项为`in_progress`。
+- 每项独立维护任务日志、定向验证和commit；检查点通过后自动进入下一项，不逐项汇报；每张正式卡结束运行`Full`，阶段末再运行`Full`。
+- 阶段A（QA-03A、QA-03B、ARCH-01、CONTRACT-01、CONTRACT-02、MOD-01）允许推送`main`；阶段B（SAFE-02A至SAFE-02E/F）只能提交本地`codex/safe-02-commit-last`，禁止推送。
+- 不新增产品依赖、协议字段、权限、GUI能力或通用Shell/文件/网络入口；遇到硬停止条件立即停止并统一汇报。
 
 ## 3.统一验证基线
 
