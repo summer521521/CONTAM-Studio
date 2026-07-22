@@ -1,0 +1,173 @@
+{
+  "commands": [
+    {
+      "command": "select_and_read_prj_zones",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "selectAndReadPrjZones",
+      "permission": "allow-select-and-read-prj-zones",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "plan_zone_volume_patch",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "planZoneVolumePatch",
+      "permission": "allow-plan-zone-volume-patch",
+      "payload_keys": ["requestId", "projectSessionId", "zoneId", "newVolumeToken"]
+    },
+    {
+      "command": "apply_zone_volume_patch_to_draft",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "applyZoneVolumePatchToDraft",
+      "permission": "allow-apply-zone-volume-patch-to-draft",
+      "payload_keys": ["requestId", "projectSessionId", "patchId"]
+    },
+    {
+      "command": "undo_project_draft",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "undoProjectDraft",
+      "permission": "allow-undo-project-draft",
+      "payload_keys": ["requestId", "projectSessionId"]
+    },
+    {
+      "command": "redo_project_draft",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "redoProjectDraft",
+      "permission": "allow-redo-project-draft",
+      "payload_keys": ["requestId", "projectSessionId"]
+    },
+    {
+      "command": "export_active_project_draft_copy",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "exportActiveProjectDraftCopy",
+      "permission": "allow-export-active-project-draft-copy",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId"]
+    },
+    {
+      "command": "select_and_extract_zone_air_state",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "selectAndExtractZoneAirState",
+      "permission": "allow-select-and-extract-zone-air-state",
+      "payload_keys": ["requestId", "projectSessionId", "zoneId"]
+    },
+    {
+      "command": "extract_active_run_zone_air_state",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "extractActiveRunZoneAirState",
+      "permission": "allow-extract-active-run-zone-air-state",
+      "payload_keys": ["requestId", "projectSessionId", "zoneId"]
+    },
+    {
+      "command": "export_active_zone_air_state_csv",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "exportActiveZoneAirStateCsv",
+      "permission": "allow-export-active-zone-air-state-csv",
+      "payload_keys": ["requestId", "projectSessionId", "zoneId", "runId", "extractionId"]
+    },
+    {
+      "command": "run_active_contam_project",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "runActiveContamProject",
+      "permission": "allow-run-active-contam-project",
+      "payload_keys": ["requestId", "projectSessionId"]
+    },
+    {
+      "command": "probe_codex_app_server",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "probeCodexAppServer",
+      "permission": "allow-probe-codex-app-server",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "install_official_codex_cli",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "installOfficialCodexCli",
+      "permission": "allow-install-official-codex-cli",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "connect_codex_app_server",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "connectCodexAppServer",
+      "permission": "allow-connect-codex-app-server",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "refresh_codex_account",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "refreshCodexAccount",
+      "permission": "allow-refresh-codex-account",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "preview_ai_context",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "previewAiContext",
+      "permission": "allow-preview-ai-context",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "zoneId", "scopes", "language", "modelId", "reasoningEffort"]
+    },
+    {
+      "command": "start_readonly_ai_turn",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "startReadonlyAiTurn",
+      "permission": "allow-start-readonly-ai-turn",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "zoneId", "previewId", "question", "scopes", "language", "modelId", "reasoningEffort"]
+    },
+    {
+      "command": "load_ai_conversation_archive",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "loadAiConversationArchive",
+      "permission": "allow-load-ai-conversation-archive",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "zoneId"]
+    },
+    {
+      "command": "set_ai_conversation_archive_enabled",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "setAiConversationArchiveEnabled",
+      "permission": "allow-set-ai-conversation-archive-enabled",
+      "payload_keys": ["requestId", "enabled"]
+    },
+    {
+      "command": "delete_ai_conversation_archive_entry",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "deleteAiConversationArchiveEntry",
+      "permission": "allow-delete-ai-conversation-archive-entry",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "zoneId", "archiveEntryId"]
+    },
+    {
+      "command": "clear_ai_conversation_archive_for_zone",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "clearAiConversationArchiveForZone",
+      "permission": "allow-clear-ai-conversation-archive-for-zone",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "zoneId"]
+    },
+    {
+      "command": "clear_all_ai_conversation_archive",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "clearAllAiConversationArchive",
+      "permission": "allow-clear-all-ai-conversation-archive",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "interrupt_readonly_ai_turn",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "interruptReadonlyAiTurn",
+      "permission": "allow-interrupt-readonly-ai-turn",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "clear_readonly_ai_session",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "clearReadonlyAiSession",
+      "permission": "allow-clear-readonly-ai-session",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "disconnect_codex_app_server",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "disconnectCodexAppServer",
+      "permission": "allow-disconnect-codex-app-server",
+      "payload_keys": ["requestId"]
+    }
+  ],
+  "schema_version": "1.0"
+}
