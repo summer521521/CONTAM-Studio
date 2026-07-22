@@ -434,6 +434,7 @@ function Check-Fast {
     Write-Host "== Fast ==" -ForegroundColor Cyan
     Invoke-Tool "Python pytest" $PythonPath @("-m", "pytest", "python\tests") | Out-Null
     Invoke-Tool "Python Ruff" $PythonPath @("-m", "ruff", "check", "python") | Out-Null
+    Invoke-Tool "Tauri command contract" "node" @("scripts\tests\test-tauri-command-contract.mjs", "--strict-generated-permissions") | Out-Null
     Invoke-Tool "Frontend tests" "pnpm" @("test") | Out-Null
     Invoke-Tool "Rust tests" "cargo" @("test", "--locked") (Join-Path $Root "src-tauri") | Out-Null
 }

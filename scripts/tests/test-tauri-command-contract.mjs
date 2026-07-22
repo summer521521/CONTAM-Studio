@@ -99,6 +99,15 @@ function extractRustCommands(sourceText) {
   );
 }
 
+function extractBuildCommands(sourceText) {
+  const commandList = sourceText.match(/commands\s*\(\s*&\[([\s\S]*?)\]\s*\)/);
+  if (!commandList) {
+    fail("Rust build.rs command list is missing");
+    return [];
+  }
+  return [...commandList[1].matchAll(/"([a-z0-9_]+)"/g)].map(([, command]) => command);
+}
+
 function extractPermissionCommand(permissionText, command) {
   const allowPattern = new RegExp(
     `identifier\\s*=\\s*"${commandToPermission(command)}"[\\s\\S]*?commands\\.allow\\s*=\\s*\\["${command}"\\]`,
@@ -110,6 +119,23 @@ function extractPermissionCommand(permissionText, command) {
 }
 
 function check() {
+  const requiredPaths = [
+    "contracts/tauri-commands.v1.json",
+    "src-tauri/src/lib.rs",
+    "src-tauri/build.rs",
+    "src-tauri/capabilities/default.json",
+    "src/app/desktop-api.ts",
+  ];
+  const missingRequiredPaths = [];
+  for (const requiredPath of requiredPaths) {
+    if (!fs.existsSync(path.join(root, requiredPath))) {
+      fail(`required contract source is missing: ${requiredPath}`);
+      missingRequiredPaths.push(requiredPath);
+    }
+  }
+  if (missingRequiredPaths.length > 0) {
+    return;
+  }
   let registry;
   try {
     registry = JSON.parse(read("contracts/tauri-commands.v1.json"));
@@ -123,6 +149,9 @@ function check() {
     fail(`registry must contain exactly 24 commands, got ${commands.length}`);
   }
   const commandNames = commands.map((entry) => entry.command);
+  if (new Set(commandNames).size !== commandNames.length) {
+    fail("registry command set contains duplicates");
+  }
   compareSets("registry command set", commandNames, [...new Set(commandNames)]);
 
   for (const entry of commands) {
@@ -150,6 +179,9 @@ function check() {
       fail(`Rust module mismatch for ${item.command}: got ${item.rustModule}`);
     }
   }
+
+  const buildCommands = extractBuildCommands(read("src-tauri/build.rs"));
+  compareSets("Rust build.rs command set", buildCommands, commandNames);
 
   let capability;
   try {
