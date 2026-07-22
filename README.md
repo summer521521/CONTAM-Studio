@@ -117,6 +117,7 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [能力状态矩阵](docs/capability-status-matrix.json)
 - [当前状态](docs/current-state.md)
 - [产品愿景](docs/product/vision.md)
+- [v0.1产品契约](docs/product/v0.1-product-contract.md)
 - [范围与非目标](docs/product/scope.md)
 - [用户与使用场景](docs/product/users-and-use-cases.md)
 - [架构概览](docs/architecture/overview.md)
