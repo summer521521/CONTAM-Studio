@@ -288,6 +288,9 @@ function Check-Docs {
         }
     }
 
+    Invoke-Tool "Foundation defect ledger" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-foundation-defect-ledger.ps1")) $Root | Out-Null
+    Invoke-Tool "Foundation defect ledger mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-foundation-defect-ledger-mutations.ps1")) $Root | Out-Null
+
     $markdownPaths = @(
         (Get-TrackedPaths "*.md")
         (Get-TrackedPaths "*.markdown")

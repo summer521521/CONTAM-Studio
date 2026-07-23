@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "review_target": {
+    "branch": "codex/batch-03x-foundations",
+    "commit": "22aa972c37ea9a2cc5cb09f27589d8dee3b205d8",
+    "availability": "unavailable",
+    "status": "changes_requested",
+    "availability_evidence": [
+      "origin does not advertise codex/batch-03x-foundations",
+      "origin rejects the frozen commit as not our ref",
+      "the source repository object database does not contain the frozen commit"
+    ]
+  },
+  "findings": [
+    {
+      "id": "workflow_parser",
+      "title": "Workflow and supply-chain parser can skip unsupported syntax",
+      "severity": "critical",
+      "owner": "L:FND-03",
+      "status": "open",
+      "regression_card": "FND-03",
+      "reproduction_input": "A workflow containing quoted, anchored, aliased, commented, or malformed uses keys, a hidden mutable ref, or a Full command only inside a comment.",
+      "expected_failure_reason": "Source-string matching does not parse a deliberately restricted workflow grammar and can silently skip authority or verification drift.",
+      "h_rereview_criterion": "Every named workflow mutation exits nonzero with its intended diagnostic class, while the tracked workflow passes locally without claiming hosted CI.",
+      "resolution": null
+    },
+    {
+      "id": "cache_producer",
+      "title": "pnpm cache producer and consumer are not bound to resolved workspace configuration",
+      "severity": "high",
+      "owner": "L:FND-04",
+      "status": "open",
+      "regression_card": "FND-04",
+      "reproduction_input": "A workspace config redirects storeDir or node_modules, or a workflow introduces a second pnpm store producer with a different resolved path.",
+      "expected_failure_reason": "The existing check does not combine workspace configuration, resolved store path, and producer count, so cache identity can drift.",
+      "h_rereview_criterion": "Resolved producer and consumer paths are identical and in policy; redirection and duplicate-producer mutations fail closed.",
+      "resolution": null
+    },
+    {
+      "id": "placeholder_unicode",
+      "title": "Escaped Unicode placeholders can bypass raw JSON scanning",
+      "severity": "high",
+      "owner": "L:FND-04",
+      "status": "open",
+      "regression_card": "FND-04",
+      "reproduction_input": "A JSON string encodes a placeholder with Unicode escapes, duplicates or leaves a declaration unused, or contains malformed placeholder delimiters.",
+      "expected_failure_reason": "Scanning undecoded JSON text does not operate on the semantic string value and can miss escaped placeholders or declaration inconsistencies.",
+      "h_rereview_criterion": "JSON is decoded before placeholder validation and escaped, duplicate, unused, undeclared, and malformed mutations each fail with the intended reason.",
+      "resolution": null
+    },
+    {
+      "id": "task_log_truth",
+      "title": "Task log records can carry invalid or contradictory completion evidence",
+      "severity": "high",
+      "owner": "L:FND-04",
+      "status": "open",
+      "regression_card": "FND-04",
+      "reproduction_input": "A record omits a critical key, uses a non-finite duration or invalid UTC timestamp, invents a status, or disagrees with its index row.",
+      "expected_failure_reason": "Loose text checks cannot prove typed time, duration, status, and record-to-index equality and can accept false completion claims.",
+      "h_rereview_criterion": "Critical keys and typed values are enforced and every index status exactly matches the referenced record under positive and negative tests.",
+      "resolution": null
+    },
+    {
+      "id": "module_visibility",
+      "title": "Rust public authority can escape incomplete visibility inventory",
+      "severity": "critical",
+      "owner": "L:FND-05",
+      "status": "open",
+      "regression_card": "FND-05",
+      "reproduction_input": "A public union, extern item, type, static, constant, re-export, glob re-export, or hidden public module is added outside the required facade.",
+      "expected_failure_reason": "The existing visibility scan does not cover the full Rust public syntax surface or fail closed on unknown syntax and facade omissions.",
+      "h_rereview_criterion": "All named public forms and unknown syntax are inventoried; forbidden or unfacaded authority fails with a precise diagnostic.",
+      "resolution": null
+    },
+    {
+      "id": "process_callsite_inventory",
+      "title": "Process authority inventory is not bidirectional or function-scope aware",
+      "severity": "critical",
+      "owner": "L:FND-05",
+      "status": "open",
+      "regression_card": "FND-05",
+      "reproduction_input": "A ninth Command or Popen call is added, a registration points at the wrong function, or a stale registration has no matching callsite.",
+      "expected_failure_reason": "File-level or one-way matching can miss a process spawn or accept a registration owned by a different function.",
+      "h_rereview_criterion": "Every discovered spawn maps to exactly one registered owning function and every registration maps back to the correct concrete callsite.",
+      "resolution": null
+    },
+    {
+      "id": "safe_command_tests",
+      "title": "SAFE evidence does not exercise the actual command failure paths",
+      "severity": "critical",
+      "owner": "L:FND-06",
+      "status": "open",
+      "regression_card": "FND-06",
+      "reproduction_input": "The production command encounters staging cleanup failure, lowercase SHA reread, or a competing destination appears during failure cleanup.",
+      "expected_failure_reason": "Helper-only tests do not prove command wiring, hash normalization, or that failure cleanup preserves a competing target.",
+      "h_rereview_criterion": "Actual command-path regressions prove lowercase reread acceptance, staging cleanup diagnostics, and non-deletion of a competing destination.",
+      "resolution": null
+    },
+    {
+      "id": "data_mapping",
+      "title": "DATA lifecycle declarations are not bound to production functions and storage joins",
+      "severity": "high",
+      "owner": "L:FND-06",
+      "status": "open",
+      "regression_card": "FND-06",
+      "reproduction_input": "A lifecycle declaration names the wrong function, omits an actual storage join, or claims a join that production cannot reach.",
+      "expected_failure_reason": "Forward declarations without reverse discovery can drift away from the functions and path joins that own data.",
+      "h_rereview_criterion": "Bidirectional mutations bind every declaration to the exact production function and storage join, with no undisclosed or stale mapping.",
+      "resolution": null
+    },
+    {
+      "id": "result_labeling",
+      "title": "Counterfactual RESULT measurements can be mistaken for production evidence",
+      "severity": "high",
+      "owner": "L:FND-06",
+      "status": "open",
+      "regression_card": "FND-06",
+      "reproduction_input": "A synthetic counterfactual measurement is labeled production, or metadata validation asserts a hardcoded boolean instead of bounded values.",
+      "expected_failure_reason": "Current labels and assertions do not prove evidence provenance or the intended metadata bounds.",
+      "h_rereview_criterion": "Counterfactual data is explicitly non-production and boundary tests validate numeric and metadata ranges rather than a fixed boolean.",
+      "resolution": null
+    }
+  ]
+}

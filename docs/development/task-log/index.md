@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [FND-02基础缺陷账本](records/fnd-02-foundation-defect-ledger.md) | Wave 0 | automated_verified | live |
 | [FND-01隔离克隆与基线](records/fnd-01-isolated-clone-baseline.md) | Wave 0 | automated_verified | live |
 | [PROD-01冻结v0.1产品契约](records/prod-01-v0-1-product-contract.md) | PROD-01 | completed | live |
 | [QA-01工具链基线与统一验证入口](records/qa-01-toolchain-and-verify.md) | QA-01 | completed | live |
