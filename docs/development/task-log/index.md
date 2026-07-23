@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [FND-03 CI工作流解析与供应链修复](records/fnd-03-ci-workflow-parser-remediation.md) | Wave 0 | automated_verified | live |
 | [FND-02基础缺陷账本](records/fnd-02-foundation-defect-ledger.md) | Wave 0 | automated_verified | live |
 | [FND-01隔离克隆与基线](records/fnd-01-isolated-clone-baseline.md) | Wave 0 | automated_verified | live |
 | [PROD-01冻结v0.1产品契约](records/prod-01-v0-1-product-contract.md) | PROD-01 | completed | live |
