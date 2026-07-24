@@ -167,6 +167,27 @@
       "ts_wrapper": "disconnectCodexAppServer",
       "permission": "allow-disconnect-codex-app-server",
       "payload_keys": ["requestId"]
+    },
+    {
+      "command": "set_close_activity",
+      "rust_module": "close_protocol",
+      "ts_wrapper": "setCloseActivity",
+      "permission": "allow-set-close-activity",
+      "payload_keys": ["activity"]
+    },
+    {
+      "command": "resolve_app_close",
+      "rust_module": "close_protocol",
+      "ts_wrapper": "resolveAppClose",
+      "permission": "allow-resolve-app-close",
+      "payload_keys": ["requestId", "decision"]
+    },
+    {
+      "command": "finish_app_close_draft_export",
+      "rust_module": "close_protocol",
+      "ts_wrapper": "finishAppCloseDraftExport",
+      "permission": "allow-finish-app-close-draft-export",
+      "payload_keys": ["requestId", "succeeded"]
     }
   ],
   "schema_version": "1.0"

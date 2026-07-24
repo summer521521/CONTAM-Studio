@@ -8,6 +8,7 @@ import type { DesktopDraftExportResponse, DesktopDraftTransitionResponse } from 
 import type { DesktopZoneAirStateResponse } from "./result-state";
 import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state";
 import type { DesktopRunResponse } from "./run-state";
+import type { CloseActivityInput, CloseResolution } from "./close-state";
 import type {
   AiContextScope,
   DesktopAiConversationArchiveResponse,
@@ -263,4 +264,22 @@ export async function clearAllAiConversationArchive(
 
 export async function disconnectCodexAppServer(requestId: string): Promise<DesktopAiActionResponse> {
   return invoke<DesktopAiActionResponse>("disconnect_codex_app_server", { requestId });
+}
+
+export async function setCloseActivity(activity: CloseActivityInput): Promise<CloseActivityInput> {
+  return invoke<CloseActivityInput>("set_close_activity", { activity });
+}
+
+export async function resolveAppClose(
+  requestId: string,
+  decision: "cancel" | "discard_draft" | "export_draft",
+): Promise<CloseResolution> {
+  return invoke<CloseResolution>("resolve_app_close", { requestId, decision });
+}
+
+export async function finishAppCloseDraftExport(
+  requestId: string,
+  succeeded: boolean,
+): Promise<CloseResolution> {
+  return invoke<CloseResolution>("finish_app_close_draft_export", { requestId, succeeded });
 }

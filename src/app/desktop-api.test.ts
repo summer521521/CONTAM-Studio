@@ -8,6 +8,7 @@ import {
   connectCodexAppServer,
   deleteAiConversationArchiveEntry,
   disconnectCodexAppServer,
+  finishAppCloseDraftExport,
   exportActiveProjectDraftCopy,
   exportActiveZoneAirStateCsv,
   extractActiveRunZoneAirState,
@@ -20,9 +21,11 @@ import {
   redoProjectDraft,
   refreshCodexAccount,
   runActiveContamProject,
+  resolveAppClose,
   selectAndExtractZoneAirState,
   selectAndReadPrjZones,
   setAiConversationArchiveEnabled,
+  setCloseActivity,
   startReadonlyAiTurn,
   undoProjectDraft,
 } from "./desktop-api";
@@ -125,6 +128,9 @@ describe("desktop API boundary", () => {
       ["interrupt_readonly_ai_turn", interruptReadonlyAiTurn("request-022"), { requestId: "request-022" }],
       ["clear_readonly_ai_session", clearReadonlyAiSession("request-023"), { requestId: "request-023" }],
       ["disconnect_codex_app_server", disconnectCodexAppServer("request-024"), { requestId: "request-024" }],
+      ["set_close_activity", setCloseActivity({ draft_dirty: true, draft_exported: false, patch_review: false, run_active: false, export_active: false, ingestion_active: false, ai_turn_active: false }), { activity: { draft_dirty: true, draft_exported: false, patch_review: false, run_active: false, export_active: false, ingestion_active: false, ai_turn_active: false } }],
+      ["resolve_app_close", resolveAppClose("close-1", "cancel"), { requestId: "close-1", decision: "cancel" }],
+      ["finish_app_close_draft_export", finishAppCloseDraftExport("close-1", true), { requestId: "close-1", succeeded: true }],
     ] as const;
 
     await Promise.all(cases.map(([, call]) => call));

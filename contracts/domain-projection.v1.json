@@ -1,0 +1,18 @@
+{
+  "schema_version": "domain_projection.v1",
+  "profile": "strict_contam_3_4_simple_zone_v1",
+  "identity": "baseline_sha256_category_external_identity_uuid5",
+  "objects": {
+    "level": {
+      "fields": ["level_id", "level_number", "label", "zone_ids", "capability", "evidence"],
+      "capability": "read_only"
+    },
+    "zone": {
+      "fields": ["zone_id", "contam_number", "label", "level_id", "fields", "capabilities", "evidence"],
+      "editable_fields": ["volume_m3"],
+      "units": {"relative_height": "m", "volume_m3": "m3"}
+    }
+  },
+  "authority_forbidden": ["array_index", "display_label", "contam_number", "source_path", "byte_offset"],
+  "unsupported_policy": "reject_projection_without_partial_semantics"
+}

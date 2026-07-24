@@ -299,6 +299,7 @@ function Check-Docs {
     Invoke-Tool "Fixture manifest contract mutations" "node" @("scripts\tests\test-fixture-manifest-contract-mutations.mjs", $Root) | Out-Null
     Invoke-Tool "DocumentEnvelope contract" "node" @("scripts\tests\test-document-envelope-contract.mjs", $Root) | Out-Null
     Invoke-Tool "SemanticGraph contract" "node" @("scripts\tests\test-semantic-graph-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Domain projection contract" "node" @("scripts\tests\test-domain-projection-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Rust authority contract" "node" @("scripts\tests\test-rust-authority-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Rust authority mutations" "node" @("scripts\tests\test-rust-authority-contract-mutations.mjs", $Root) | Out-Null
     Invoke-Tool "Bridge JSON placeholder contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-bridge-json-placeholder-contract.ps1")) $Root | Out-Null

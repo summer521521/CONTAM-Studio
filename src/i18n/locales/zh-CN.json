@@ -7,6 +7,28 @@
     "yes": "是",
     "no": "否"
   },
+  "close": {
+    "eyebrow": "关闭工作台",
+    "title": "退出前需要确认",
+    "draftTitle": "当前草稿尚未另存",
+    "draftBody": "可以取消退出、另存受控副本后退出，或丢弃本次会话草稿。原始PRJ不会被覆盖。",
+    "activeTitle": "仍有工作正在进行",
+    "activeBody": "为避免误报清理完成，当前任务必须先结束或由你取消关闭。",
+    "cancel": "继续工作",
+    "discard": "丢弃草稿并退出",
+    "export": "另存副本并退出",
+    "exporting": "另存并退出中",
+    "blocked": "当前仍有未完成工作，退出请求已保留。",
+    "exportFailed": "草稿另存失败，应用保持打开。",
+    "protocolUnavailable": "退出协议暂不可用，应用保持打开。",
+    "work": {
+      "patch_review": "Patch审阅",
+      "run": "ContamX运行",
+      "export": "文件导出",
+      "ingestion": "项目读取",
+      "ai_turn": "AI问答"
+    }
+  },
   "toolbar": {
     "newProject": "新建项目",
     "openProject": "打开项目",

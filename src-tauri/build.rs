@@ -24,6 +24,9 @@ fn main() {
         "interrupt_readonly_ai_turn",
         "clear_readonly_ai_session",
         "disconnect_codex_app_server",
+        "set_close_activity",
+        "resolve_app_close",
+        "finish_app_close_draft_export",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
         .expect("failed to build CONTAM Studio application manifest");

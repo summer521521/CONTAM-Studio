@@ -1792,10 +1792,13 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         "interrupt_readonly_ai_turn",
         "clear_readonly_ai_session",
         "disconnect_codex_app_server",
+        "set_close_activity",
+        "resolve_app_close",
+        "finish_app_close_draft_export",
     ] {
         assert!(build_script.contains(command));
     }
-    assert_eq!(capability["permissions"].as_array().unwrap().len(), 25);
+    assert_eq!(capability["permissions"].as_array().unwrap().len(), 28);
     let forbidden = [
         "sourcePath",
         "outputPath",

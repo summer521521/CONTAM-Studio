@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-finish-app-close-draft-export"
+description = "Enables the finish_app_close_draft_export command without any pre-configured scope."
+commands.allow = ["finish_app_close_draft_export"]
+
+[[permission]]
+identifier = "deny-finish-app-close-draft-export"
+description = "Denies the finish_app_close_draft_export command without any pre-configured scope."
+commands.deny = ["finish_app_close_draft_export"]

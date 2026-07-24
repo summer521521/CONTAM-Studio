@@ -1112,6 +1112,22 @@ input:focus-visible,
   background: color-mix(in srgb, #000000 42%, transparent);
 }
 
+.close-dialog-backdrop {
+  inset: 0;
+  z-index: 60;
+}
+
+.close-dialog {
+  width: min(620px, 100%);
+}
+
+.close-work-list {
+  margin: 15px 0 0;
+  padding: 0 0 0 21px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
 .patch-dialog {
   display: flex;
   flex-direction: column;

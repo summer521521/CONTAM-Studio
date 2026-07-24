@@ -7,6 +7,28 @@
     "yes": "Yes",
     "no": "No"
   },
+  "close": {
+    "eyebrow": "Close workbench",
+    "title": "Confirm before exit",
+    "draftTitle": "The current draft is not saved as a copy",
+    "draftBody": "Cancel, save a controlled copy before exit, or discard this session draft. The original PRJ is never overwritten.",
+    "activeTitle": "Work is still in progress",
+    "activeBody": "To avoid reporting cleanup that was not confirmed, let the current task finish or cancel closing.",
+    "cancel": "Keep working",
+    "discard": "Discard draft and exit",
+    "export": "Save copy and exit",
+    "exporting": "Saving and exiting",
+    "blocked": "Unfinished work is still active; the exit request remains open.",
+    "exportFailed": "The draft copy failed, so the app stays open.",
+    "protocolUnavailable": "The close protocol is unavailable, so the app stays open.",
+    "work": {
+      "patch_review": "Patch review",
+      "run": "ContamX run",
+      "export": "File export",
+      "ingestion": "Project ingestion",
+      "ai_turn": "AI turn"
+    }
+  },
   "toolbar": {
     "newProject": "New project",
     "openProject": "Open project",

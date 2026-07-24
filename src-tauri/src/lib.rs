@@ -1,3 +1,4 @@
+mod close_protocol;
 mod codex_app_server;
 mod zone_bridge;
 
@@ -7,6 +8,7 @@ pub fn run() {
         .manage(zone_bridge::DesktopProjectSessionStore::default())
         .manage(codex_app_server::CodexAssistantStore::default())
         .manage(codex_app_server::AiConversationArchiveStore::default())
+        .manage(close_protocol::CloseProtocolStore::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             zone_bridge::select_and_read_prj_zones,
@@ -32,8 +34,12 @@ pub fn run() {
             codex_app_server::clear_all_ai_conversation_archive,
             codex_app_server::interrupt_readonly_ai_turn,
             codex_app_server::clear_readonly_ai_session,
-            codex_app_server::disconnect_codex_app_server
+            codex_app_server::disconnect_codex_app_server,
+            close_protocol::set_close_activity,
+            close_protocol::resolve_app_close,
+            close_protocol::finish_app_close_draft_export
         ])
+        .on_window_event(close_protocol::handle_window_event)
         .run(tauri::generate_context!())
         .expect("error while running CONTAM Studio");
 }

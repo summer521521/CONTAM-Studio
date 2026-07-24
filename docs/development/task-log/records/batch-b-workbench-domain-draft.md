@@ -41,8 +41,8 @@ notes: 外部GUI、真实ContamX/SimRead、干净电脑和用户研究只标记p
 | --- | --- | --- |
 | FE-01 | automated_verified | Central Patch review lock, direct callback guards, Escape/Tab handling, and focus restoration are implemented; manual GUI acceptance remains pending_final_acceptance. |
 | FE-02 | automated_verified | Dirty unexported drafts route through Cancel/Save-copy-and-open/Discard-and-open guard; picker cancellation and response failures retain the current project. |
-| FE-03 | pending | Rust-owned close protocol. |
-| FE-04 | pending | Frontend controller split. |
+| FE-03 | automated_verified | Rust-owned close protocol intercepts Tauri close requests, tracks safe activity summaries, requires explicit draft cancel/discard/export decisions, and refuses to report active work as stopped; GUI and real process cleanup remain pending_final_acceptance. |
+| FE-04 | in_progress | Project/Draft, Run, Result, and read-only AI controllers are extracted with request/generation invalidation preserved; Attachment has no stateful implementation yet and remains explicitly unimplemented rather than a placeholder controller. |
 | FE-05 | automated_verified | ActivityBar and settings route to real project/search/run/results/settings destinations; mock tree, mock actions, and Phase labels were removed from rendered states. |
 | FE-06 | automated_verified | Project summary and status surfaces expose safe filename, hash prefix, reader/profile, source protection, read-only boundary, and tool readiness without absolute paths. |
 | FE-07 | automated_verified | Supported Zone explorer uses stable zone IDs for selection and search navigation; no-project inspector is an explicit empty state. |
@@ -50,7 +50,7 @@ notes: 外部GUI、真实ContamX/SimRead、干净电脑和用户研究只标记p
 | DOM-01 | automated_verified | Fixture manifest binds all tracked PRJ fixtures to provenance, source licence/readme, SHA-256, size, profile, intended test, and exclusions; mutation tests reject identity and derived-output bypasses. |
 | DOM-02 | automated_verified | Conservative Python DocumentEnvelope records byte hash/size, ASCII encoding, LF/CRLF/mixed evidence, final newline, bounded line spans, opaque sections and read-only policy; 7 tests plus machine contract pass. |
 | DOM-03 | automated_verified | Python SemanticGraph validates stable UUID identity, deterministic ordering, duplicate/dangling/self references and prohibited cycles; UI authority fields are machine-forbidden. |
-| DOM-04 | pending | Level and Zone projection. |
+| DOM-04 | automated_verified | Added the strict Profile-backed Level/Zone projection with baseline-bound UUID5 identities, units, field capabilities, bounded evidence IDs, and fail-closed range/profile validation; bridge/UI integration remains limited to the existing verified Zone view. |
 | DOM-05 | pending | Airflow paths/components. |
 | DOM-06 | pending | Schedules/day types/time profiles. |
 | DOM-07 | pending | Species and sources/sinks. |

@@ -28,6 +28,9 @@
     "allow-clear-all-ai-conversation-archive",
     "allow-interrupt-readonly-ai-turn",
     "allow-clear-readonly-ai-session",
-    "allow-disconnect-codex-app-server"
+    "allow-disconnect-codex-app-server",
+    "allow-set-close-activity",
+    "allow-resolve-app-close",
+    "allow-finish-app-close-draft-export"
   ]
 }
