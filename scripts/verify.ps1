@@ -290,6 +290,10 @@ function Check-Docs {
 
     Invoke-Tool "Foundation defect ledger" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-foundation-defect-ledger.ps1")) $Root | Out-Null
     Invoke-Tool "Foundation defect ledger mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-foundation-defect-ledger-mutations.ps1")) $Root | Out-Null
+    Invoke-Tool "Bridge JSON placeholder contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-bridge-json-placeholder-contract.ps1")) $Root | Out-Null
+    Invoke-Tool "Bridge JSON placeholder mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-bridge-json-placeholder-contract-mutations.ps1")) $Root | Out-Null
+    Invoke-Tool "Task log contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-task-log-contract.ps1")) $Root | Out-Null
+    Invoke-Tool "Task log contract mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-task-log-contract-mutations.ps1")) $Root | Out-Null
 
     $markdownPaths = @(
         (Get-TrackedPaths "*.md")
@@ -438,6 +442,8 @@ function Check-Fast {
     Invoke-Tool "Python pytest" $PythonPath @("-m", "pytest", "python\tests") | Out-Null
     Invoke-Tool "Python Ruff" $PythonPath @("-m", "ruff", "check", "python") | Out-Null
     Invoke-Tool "Tauri command contract" "node" @("scripts\tests\test-tauri-command-contract.mjs", "--strict-generated-permissions") | Out-Null
+    Invoke-Tool "pnpm cache contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-pnpm-cache-contract.ps1")) $Root | Out-Null
+    Invoke-Tool "pnpm cache contract mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-pnpm-cache-contract-mutations.ps1")) $Root | Out-Null
     Invoke-Tool "Frontend tests" "pnpm" @("test") | Out-Null
     Invoke-Tool "Rust tests" "cargo" @("test", "--locked") (Join-Path $Root "src-tauri") | Out-Null
 }
