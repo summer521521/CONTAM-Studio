@@ -92,8 +92,14 @@
     "languageBody": "使用顶部控件切换中英文和浅色/深色主题。",
     "privacyTitle": "AI与隐私",
     "privacyBody": "AI默认不连接；只有用户主动连接后才披露受控结构化上下文。",
+    "toolTitle": "工具就绪状态",
+    "toolBody": "ContamX和SimRead的版本、许可与真实运行证据在候选版本验收前保持待验证；应用不会伪造已配置状态。",
     "storageTitle": "本地存储",
     "storageBody": "项目草稿和对话档案由受控桌面存储管理，不读取或扫描其他目录。",
+    "helpTitle": "离线帮助",
+    "helpBody": "界面只展示已验证Profile的术语、单位和安全边界；不支持的PRJ内容保持只读。",
+    "recoveryTitle": "恢复中心",
+    "recoveryBody": "异常退出后的残留会由Rust存储策略标记为待恢复；本页不会自动删除或覆盖任何用户文件。",
     "resetLayout": "恢复工作台布局"
   },
   "inspector": {

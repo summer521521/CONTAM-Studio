@@ -107,7 +107,10 @@ export function DestinationPage({
       <section className="destination-section settings-list">
         <div><strong>{t("settings.languageTitle")}</strong><p>{t("settings.languageBody")}</p></div>
         <div><strong>{t("settings.privacyTitle")}</strong><p>{t("settings.privacyBody")}</p></div>
+        <div><strong>{t("settings.toolTitle")}</strong><p>{t("settings.toolBody")}</p></div>
         <div><strong>{t("settings.storageTitle")}</strong><p>{t("settings.storageBody")}</p></div>
+        <div><strong>{t("settings.helpTitle")}</strong><p>{t("settings.helpBody")}</p></div>
+        <div><strong>{t("settings.recoveryTitle")}</strong><p>{t("settings.recoveryBody")}</p></div>
         <button className="secondary-action" type="button" onClick={onSettingsReset}><RotateCcw size={16} />{t("settings.resetLayout")}</button>
       </section>
     </section>

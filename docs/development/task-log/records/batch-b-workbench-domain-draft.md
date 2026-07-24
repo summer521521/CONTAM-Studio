@@ -46,7 +46,7 @@ notes: 外部GUI、真实ContamX/SimRead、干净电脑和用户研究只标记p
 | FE-05 | automated_verified | ActivityBar and settings route to real project/search/run/results/settings destinations; mock tree, mock actions, and Phase labels were removed from rendered states. |
 | FE-06 | automated_verified | Project summary and status surfaces expose safe filename, hash prefix, reader/profile, source protection, read-only boundary, and tool readiness without absolute paths. |
 | FE-07 | automated_verified | Supported Zone explorer uses stable zone IDs for selection and search navigation; no-project inspector is an explicit empty state. |
-| FE-08 | pending | Settings, Help and Recovery. |
+| FE-08 | automated_verified | Settings destination now presents language/theme, privacy/AI opt-in, tool readiness, offline help, storage and recovery boundaries; system-level configuration and support export remain pending_final_acceptance. |
 | DOM-01 | pending | Sourced fixture corpus. |
 | DOM-02 | pending | Lossless document envelope. |
 | DOM-03 | pending | Stable IDs and reference graph. |

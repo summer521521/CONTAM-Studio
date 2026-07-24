@@ -92,8 +92,14 @@
     "languageBody": "Use the top controls to switch Chinese/English and light/dark themes.",
     "privacyTitle": "AI and privacy",
     "privacyBody": "AI stays disconnected by default; controlled structured context is disclosed only after an explicit connection.",
+    "toolTitle": "Tool readiness",
+    "toolBody": "ContamX and SimRead versions, licensing, and real-run evidence remain pending candidate acceptance; the app never fabricates configured status.",
     "storageTitle": "Local storage",
     "storageBody": "Drafts and conversation archives use controlled desktop storage without scanning other directories.",
+    "helpTitle": "Offline help",
+    "helpBody": "The UI documents only verified Profile terms, units, and safety boundaries; unsupported PRJ content remains read-only.",
+    "recoveryTitle": "Recovery center",
+    "recoveryBody": "Residual state after an abnormal exit is marked for recovery by Rust storage policy; this page never deletes or overwrites user files automatically.",
     "resetLayout": "Reset workbench layout"
   },
   "inspector": {
