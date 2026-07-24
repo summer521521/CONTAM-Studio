@@ -12,7 +12,9 @@ function readJson(relative) {
 const admission = readJson("contracts/foundation-admission.v1.json");
 const ledger = readJson("docs/development/foundation-defect-ledger.json");
 if (admission) {
-  if (admission.version !== 1 || admission.review_status !== "automated_admitted_pending_h_final" || admission.h_final_claimed !== false) fail("admission_status", "Admission must remain automated and must not claim H-FINAL.");
+  if (admission.version !== 1 || admission.review_status !== "h_final_reviewed_with_deferred_product_work" || admission.h_final_claimed !== true) fail("admission_status", "Admission must record the completed H-FINAL review without claiming deferred product work.");
+  if (admission.h_final_record !== "docs/development/task-log/records/h-final-v1-candidate-review.md") fail("admission_status", "H-FINAL record path is invalid.");
+  if (!/^[0-9a-f]{40}$/.test(admission.h_final_fix_commit)) fail("admission_status", "H-FINAL fix commit is invalid.");
   if (!/^[0-9a-f]{40}$/.test(admission.baseline_head)) fail("admission_head", "baseline_head must be a full lowercase SHA.");
   let head = "";
   try { head = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], {encoding: "utf8"}).trim(); }
@@ -29,7 +31,7 @@ if (admission) {
 }
 if (ledger) {
   const findings = Array.isArray(ledger.findings) ? ledger.findings : [];
-  if (findings.length !== 9 || findings.some((finding) => finding.status !== "open")) fail("admission_ledger", "All nine foundation findings must remain open until H-FINAL.");
+  if (findings.length !== 9 || findings.some((finding) => finding.status !== "admitted")) fail("admission_ledger", "All nine foundation findings must carry H-FINAL admission evidence.");
 }
 if (failures.length) { for (const failure of failures) console.error(failure); process.exit(1); }
-console.log("Foundation admission contract passed: FND-01..06 SHAs are reachable and H-FINAL remains unclaimed.");
+console.log("Foundation admission contract passed: FND-01..06 are reachable and H-FINAL is recorded without promoting deferred product work.");

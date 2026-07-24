@@ -4,11 +4,11 @@
 task_id: H-FINAL
 phase: Final review
 title: v1候选集中代码复核、缺陷修复与主线交付
-status: in_progress
+status: completed
 record_origin: live
 started_at_utc: 2026-07-24T12:50:32.0836652Z
-ended_at_utc: null
-duration_seconds: null
+ended_at_utc: 2026-07-24T13:30:57.8696986Z
+duration_seconds: 2425.786
 base_commit: 79e8e13bdad268576e9caa30bd8945d7cc1bd0d0
 branch: codex/contam-studio-v1-complete
 task_source: CONTAM-STUDIO-V1-COMPLETE-PRODUCT-MASTER-TASKBOOK.md Revision 2
@@ -24,14 +24,14 @@ forbidden_scope:
   - 用户PRJ/SIM/CSV正文、真实AppData、凭据、系统/全局环境、签名、tag和发布。
 validation:
   - 定向边界测试、scripts/verify.ps1 -Mode Full、git diff --check、分支与远端SHA复核。
-delivery_status: in_progress
+delivery_status: delivered_to_main
 token_usage:
   input_tokens: null
   cached_input_tokens: null
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: GUI、真实ContamX/SimRead、App Server、干净Windows和用户研究不能由自动化复核冒充；缺失证据必须继续明确标记。
+notes: 候选经普通快进推送至origin/main，正式F:\CONTAM Studio已切换到main；旧phase-6a分支保留。GUI、真实ContamX/SimRead、App Server、干净Windows和用户研究未在本次执行，Batch C/D未接线产品任务保持blocked。
 ```
 
 ## Review ledger
@@ -45,7 +45,7 @@ notes: GUI、真实ContamX/SimRead、App Server、干净Windows和用户研究�
 | Attachments | blocked_future | AttachmentBroker无Tauri/React入口，且magic、ZIP symlink/Unicode/嵌套、Office外链、PDF文本和quarantine提交仍有缺口；ATT产品任务已改为blocked。 |
 | AI authority | reviewed | 生产AI仍是既有Rust只读App Server路径；新增Python gateway无生产接线且嵌套权限/TTL/Trace提交不满足执行型AI要求，AI写入和自动仿真仍未实现。 |
 | Desktop permissions | corrected | 删除WebView可写的`set_close_activity`命令、ACL、封装和效果；Rust现直接读取草稿/Patch/项目操作和AI任务状态，另存后再次核对权威Revision状态。命令契约为26项。 |
-| Merge readiness | ready | 最终Full一次通过54项：Python 321、前端150、Rust 86 passed/1 ignored；Clippy、构建、格式、Docs、突变契约和`git diff --check`通过。`origin/main=81205f4`仍是候选祖先，可快进交付。 |
+| Merge readiness | delivered | 最终Full一次通过54项：Python 321、前端150、Rust 86 passed/1 ignored；候选已普通快进交付`origin/main`，正式工作区已切换到`main`。 |
 
 ## Focused validation
 
@@ -55,3 +55,10 @@ notes: GUI、真实ContamX/SimRead、App Server、干净Windows和用户研究�
 - `cargo check`、Clippy `-D warnings`通过。
 - Docs模式32项通过；任务日志58条和Tauri 26命令契约通过。
 - 最终`Full`：54 checks passed；Python 321、前端150、Rust 86 passed/1 ignored；保留既有Vite大chunk和Rust linker提示。
+
+## Delivery
+
+- 修复提交：`e15f9e4cd4d1e4eee831e50bdc3885628e0d4ac5`。
+- `origin/main`以普通快进从`81205f4`更新至`e15f9e4`，未force push、rebase、tag、sign或发布。
+- 正式工作区`F:\CONTAM Studio`从`codex/phase-6a-codex-readonly-assistant`切换到跟踪`origin/main`的`main`；旧分支未删除。
+- 占用本地`main`的旧临时工作树保持文件不变并切为detached HEAD，没有删除目录。

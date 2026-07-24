@@ -38,7 +38,7 @@ try {
     Invoke-ExpectedFailure $missingRegression "missing-regression" "ledger_missing_field"
 
     $falseCompleted = Get-Content -LiteralPath $source -Raw -Encoding UTF8 | ConvertFrom-Json
-    $falseCompleted.findings[0].status = "remediated_pending_h"
+    $falseCompleted.findings[0].resolution = $null
     Invoke-ExpectedFailure $falseCompleted "false-completed" "ledger_false_completion"
 }
 finally {

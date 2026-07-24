@@ -2,8 +2,10 @@
   "version": 1,
   "baseline_branch": "codex/contam-studio-v1-complete",
   "baseline_head": "d0d9b5a46c11a649c2c34fc32f998136c17ce909",
-  "review_status": "automated_admitted_pending_h_final",
-  "h_final_claimed": false,
+  "review_status": "h_final_reviewed_with_deferred_product_work",
+  "h_final_claimed": true,
+  "h_final_record": "docs/development/task-log/records/h-final-v1-candidate-review.md",
+  "h_final_fix_commit": "e15f9e4cd4d1e4eee831e50bdc3885628e0d4ac5",
   "findings_source": "docs/development/foundation-defect-ledger.json",
   "admitted_commits": [
     {"task": "FND-01", "commit": "3a9e673e3a0da86e0528c8d79ee65844e77d6492"},

@@ -136,4 +136,4 @@ if ($failures.Count -gt 0) {
     $failures | ForEach-Object { Write-Error $_ }
     exit 1
 }
-Write-Host "Foundation defect ledger passed: $($findings.Count) changes_requested findings are complete and machine-checkable."
+Write-Host "Foundation defect ledger passed: $($findings.Count) findings carry complete H-FINAL admission evidence."

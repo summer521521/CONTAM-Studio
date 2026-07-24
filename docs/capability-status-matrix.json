@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-24T13:10:11.7545420Z",
+  "last_updated_utc": "2026-07-24T13:30:57.8696986Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {

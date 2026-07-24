@@ -2,7 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
-| [H-FINAL v1候选集中复核与主线交付](records/h-final-v1-candidate-review.md) | H-FINAL | in_progress | live |
+| [H-FINAL v1候选集中复核与主线交付](records/h-final-v1-candidate-review.md) | H-FINAL | completed | live |
 | [Batch B Workbench, Supported Domain and Drafts](records/batch-b-workbench-domain-draft.md) | Wave 2-4 | automated_verified | live |
 | [Batch C Process, Tools, Results and Distribution](records/batch-c-process-tools-results-distribution.md) | Wave 5-7 | blocked | live |
 | [Batch D Attachments and Semantic AI](records/batch-d-attachments-ai.md) | Wave 8-10 | blocked | live |

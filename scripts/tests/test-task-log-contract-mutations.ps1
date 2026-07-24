@@ -44,7 +44,11 @@ try {
         param($caseRoot)
         $path = Join-Path $caseRoot "records\fnd-03-ci-workflow-parser-remediation.md"
         $content = Get-Content -LiteralPath $path -Raw -Encoding UTF8
-        [System.IO.File]::WriteAllText($path, $content.Replace("base_commit: aa09c38c983d8a471caa3288b0a78b4509c708a1`n", ""), [System.Text.UTF8Encoding]::new($false))
+        $updated = $content -replace '(?m)^base_commit:[^\r\n]*\r?\n', ''
+        if ($updated -eq $content) {
+            throw "Mutation 'missing-key' did not modify the task record."
+        }
+        [System.IO.File]::WriteAllText($path, $updated, [System.Text.UTF8Encoding]::new($false))
     }
     Invoke-ExpectedFailure "nan-duration" "task_log_duration" {
         param($caseRoot)
