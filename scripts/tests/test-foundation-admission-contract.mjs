@@ -17,7 +17,9 @@ if (admission) {
   let head = "";
   try { head = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], {encoding: "utf8"}).trim(); }
   catch (error) { fail("admission_git", error.message); }
-  if (head !== admission.baseline_head) fail("admission_head", `Expected HEAD ${admission.baseline_head}; got ${head}.`);
+  try {
+    execFileSync("git", ["-C", root, "merge-base", "--is-ancestor", admission.baseline_head, "HEAD"], {stdio: "ignore"});
+  } catch { fail("admission_head", `Expected admitted baseline ${admission.baseline_head} to remain an ancestor of HEAD ${head}.`); }
   for (const entry of admission.admitted_commits || []) {
     if (!/^[0-9a-f]{40}$/.test(entry.commit)) fail("admission_commit", `${entry.task} has invalid SHA.`);
     try { execFileSync("git", ["-C", root, "cat-file", "-e", `${entry.commit}^{commit}`], {stdio: "ignore"}); }

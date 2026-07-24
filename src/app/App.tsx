@@ -11,6 +11,7 @@ import { StatusBar } from "../components/workbench/StatusBar";
 import { TopBar } from "../components/workbench/TopBar";
 import { WelcomePage } from "../components/workbench/WelcomePage";
 import { ZoneVolumePatchDialog } from "../components/workbench/ZoneVolumePatchDialog";
+import { DraftSwitchDialog } from "../components/workbench/DraftSwitchDialog";
 import i18n from "../i18n";
 import {
   applyZoneVolumePatchToDraft,
@@ -87,13 +88,16 @@ import {
   getMainLayout,
   loadWorkbenchState,
   saveWorkbenchState,
+  DEFAULT_WORKBENCH_STATE,
   type AppLanguage,
+  type WorkbenchDestination,
   type WorkbenchState,
 } from "./workbench-state";
 
 function App() {
   const { t } = useTranslation();
   const [workbench, setWorkbench] = useState(loadWorkbenchState);
+  const [activeDestination, setActiveDestination] = useState<WorkbenchDestination>("project");
   const [selectedObject, setSelectedObject] = useState("navigation.classroom");
   const [projectState, dispatchProject] = useReducer(projectReducer, INITIAL_PROJECT_STATE);
   const [patchState, dispatchPatch] = useReducer(patchReducer, INITIAL_PATCH_STATE);
@@ -102,6 +106,8 @@ function App() {
   const [runState, dispatchRun] = useReducer(runReducer, INITIAL_RUN_STATE);
   const [aiState, dispatchAi] = useReducer(aiReducer, INITIAL_AI_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
+  const [draftGuardOpen, setDraftGuardOpen] = useState(false);
+  const [draftGuardBusy, setDraftGuardBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
   const requestSequence = useRef(0);
   const resultSequence = useRef(0);
@@ -225,8 +231,9 @@ function App() {
     aiStatus: aiState.status,
     draftBusy,
   });
+  const patchLocked = patchState.status === "review" || patchState.status === "applying";
 
-  const openProject = useCallback(async () => {
+  const openProjectNow = useCallback(async () => {
     if (!commandAvailability.openProject) return;
     const sequence = ++requestSequence.current;
     dispatchProject({ type: "selection_started", sequence });
@@ -279,6 +286,7 @@ function App() {
       dispatchResultExport({ type: "result_changed" });
       dispatchRun({ type: "project_changed" });
       dispatchAi({ type: "context_changed" });
+      setActiveDestination("project");
     } catch {
       if (!mounted.current || sequence !== requestSequence.current) return;
       dispatchProject({
@@ -294,6 +302,15 @@ function App() {
       });
     }
   }, [commandAvailability.openProject]);
+
+  const openProject = useCallback(async () => {
+    if (!commandAvailability.openProject) return;
+    if (projectState.draft?.dirty && !projectState.draft.exported) {
+      setDraftGuardOpen(true);
+      return;
+    }
+    await openProjectNow();
+  }, [commandAvailability.openProject, openProjectNow, projectState.draft]);
 
   const refreshAiArchive = useCallback(async () => {
     if (!projectState.projectSessionId || !projectState.draft || !currentZone) return;
@@ -717,28 +734,51 @@ function App() {
     }
   }, [commandAvailability.redoDraft, commandAvailability.undoDraft, currentZone, draftBusy, projectState.projectSessionId, t]);
 
-  const exportDraft = useCallback(async () => {
-    if (!commandAvailability.exportDraft || !projectState.projectSessionId || !projectState.draft || draftBusy) return;
+  const exportDraft = useCallback(async (): Promise<boolean> => {
+    if (!commandAvailability.exportDraft || !projectState.projectSessionId || !projectState.draft || draftBusy) return false;
     const requestId = crypto.randomUUID();
     setDraftBusy(true);
     dispatchProject({ type: "issue_cleared" });
     try {
       const response = await exportActiveProjectDraftCopy(requestId, projectState.projectSessionId, projectState.draft.revision_id);
-      if (!mounted.current) return;
+      if (!mounted.current) return false;
       if (response.cancelled) {
         setPlaceholderNotice(t("draft.exportCancelled"));
+        return false;
       } else if (response.error || !response.export || !isDraftExportSummaryValid(response.export) || response.project_session_id !== projectState.projectSessionId) {
         dispatchProject({ type: "issue_reported", issue: response.error ?? { code: "draft_export_verification_failed", message: "Draft export response invalid", source_line_number: null, context: {} } });
+        return false;
       } else {
         dispatchProject({ type: "draft_exported", revisionId: projectState.draft.revision_id });
         setPlaceholderNotice(t("draft.exportSuccess", { file: response.export.file_name }));
+        return true;
       }
     } catch {
       if (mounted.current) dispatchProject({ type: "issue_reported", issue: { code: "desktop_bridge_invoke_failed", message: "Draft export failed", source_line_number: null, context: {} } });
+      return false;
     } finally {
       if (mounted.current) setDraftBusy(false);
     }
   }, [commandAvailability.exportDraft, draftBusy, projectState.draft, projectState.projectSessionId, t]);
+
+  const exportDraftAndOpen = useCallback(async () => {
+    if (draftGuardBusy) return;
+    setDraftGuardBusy(true);
+    try {
+      if (await exportDraft()) {
+        setDraftGuardOpen(false);
+        await openProjectNow();
+      }
+    } finally {
+      if (mounted.current) setDraftGuardBusy(false);
+    }
+  }, [draftGuardBusy, exportDraft, openProjectNow]);
+
+  const discardDraftAndOpen = useCallback(async () => {
+    if (draftGuardBusy) return;
+    setDraftGuardOpen(false);
+    await openProjectNow();
+  }, [draftGuardBusy, openProjectNow]);
 
   const clearAiSession = useCallback(async () => {
     aiSequence.current += 1;
@@ -751,6 +791,7 @@ function App() {
   }, []);
 
   const changeAiArchivePersistence = useCallback(async (enabled: boolean) => {
+    if (patchLocked) return;
     const sequence = ++aiArchiveSequence.current;
     const requestId = crypto.randomUUID();
     dispatchAi({ type: "archive_loading", requestId });
@@ -775,12 +816,13 @@ function App() {
         issue: { code: "ai_archive_write_failed", message: "AI archive preference could not be saved." },
       });
     }
-  }, [refreshAiArchive]);
+  }, [patchLocked, refreshAiArchive]);
 
   const mutateAiArchive = useCallback(async (
     action: "delete" | "clear_zone" | "clear_all",
     archiveEntryId?: string,
   ) => {
+    if (patchLocked) return;
     if (!projectState.projectSessionId || !projectState.draft || !currentZone) return;
     const sequence = ++aiArchiveSequence.current;
     const requestId = crypto.randomUUID();
@@ -821,7 +863,7 @@ function App() {
         issue: { code: "ai_archive_write_failed", message: "AI archive could not be updated." },
       });
     }
-  }, [currentZone, projectState.draft, projectState.projectSessionId, refreshAiArchive]);
+  }, [currentZone, patchLocked, projectState.draft, projectState.projectSessionId, refreshAiArchive]);
 
   useEffect(() => {
     let disposed = false;
@@ -868,6 +910,7 @@ function App() {
   }, []);
 
   const updateAiConnection = useCallback(async (refresh = false) => {
+    if (patchLocked) return;
     const sequence = ++aiSequence.current;
     const requestId = crypto.randomUUID();
     dispatchAi({ type: "connect_started", requestId });
@@ -887,9 +930,10 @@ function App() {
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_app_server_start_failed", message: "Codex connection failed." } });
     }
-  }, []);
+  }, [patchLocked]);
 
   const installCodexCli = useCallback(async () => {
+    if (patchLocked) return;
     const sequence = ++aiSequence.current;
     const requestId = crypto.randomUUID();
     dispatchAi({ type: "install_started", requestId });
@@ -915,37 +959,42 @@ function App() {
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_cli_install_failed", message: "Codex CLI installation failed." } });
     }
-  }, []);
+  }, [patchLocked]);
 
   const disconnectAi = useCallback(async () => {
+    if (patchLocked) return;
     aiSequence.current += 1;
     try {
       await disconnectCodexAppServer(crypto.randomUUID());
     } finally {
       if (mounted.current) dispatchAi({ type: "disconnected" });
     }
-  }, []);
+  }, [patchLocked]);
 
   const toggleAiScope = useCallback((scope: AiContextScope) => {
+    if (patchLocked) return;
     dispatchAi({ type: "scope_toggled", scope });
     void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
-  }, []);
+  }, [patchLocked]);
 
   const changeAiModel = useCallback((modelId: string) => {
+    if (patchLocked) return;
     const model = aiState.connection?.models.find((item) => item.id === modelId && item.available);
     if (!model) return;
     dispatchAi({ type: "model_changed", modelId, effort: model.default_reasoning_effort });
     void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
-  }, [aiState.connection?.models]);
+  }, [aiState.connection?.models, patchLocked]);
 
   const changeAiEffort = useCallback((effort: string) => {
+    if (patchLocked) return;
     const model = aiState.connection?.models.find((item) => item.id === aiState.modelId);
     if (!model?.reasoning_efforts.some((item) => item.id === effort)) return;
     dispatchAi({ type: "effort_changed", effort });
     void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
-  }, [aiState.connection?.models, aiState.modelId]);
+  }, [aiState.connection?.models, aiState.modelId, patchLocked]);
 
   const previewContext = useCallback(async () => {
+    if (patchLocked) return;
     if (!projectState.projectSessionId || !projectState.draft || !currentZone || !aiState.modelId || !aiState.reasoningEffort) return;
     const sequence = ++aiSequence.current;
     const requestId = crypto.randomUUID();
@@ -979,9 +1028,10 @@ function App() {
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "ai_context_unavailable", message: "AI context preview failed." } });
     }
-  }, [aiState.modelId, aiState.reasoningEffort, aiState.scopes, currentZone, projectState.draft, projectState.projectSessionId, workbench.language]);
+  }, [aiState.modelId, aiState.reasoningEffort, aiState.scopes, currentZone, patchLocked, projectState.draft, projectState.projectSessionId, workbench.language]);
 
   const sendAiQuestion = useCallback(async () => {
+    if (patchLocked) return;
     if (!projectState.projectSessionId || !projectState.draft || !currentZone || !aiState.preview || !aiState.question.trim()) return;
     const sequence = ++aiSequence.current;
     const requestId = crypto.randomUUID();
@@ -1022,9 +1072,10 @@ function App() {
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_app_server_disconnected", message: "AI turn failed." } });
     }
-  }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, currentZone, projectState.draft, projectState.projectSessionId, refreshAiArchive, workbench.language]);
+  }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, currentZone, patchLocked, projectState.draft, projectState.projectSessionId, refreshAiArchive, workbench.language]);
 
   const stopAiTurn = useCallback(async () => {
+    if (patchLocked) return;
     aiSequence.current += 1;
     dispatchAi({ type: "interrupt_started" });
     try {
@@ -1038,7 +1089,7 @@ function App() {
     } catch {
       if (mounted.current) dispatchAi({ type: "operation_failed", requestId: null, issue: { code: "codex_app_server_disconnected", message: "AI interrupt failed." } });
     }
-  }, []);
+  }, [patchLocked]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -1070,6 +1121,28 @@ function App() {
     else projectPanelRef.current?.collapse();
     updateWorkbench({ projectCollapsed: !workbench.projectCollapsed });
   };
+
+  const navigateDestination = useCallback((destination: Exclude<WorkbenchDestination, "settings">) => {
+    if (!commandAvailability.navigation) return;
+    setActiveDestination(destination);
+    if (destination === "project" && workbench.projectCollapsed) projectPanelRef.current?.expand();
+    if (destination === "project") updateWorkbench({ projectCollapsed: false });
+    if (destination === "run") updateWorkbench({ bottomCollapsed: false, bottomTab: "logs" });
+    if (destination === "results") updateWorkbench({ bottomCollapsed: false, bottomTab: "results" });
+  }, [commandAvailability.navigation, projectPanelRef, updateWorkbench, workbench.projectCollapsed]);
+
+  const selectZoneById = useCallback((zoneId: string) => {
+    if (!commandAvailability.zoneSelect || !projectState.project) return;
+    const zone = projectState.project.zones.find((candidate) => candidate.zone_id === zoneId);
+    if (!zone) return;
+    dispatchProject({ type: "zone_selected", zoneKey: zoneSelectionKey(projectState.project, zone) });
+    dispatchPatch({ type: "project_or_zone_changed" });
+    dispatchResult({ type: "project_or_zone_changed" });
+    dispatchResultExport({ type: "result_changed" });
+    dispatchAi({ type: "context_changed" });
+    setActiveDestination("project");
+    void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
+  }, [commandAvailability.zoneSelect, projectState.project]);
 
   const toggleContext = () => {
     if (workbench.contextCollapsed) contextPanelRef.current?.expand();
@@ -1128,6 +1201,9 @@ function App() {
         onNewProject={() => {
           if (commandAvailability.newProject) showPlaceholder(t("toolbar.newProject"));
         }}
+        onSettings={() => {
+          if (commandAvailability.navigation) setActiveDestination("settings");
+        }}
         onOpenProject={openProject}
         onRunProject={runProject}
         onUndoDraft={() => void switchDraft("undo")}
@@ -1139,8 +1215,10 @@ function App() {
       <div className="workbench-body">
         <ActivityBar
           projectCollapsed={workbench.projectCollapsed}
+          activeDestination={activeDestination}
+          navigationAvailable={commandAvailability.navigation}
           onToggleProject={toggleProject}
-          onPlaceholder={showPlaceholder}
+          onNavigate={navigateDestination}
         />
 
         <Group
@@ -1165,17 +1243,7 @@ function App() {
               availability={commandAvailability}
               onSelectObject={setSelectedObject}
               onSelectZone={(zone) =>
-                commandAvailability.zoneSelect && projectState.project && (() => {
-                  dispatchProject({
-                    type: "zone_selected",
-                    zoneKey: zoneSelectionKey(projectState.project, zone),
-                  });
-                  dispatchPatch({ type: "project_or_zone_changed" });
-                  dispatchResult({ type: "project_or_zone_changed" });
-                  dispatchResultExport({ type: "result_changed" });
-                  dispatchAi({ type: "context_changed" });
-                  void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
-                })()
+                selectZoneById(zone.zone_id)
               }
               onCollapse={toggleProject}
             />
@@ -1190,15 +1258,16 @@ function App() {
             >
               <Panel id="editor" minSize="360px">
                 <WelcomePage
+                  destination={activeDestination}
                   projectState={projectState}
                   contextCollapsed={workbench.contextCollapsed}
                   bottomCollapsed={workbench.bottomCollapsed}
                   onToggleContext={toggleContext}
                   onToggleBottom={toggleBottom}
-                  onNewProject={() => {
-                    if (commandAvailability.newProject) showPlaceholder(t("welcome.newProject"));
-                  }}
                   onOpenProject={openProject}
+                  onSelectZone={selectZoneById}
+                  onRunProject={runProject}
+                  onSettingsReset={() => setWorkbench(DEFAULT_WORKBENCH_STATE)}
                   availability={commandAvailability}
                   resultState={resultState}
                   resultExportState={resultExportState}
@@ -1256,7 +1325,9 @@ function App() {
               onCancelVolumeEdit={() => {
                 if (commandAvailability.patchCancel) dispatchPatch({ type: "cancel" });
               }}
-              onTabChange={(contextTab) => updateWorkbench({ contextTab })}
+              onTabChange={(contextTab) => {
+                if (commandAvailability.navigation) updateWorkbench({ contextTab });
+              }}
               onCollapse={toggleContext}
               aiState={aiState}
               aiContextAvailable={Boolean(projectState.projectSessionId && projectState.draft && currentZone)}
@@ -1312,6 +1383,15 @@ function App() {
             if (commandAvailability.patchCancel) dispatchPatch({ type: "cancel" });
           }}
           onApply={applyVolumePatch}
+        />
+      ) : null}
+
+      {draftGuardOpen && projectState.draft?.dirty && !projectState.draft.exported ? (
+        <DraftSwitchDialog
+          busy={draftGuardBusy}
+          onCancel={() => setDraftGuardOpen(false)}
+          onExport={exportDraftAndOpen}
+          onDiscard={discardDraftAndOpen}
         />
       ) : null}
     </div>

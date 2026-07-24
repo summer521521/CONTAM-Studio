@@ -1,16 +1,4 @@
-import {
-  Beaker,
-  Building2,
-  CalendarClock,
-  ChevronDown,
-  Clock3,
-  DoorOpen,
-  FolderTree,
-  GitBranch,
-  History,
-  Layers3,
-  PanelLeftClose,
-} from "lucide-react";
+import { Building2, ChevronDown, Clock3, DoorOpen, FolderTree, PanelLeftClose } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { ProjectState, ZoneRecord } from "../../app/project-state";
@@ -20,7 +8,7 @@ interface ProjectSidebarProps {
   projectState: ProjectState;
   selectedObject: string;
   selectedZoneKey: string | null;
-  availability?: Pick<CommandAvailability, "zoneSelect">;
+  availability?: Pick<CommandAvailability, "zoneSelect"> & { navigation?: boolean };
   onSelectObject: (translationKey: string) => void;
   onSelectZone: (zone: ZoneRecord) => void;
   onCollapse: () => void;
@@ -54,10 +42,8 @@ function TreeRow({ icon: Icon, label, level = 0, selected, disabled = false, onC
 
 export function ProjectSidebar({
   projectState,
-  selectedObject,
   selectedZoneKey,
-  availability = { zoneSelect: true },
-  onSelectObject,
+  availability = { zoneSelect: true, navigation: true },
   onSelectZone,
   onCollapse,
 }: ProjectSidebarProps) {
@@ -68,21 +54,24 @@ export function ProjectSidebar({
     <aside className="project-sidebar">
       <div className="panel-heading">
         <FolderTree size={16} aria-hidden="true" />
-        <strong>{t(project ? "navigation.projectTitle" : "navigation.mockProjectTitle")}</strong>
+        <strong>{t("navigation.projectTitle")}</strong>
         <button
           className="panel-icon-button"
           type="button"
           title={t("navigation.collapse")}
           aria-label={t("navigation.collapse")}
+          disabled={availability.navigation === false}
           onClick={onCollapse}
         >
           <PanelLeftClose size={16} />
         </button>
       </div>
-      <div className={project ? "readonly-strip" : "mock-strip"}>
-        <span className={project ? "readonly-dot" : "mock-dot"} aria-hidden="true" />
-        {t(project ? "project.readOnlyPreview" : "navigation.mockLabel")}
-      </div>
+      {project ? (
+        <div className="readonly-strip">
+          <span className="readonly-dot" aria-hidden="true" />
+          {t("project.readOnlyPreview")}
+        </div>
+      ) : null}
       <div className="tree-scroll">
         {project ? (
           <>
@@ -124,42 +113,16 @@ export function ProjectSidebar({
             {t(`project.status.${projectState.status}`)}
           </div>
         ) : (
-          <>
-            <div className="tree-root">
-              <ChevronDown size={14} aria-hidden="true" />
-              <Building2 size={16} aria-hidden="true" />
-              <strong>{t("navigation.sampleProject")}</strong>
-            </div>
-            <ul className="project-tree">
-          <TreeRow icon={Layers3} label={t("navigation.floors")} />
-          <TreeRow icon={Layers3} label={t("navigation.floor1")} level={1} />
-          <TreeRow icon={Layers3} label={t("navigation.floor2")} level={1} />
-          <TreeRow icon={DoorOpen} label={t("navigation.zones")} />
-          <TreeRow
-            icon={DoorOpen}
-            label={t("navigation.classroom")}
-            level={1}
-            selected={selectedObject === "navigation.classroom"}
-            onClick={() => onSelectObject("navigation.classroom")}
-          />
-          <TreeRow
-            icon={DoorOpen}
-            label={t("navigation.corridor")}
-            level={1}
-            selected={selectedObject === "navigation.corridor"}
-            onClick={() => onSelectObject("navigation.corridor")}
-          />
-          <TreeRow icon={GitBranch} label={t("navigation.airflowPaths")} />
-          <TreeRow icon={Beaker} label={t("navigation.contaminants")} />
-          <TreeRow icon={CalendarClock} label={t("navigation.schedules")} />
-          <TreeRow icon={History} label={t("navigation.runHistory")} />
-            </ul>
-          </>
+          <div className="tree-empty-state">
+            <FolderTree size={24} strokeWidth={1.5} aria-hidden="true" />
+            <strong>{t("navigation.noProjectTitle")}</strong>
+            <p>{t("navigation.noProjectBody")}</p>
+          </div>
         )}
       </div>
       <div className="project-sidebar-footer">
         <Clock3 size={14} aria-hidden="true" />
-        <span>{t(project ? "project.strictSubset" : "app.phase")}</span>
+        <span>{t(project ? "project.strictSubset" : "navigation.noProjectFooter")}</span>
       </div>
     </aside>
   );

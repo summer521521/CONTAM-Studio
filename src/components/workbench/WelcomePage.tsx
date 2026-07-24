@@ -1,6 +1,5 @@
 import {
   Activity,
-  FilePlus2,
   FolderOpen,
   HardDrive,
   Home,
@@ -18,14 +17,17 @@ import type { ResultState } from "../../app/result-state";
 import type { ResultExportState } from "../../app/result-export-state";
 import type { AppTheme } from "../../app/workbench-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
+import { DestinationPage } from "./DestinationPage";
+import type { WorkbenchDestination } from "../../app/workbench-state";
 
 interface WelcomePageProps {
+  destination?: WorkbenchDestination;
   projectState: ProjectState;
   contextCollapsed: boolean;
   bottomCollapsed: boolean;
   onToggleContext: () => void;
   onToggleBottom: () => void;
-  onNewProject: () => void;
+  onNewProject?: () => void;
   onOpenProject: () => void;
   availability?: Pick<CommandAvailability, "newProject" | "openProject" | "loadActiveResult" | "selectManifest" | "exportResult">;
   resultState: ResultState;
@@ -35,15 +37,18 @@ interface WelcomePageProps {
   onLoadLatestResults: () => void;
   onSelectManifestResults: () => void;
   onExportResults: () => void;
+  onSelectZone?: (zoneId: string) => void;
+  onRunProject?: () => void;
+  onSettingsReset?: () => void;
 }
 
 export function WelcomePage({
+  destination = "project",
   projectState,
   contextCollapsed,
   bottomCollapsed,
   onToggleContext,
   onToggleBottom,
-  onNewProject,
   onOpenProject,
   availability = { newProject: true, openProject: true, loadActiveResult: true, selectManifest: true, exportResult: true },
   resultState,
@@ -53,6 +58,9 @@ export function WelcomePage({
   onLoadLatestResults,
   onSelectManifestResults,
   onExportResults,
+  onSelectZone = () => undefined,
+  onRunProject = () => undefined,
+  onSettingsReset = () => undefined,
 }: WelcomePageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -62,7 +70,7 @@ export function WelcomePage({
       <div className="editor-tabs">
         <div className="editor-tab is-active">
           {project ? <Activity size={14} aria-hidden="true" /> : <Home size={14} aria-hidden="true" />}
-          <span>{project ? t("results.tab") : t("welcome.tab")}</span>
+          <span>{destination === "project" ? (project ? t("results.tab") : t("welcome.tab")) : t(`navigation.${destination}`)}</span>
         </div>
         <div className="editor-layout-actions">
           <button
@@ -87,7 +95,24 @@ export function WelcomePage({
       </div>
 
       <div className="welcome-scroll">
-        {project ? (
+        {destination !== "project" ? (
+          <DestinationPage
+            destination={destination}
+            projectState={projectState}
+            resultState={resultState}
+            resultExportState={resultExportState}
+            activeRunId={activeRunId}
+            theme={theme}
+            onOpenProject={onOpenProject}
+            onRunProject={onRunProject}
+            onSelectZone={onSelectZone}
+            onLoadLatestResults={onLoadLatestResults}
+            onSelectManifestResults={onSelectManifestResults}
+            onExportResults={onExportResults}
+            onSettingsReset={onSettingsReset}
+            availability={availability}
+          />
+        ) : project ? (
           <div className="project-summary">
             <header className="project-summary-header">
               <div>
@@ -163,10 +188,6 @@ export function WelcomePage({
                 <FolderOpen size={18} />
                 <span>{t("welcome.openProject")}</span>
               </button>
-              <button className="secondary-action" type="button" disabled={!availability.newProject} onClick={onNewProject}>
-                <FilePlus2 size={18} />
-                <span>{t("welcome.newProject")}</span>
-              </button>
             </div>
           </section>
 
@@ -179,11 +200,6 @@ export function WelcomePage({
                 <p>{t("welcome.recentHint")}</p>
               </div>
             </div>
-          </section>
-
-          <section className="phase-band">
-            <strong>{t("welcome.phaseTitle")}</strong>
-            <p>{t("welcome.phaseBody")}</p>
           </section>
 
           {projectState.status === "selecting" || projectState.status === "loading" ? (

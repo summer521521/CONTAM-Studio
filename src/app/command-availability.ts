@@ -43,6 +43,7 @@ export interface CommandAvailability {
   patchBack: boolean;
   patchCancel: boolean;
   patchApply: boolean;
+  navigation: boolean;
 }
 
 const CONTEXT_BLOCKING_PATCH_STATUSES: PatchStatus[] = [
@@ -96,5 +97,6 @@ export function deriveCommandAvailability(input: CommandAvailabilityInput): Comm
     patchBack: patchReview,
     patchCancel: patchEditing || patchReview,
     patchApply: patchReview,
+    navigation: externalCommandsAvailable,
   };
 }

@@ -1,17 +1,22 @@
 import { BarChart3, FolderTree, Play, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { WorkbenchDestination } from "../../app/workbench-state";
 
 interface ActivityBarProps {
   projectCollapsed: boolean;
+  activeDestination?: WorkbenchDestination;
+  navigationAvailable?: boolean;
   onToggleProject: () => void;
-  onPlaceholder: (action: string) => void;
+  onNavigate: (destination: Exclude<WorkbenchDestination, "settings">) => void;
 }
 
 export function ActivityBar({
   projectCollapsed,
+  activeDestination = "project",
+  navigationAvailable = true,
   onToggleProject,
-  onPlaceholder,
+  onNavigate,
 }: ActivityBarProps) {
   const { t } = useTranslation();
   const items: Array<{
@@ -29,13 +34,18 @@ export function ActivityBar({
     <nav className="activity-bar" aria-label={t("navigation.projects")}>
       {items.map(({ key, icon: Icon, onClick }) => (
         <button
-          className={`activity-button ${key === "projects" && !projectCollapsed ? "is-active" : ""}`}
+          className={`activity-button ${
+            key === "projects"
+              ? activeDestination === "project" && !projectCollapsed ? "is-active" : ""
+              : activeDestination === key ? "is-active" : ""
+          }`}
           type="button"
           key={key}
+          disabled={!navigationAvailable}
           title={t(`navigation.${key}`)}
           aria-label={t(`navigation.${key}`)}
           aria-pressed={key === "projects" ? !projectCollapsed : undefined}
-          onClick={onClick ?? (() => onPlaceholder(t(`navigation.${key}`)))}
+          onClick={onClick ?? (() => onNavigate(key === "projects" ? "project" : key))}
         >
           <Icon size={21} strokeWidth={1.8} />
         </button>

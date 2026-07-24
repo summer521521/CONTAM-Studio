@@ -1,13 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it } from "vitest";
 import i18n from "../../i18n";
-import type { ProjectInspection, ProjectState } from "../../app/project-state";
+import { INITIAL_PROJECT_STATE, type ProjectInspection, type ProjectState } from "../../app/project-state";
 import { zoneSelectionKey } from "../../app/project-state";
 import { BottomPanel } from "./BottomPanel";
 import { ContextSidebar } from "./ContextSidebar";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { StatusBar } from "./StatusBar";
 import { ZoneVolumePatchDialog } from "./ZoneVolumePatchDialog";
+import { ActivityBar } from "./ActivityBar";
+import { DestinationPage } from "./DestinationPage";
+import { DraftSwitchDialog } from "./DraftSwitchDialog";
 import { ZoneAirStateDataTable, ZoneAirStateResults } from "./ZoneAirStateResults";
 import { TopBar } from "./TopBar";
 import { INITIAL_RESULT_STATE } from "../../app/result-state";
@@ -82,6 +85,58 @@ beforeAll(async () => {
 });
 
 describe("real project components", () => {
+  it("renders a truthful no-project state without mock objects or phase labels", () => {
+    const markup = renderToStaticMarkup(
+      <ProjectSidebar
+        projectState={{ ...state, status: "idle", project: null, projectSessionId: null, draft: null, selectedZoneKey: null }}
+        selectedObject="navigation.classroom"
+        selectedZoneKey={null}
+        onSelectObject={() => undefined}
+        onSelectZone={() => undefined}
+        onCollapse={() => undefined}
+      />,
+    );
+    expect(markup).toContain("尚未打开项目");
+    expect(markup).not.toContain("模拟");
+    expect(markup).not.toContain("Phase");
+  });
+
+  it("routes activity actions and empty destinations without placeholder notices", () => {
+    const destinations: string[] = [];
+    const markup = renderToStaticMarkup(
+      <ActivityBar projectCollapsed={false} onToggleProject={() => destinations.push("project")} onNavigate={(destination) => destinations.push(destination)} />,
+    );
+    expect(markup).toContain("aria-label=\"搜索\"");
+    expect(markup).not.toContain("placeholder");
+    const destinationMarkup = renderToStaticMarkup(
+      <DestinationPage
+        destination="results"
+        projectState={INITIAL_PROJECT_STATE}
+        resultState={INITIAL_RESULT_STATE}
+        resultExportState={INITIAL_RESULT_EXPORT_STATE}
+        activeRunId={null}
+        theme="light"
+        availability={{ openProject: true, loadActiveResult: false, selectManifest: false, exportResult: false }}
+        onOpenProject={() => undefined}
+        onRunProject={() => undefined}
+        onSelectZone={() => undefined}
+        onLoadLatestResults={() => undefined}
+        onSelectManifestResults={() => undefined}
+        onExportResults={() => undefined}
+        onSettingsReset={() => undefined}
+      />,
+    );
+    expect(destinationMarkup).toContain("尚未打开项目");
+  });
+
+  it("exposes all explicit draft switch choices", () => {
+    const markup = renderToStaticMarkup(<DraftSwitchDialog busy={false} onCancel={() => undefined} onExport={() => undefined} onDiscard={() => undefined} />);
+    expect(markup).toContain("取消切换");
+    expect(markup).toContain("另存副本并打开");
+    expect(markup).toContain("丢弃并打开");
+    expect(markup).toContain('aria-modal="true"');
+  });
+
   it("keeps the real run action disabled until a supported project is available", () => {
     const markup = renderToStaticMarkup(
       <TopBar

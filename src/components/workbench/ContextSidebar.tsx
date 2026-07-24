@@ -13,7 +13,7 @@ interface ContextSidebarProps {
   selectedZone: ZoneRecord | null;
   selectedObject: string;
   patchState: PatchState;
-  availability?: Pick<CommandAvailability, "startEditing" | "patchInput" | "planPatch" | "patchCancel">;
+  availability?: Pick<CommandAvailability, "startEditing" | "patchInput" | "planPatch" | "patchCancel"> & { navigation?: boolean };
   onStartVolumeEdit: () => void;
   onVolumeTokenChange: (token: string) => void;
   onPlanVolumePatch: () => void;
@@ -45,9 +45,8 @@ export function ContextSidebar({
   activeTab,
   project,
   selectedZone,
-  selectedObject,
   patchState,
-  availability = { startEditing: true, patchInput: true, planPatch: true, patchCancel: true },
+  availability = { startEditing: true, patchInput: true, planPatch: true, patchCancel: true, navigation: true },
   onStartVolumeEdit,
   onVolumeTokenChange,
   onPlanVolumePatch,
@@ -84,6 +83,7 @@ export function ContextSidebar({
           type="button"
           role="tab"
           aria-selected={activeTab === "inspector"}
+          disabled={availability.navigation === false}
           onClick={() => onTabChange("inspector")}
         >
           {t("inspector.properties")}
@@ -93,6 +93,7 @@ export function ContextSidebar({
           type="button"
           role="tab"
           aria-selected={activeTab === "assistant"}
+          disabled={availability.navigation === false}
           onClick={() => onTabChange("assistant")}
         >
           {t("assistant.tab")}
@@ -114,7 +115,7 @@ export function ContextSidebar({
             <SlidersHorizontal size={18} aria-hidden="true" />
             <div>
               <span>{t(project ? "inspector.selectedZone" : "inspector.selected")}</span>
-              <strong>{selectedZone?.name ?? t(selectedObject)}</strong>
+              <strong>{selectedZone?.name ?? t(project ? "inspector.noZoneTitle" : "inspector.noProjectTitle")}</strong>
             </div>
           </div>
           {project && selectedZone ? (
@@ -184,32 +185,14 @@ export function ContextSidebar({
               <p>{t("inspector.noZone")}</p>
             </div>
           ) : !project ? (
-            <dl className="property-list">
-            <div>
-              <dt>{t("inspector.name")}</dt>
-              <dd>{t(selectedObject)}</dd>
+            <div className="context-empty">
+              <Info size={22} aria-hidden="true" />
+              <p>{t("inspector.noProject")}</p>
             </div>
-            <div>
-              <dt>{t("inspector.type")}</dt>
-              <dd>{t("inspector.typeValue")}</dd>
-            </div>
-            <div>
-              <dt>{t("inspector.level")}</dt>
-              <dd>{t("inspector.levelValue")}</dd>
-            </div>
-            <div>
-              <dt>{t("inspector.volume")}</dt>
-              <dd>{t("inspector.volumeValue")}</dd>
-            </div>
-            <div>
-              <dt>{t("inspector.status")}</dt>
-              <dd>{t("inspector.statusValue")}</dd>
-            </div>
-            </dl>
           ) : null}
           <div className="context-note">
             <Info size={16} aria-hidden="true" />
-            <p>{t(project ? "inspector.realReadOnly" : "inspector.readOnly")}</p>
+            <p>{t(project ? "inspector.realReadOnly" : "inspector.noProjectBody")}</p>
           </div>
         </div>
       ) : (

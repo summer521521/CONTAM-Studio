@@ -2,6 +2,7 @@ export type AppLanguage = "zh-CN" | "en";
 export type AppTheme = "light" | "dark";
 export type ContextTab = "inspector" | "assistant";
 export type BottomTab = "problems" | "logs" | "results";
+export type WorkbenchDestination = "project" | "search" | "run" | "results" | "settings";
 
 export interface WorkbenchState {
   version: 1;

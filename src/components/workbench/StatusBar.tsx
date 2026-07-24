@@ -58,7 +58,6 @@ export function StatusBar({ theme, projectState, runState, aiState }: StatusBarP
         {aiState?.status === "available" ? <Bot size={13} aria-hidden="true" /> : <BotOff size={13} aria-hidden="true" />}
         {aiState ? t(`assistant.status.${aiState.status}`) : t("status.ai")}
       </span>
-      <span className="status-phase">{t("app.phase")}</span>
     </footer>
   );
 }

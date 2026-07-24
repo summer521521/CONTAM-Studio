@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [Batch B Workbench, Supported Domain and Drafts](records/batch-b-workbench-domain-draft.md) | Wave 2-4 | in_progress | live |
 | [Batch A Foundation and Product Baseline](records/batch-a-foundation-product-baseline.md) | Wave 0-1 | automated_verified | live |
 | [FND-06 SAFE、DATA与RESULT证据修复](records/fnd-06-safe-data-result-evidence-remediation.md) | Wave 0 | automated_verified | live |
 | [FND-05 Rust可见性与进程调用清单修复](records/fnd-05-rust-visibility-process-inventory-remediation.md) | Wave 0 | automated_verified | live |

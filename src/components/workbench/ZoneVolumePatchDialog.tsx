@@ -25,27 +25,52 @@ export function ZoneVolumePatchDialog({
 }: ZoneVolumePatchDialogProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
+    return () => {
+      const previous = previousFocusRef.current;
+      if (previous?.isConnected) window.setTimeout(() => previous.focus(), 0);
+    };
   }, []);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && availability.patchCancel) onCancel();
+      if (event.key === "Escape" && availability.patchCancel) {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [availability.patchCancel, onCancel]);
 
   return (
-    <div className="patch-dialog-backdrop">
+    <div className="patch-dialog-backdrop" data-patch-lock="true">
       <div
         ref={dialogRef}
         className="patch-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="patch-review-title"
+        aria-describedby="patch-review-description"
         tabIndex={-1}
       >
         <header className="patch-dialog-header">
@@ -74,7 +99,7 @@ export function ZoneVolumePatchDialog({
             <div className="patch-diff-new">+{review.new_line}</div>
           </div>
 
-          <div className="patch-safety-note">
+          <div className="patch-safety-note" id="patch-review-description">
             <ShieldCheck size={19} aria-hidden="true" />
             <div>
               <strong>{t("patch.originalUnchanged")}</strong>

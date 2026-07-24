@@ -2,7 +2,6 @@ import {
   FolderOpen,
   Moon,
   Play,
-  Plus,
   Download,
   Settings,
   Sun,
@@ -14,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { AppLanguage, AppTheme } from "../../app/workbench-state";
 
-type TopBarAvailability = Pick<CommandAvailability, "newProject" | "openProject" | "runProject" | "undoDraft" | "redoDraft" | "exportDraft" | "language">;
+type TopBarAvailability = Pick<CommandAvailability, "newProject" | "openProject" | "runProject" | "undoDraft" | "redoDraft" | "exportDraft" | "language"> & { navigation?: boolean };
 
 interface TopBarProps {
   language: AppLanguage;
@@ -28,26 +27,26 @@ interface TopBarProps {
   onUndoDraft: () => void;
   onRedoDraft: () => void;
   onExportDraft: () => void;
-  onPlaceholder: (action: string) => void;
+  onPlaceholder?: (action: string) => void;
+  onSettings?: () => void;
 }
 
 export function TopBar({
   language,
   theme,
   onLanguageChange,
-  availability = { newProject: true, openProject: true, runProject: true, undoDraft: true, redoDraft: true, exportDraft: true, language: true },
+  availability = { newProject: true, openProject: true, runProject: true, undoDraft: true, redoDraft: true, exportDraft: true, language: true, navigation: true },
   onThemeToggle,
-  onNewProject,
   onOpenProject,
   onRunProject,
   onUndoDraft,
   onRedoDraft,
   onExportDraft,
   onPlaceholder,
+  onSettings,
 }: TopBarProps) {
   const { t } = useTranslation();
   const actions = [
-    { key: "newProject", icon: Plus, onClick: onNewProject },
     { key: "openProject", icon: FolderOpen, onClick: onOpenProject },
     { key: "run", icon: Play, onClick: onRunProject },
   ] as const;
@@ -67,7 +66,7 @@ export function TopBar({
             className={`tool-button ${key === "run" ? "tool-button-run" : ""}`}
             key={key}
             type="button"
-            disabled={key === "newProject" ? !availability.newProject : key === "openProject" ? !availability.openProject : !availability.runProject}
+            disabled={key === "openProject" ? !availability.openProject : !availability.runProject}
             onClick={onClick}
           >
             <Icon size={16} aria-hidden="true" />
@@ -83,7 +82,6 @@ export function TopBar({
       </div>
 
       <div className="toolbar-spacer" />
-      <span className="phase-label">{t("app.phase")}</span>
       <label className="language-control">
         <span className="sr-only">{t("toolbar.language")}</span>
         <select
@@ -101,6 +99,7 @@ export function TopBar({
         type="button"
         title={`${t("toolbar.theme")}: ${t(`toolbar.${theme}`)}`}
         aria-label={`${t("toolbar.theme")}: ${t(`toolbar.${theme}`)}`}
+        disabled={availability.navigation === false}
         onClick={onThemeToggle}
       >
         {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
@@ -110,7 +109,8 @@ export function TopBar({
         type="button"
         title={t("toolbar.settings")}
         aria-label={t("toolbar.settings")}
-        onClick={() => onPlaceholder(t("toolbar.settings"))}
+        disabled={availability.navigation === false}
+        onClick={onSettings ?? (() => onPlaceholder?.(t("toolbar.settings")))}
       >
         <Settings size={17} />
       </button>
