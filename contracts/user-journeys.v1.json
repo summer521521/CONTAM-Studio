@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "journeys": [
+    {"id": "learner_open", "screen": "Project", "tool": "inspect_project", "test": "reader_positive_negative", "irreversible": false, "evidence": "source_identity"},
+    {"id": "learner_inspect", "screen": "Project/Inspector", "tool": "read_supported_objects", "test": "golden_envelope", "irreversible": false, "evidence": "safe_project_summary"},
+    {"id": "learner_prepare", "screen": "Draft", "tool": "plan_zone_volume_patch", "test": "stale_mismatch_mutation", "irreversible": false, "evidence": "patch_transaction_diff"},
+    {"id": "learner_approve", "screen": "Diff", "tool": "apply_patch", "test": "command_race", "irreversible": true, "evidence": "immutable_revision"},
+    {"id": "learner_run", "screen": "Runs", "tool": "run_approved_bundle", "test": "process_controller", "irreversible": true, "evidence": "run_manifest"},
+    {"id": "learner_result", "screen": "Results", "tool": "extract_zone_air_state", "test": "paging_boundary", "irreversible": false, "evidence": "result_artifact"},
+    {"id": "learner_compare", "screen": "Compare", "tool": "compare_revisions", "test": "identity_mismatch", "irreversible": true, "evidence": "comparison_evidence"},
+    {"id": "learner_report", "screen": "Report", "tool": "build_report", "test": "deterministic_export", "irreversible": true, "evidence": "report_manifest"},
+    {"id": "teacher_review", "screen": "Evidence", "tool": "read_evidence_index", "test": "disclosure", "irreversible": false, "evidence": "review_summary"},
+    {"id": "offline_core", "screen": "Settings/Activity", "tool": "none", "test": "offline_contract", "irreversible": false, "evidence": "local_audit"},
+    {"id": "assistant_explain", "screen": "Assistant", "tool": "preview_ai_context", "test": "disclosure_mutation", "irreversible": true, "evidence": "consent_receipt"},
+    {"id": "failure_recover", "screen": "Activity/Recovery", "tool": "recover_owned_artifacts", "test": "crash_recovery", "irreversible": true, "evidence": "failure_manifest"}
+  ],
+  "required_fields": ["id", "screen", "tool", "test", "irreversible", "evidence"]
+}

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "tokens": ["protected-source", "draft-revision", "deterministic-evidence", "ai-interpretation", "run-active", "warning", "failure", "unsupported"],
+  "required_states": ["loading", "empty", "read_only", "unsupported", "failure", "recovery"],
+  "scaling": {"minimum_percent": 100, "maximum_percent": 200, "font_letter_spacing": 0},
+  "keyboard_order": ["Project", "Draft", "Runs", "Results", "Compare", "Report", "Attachments", "Assistant", "Settings", "Activity", "Evidence"],
+  "icon_button_requirements": {"accessible_name": true, "tooltip": true},
+  "color_alone_is_meaning": false
+}

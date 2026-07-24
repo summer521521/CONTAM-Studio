@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "default_language": "zh-CN",
+  "supported_languages": ["zh-CN", "en"],
+  "labels": {
+    "fact": {"zh-CN": "事实", "en": "Fact"},
+    "deterministic_validation": {"zh-CN": "确定性验证", "en": "Deterministic validation"},
+    "ai_interpretation": {"zh-CN": "AI解释", "en": "AI interpretation"},
+    "uncertainty": {"zh-CN": "不确定", "en": "Uncertainty"},
+    "unsupported": {"zh-CN": "不支持", "en": "Unsupported"},
+    "pending_final_acceptance": {"zh-CN": "待最终验收", "en": "Pending final acceptance"}
+  },
+  "units": {
+    "temperature": {"canonical": "K", "display_allowed": ["K", "degC"]},
+    "pressure": {"canonical": "Pa", "display_allowed": ["Pa"]},
+    "density": {"canonical": "kg/m3", "display_allowed": ["kg/m3"]},
+    "volume": {"canonical": "m3", "display_allowed": ["m3"]},
+    "time": {"canonical": "s", "display_allowed": ["s", "min", "h"]}
+  },
+  "namespaces": ["project", "revision", "zone", "run", "result", "attachment", "assistant", "evidence"],
+  "unsafe_display_patterns": ["(?:[A-Za-z]:[\\\\/])", "(?:\\\\\\\\|/)(?:Users|AppData|ProgramData)(?:\\\\|/)", "(?i)(?:token|password|secret|cookie|auth)"],
+  "parity_required": true
+}

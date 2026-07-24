@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "status_vocabulary": ["queued", "starting", "running", "cancel_requested", "succeeded", "failed", "timed_out", "cancelled", "unknown_cleanup"],
+  "job_object": {
+    "required": true,
+    "create_suspended": true,
+    "assign_before_resume": true,
+    "kill_on_close": true,
+    "fail_closed_code": "process_ownership_failed",
+    "forbidden_fallbacks": ["taskkill", "global_process_name_match", "unbounded_wait", "unbounded_join"]
+  },
+  "cleanup_reserve": {
+    "formula": "max(1s,min(10s,total_budget/4))",
+    "shared_deadline": true
+  },
+  "stream_limits": {"stdout_bytes": 4194304, "stderr_bytes": 4194304, "continue_draining_after_limit": true},
+  "operations": {
+    "python_bridge": {"total_budget_seconds": 45},
+    "contamx": {"total_budget_seconds": 75},
+    "simread": {"total_budget_seconds": 45},
+    "codex_app_server_install": {"total_budget_seconds": 180},
+    "codex_app_server_turn": {"total_budget_seconds": 90}
+  },
+  "required_evidence": ["operation_id", "tool_identity", "deadline", "pid_proof", "job_proof", "exit_code", "stream_frozen", "artifact_refs", "generation"]
+}

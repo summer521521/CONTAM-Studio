@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "root": "app_local_data_dir/owned-artifacts",
+  "soft_quota_bytes": 10737418240,
+  "hard_quota_bytes": 21474836480,
+  "temporary_reclaim_age_hours": 24,
+  "categories": {
+    "external_source": {"owner": "user", "persistent": true, "auto_delete": false},
+    "export": {"owner": "user", "persistent": true, "auto_delete": false},
+    "revision": {"owner": "studio", "persistent": true, "auto_delete": false},
+    "run": {"owner": "studio", "persistent": true, "auto_delete": false},
+    "result": {"owner": "studio", "persistent": true, "auto_delete": false},
+    "report_evidence": {"owner": "studio", "persistent": true, "auto_delete": false},
+    "attachment_derivative": {"owner": "studio", "persistent": true, "auto_delete": false},
+    "ai_archive": {"owner": "studio", "persistent": true, "auto_delete": false, "opt_in": true},
+    "cache": {"owner": "studio", "persistent": false, "auto_delete": true},
+    "temporary": {"owner": "studio", "persistent": false, "auto_delete": true, "minimum_age_hours": 24},
+    "quarantine": {"owner": "studio", "persistent": true, "auto_delete": false}
+  },
+  "required_metadata": ["artifact_id", "schema_version", "category", "relative_path", "size_bytes", "created_at_utc", "last_used_at_utc", "sha256", "dependencies", "status"],
+  "protected_from_cleanup": ["active", "pinned", "last_recoverable_revision", "report_referenced", "external_source", "export", "symlink", "junction", "path_escape"],
+  "migration": {"sequence": ["copy", "hash_verify", "parse_verify", "fsync", "atomic_activate"], "rollback": true, "unknown_schema": "recovery_read_only"},
+  "uninstall": {"retain_by_default": true, "purge_requires_preview_and_confirmation": true}
+}

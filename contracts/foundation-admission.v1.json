@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "baseline_branch": "codex/contam-studio-v1-complete",
+  "baseline_head": "d0d9b5a46c11a649c2c34fc32f998136c17ce909",
+  "review_status": "automated_admitted_pending_h_final",
+  "h_final_claimed": false,
+  "findings_source": "docs/development/foundation-defect-ledger.json",
+  "admitted_commits": [
+    {"task": "FND-01", "commit": "3a9e673e3a0da86e0528c8d79ee65844e77d6492"},
+    {"task": "FND-02", "commit": "aa09c38c983d8a471caa3288b0a78b4509c708a1"},
+    {"task": "FND-03", "commit": "772089a550cbfda755ecf757c732dc2fd872a6f1"},
+    {"task": "FND-04", "commit": "dcb6a0baa52ebd48d7454116c0e1c389905ed5bb"},
+    {"task": "FND-05", "commit": "f3ce4b33f8d7ca580110d3d95f589d77530163a3"},
+    {"task": "FND-06", "commit": "d0d9b5a46c11a649c2c34fc32f998136c17ce909"}
+  ],
+  "focused_verification": [
+    "test-foundation-defect-ledger.ps1",
+    "test-foundation-defect-ledger-mutations.ps1",
+    "test-rust-authority-contract.mjs",
+    "test-rust-authority-contract-mutations.mjs",
+    "test-bridge-json-placeholder-contract.ps1",
+    "test-task-log-contract.ps1",
+    "test-v1-baseline-contract.mjs",
+    "test-v1-baseline-contract-mutations.mjs"
+  ],
+  "external_rows": ["h_final_review", "gui", "official_tool", "clean_machine", "licence", "user_validation"]
+}

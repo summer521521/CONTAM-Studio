@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "surfaces": ["Project", "Draft", "Runs", "Results", "Compare", "Report", "Attachments", "Assistant", "Settings", "Activity", "Evidence"],
+  "states": ["no_project", "inspecting", "ready_read_only", "ready_editable", "unsupported", "corrupt", "patch_review", "applying", "revision_ready", "queued", "starting", "running", "succeeded", "failed", "timed_out", "cancelled", "unknown_cleanup", "results_ready", "compare_ready", "report_ready", "exported", "recovery_required", "recovered", "read_only"],
+  "preference_keys": ["language", "density", "theme", "last_safe_surface", "reduced_motion"],
+  "forbidden_preference_values": ["credential", "raw_prj", "absolute_path", "authority_token", "ai_transcript"]
+}

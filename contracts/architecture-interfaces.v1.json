@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "interfaces": [
+    {"name": "DocumentIndex", "owner": "Rust+Python", "boundary": "safe_object_index"},
+    {"name": "SemanticGraph", "owner": "Python", "boundary": "stable_object_ids"},
+    {"name": "PatchTransaction", "owner": "Rust+Python", "boundary": "immutable_revision"},
+    {"name": "ProcessController", "owner": "Rust", "boundary": "lifecycle_evidence"},
+    {"name": "OwnedArtifactStore", "owner": "Rust", "boundary": "quota_ownership"},
+    {"name": "ResultStore", "owner": "Rust+Python", "boundary": "paged_typed_samples"},
+    {"name": "AttachmentBroker", "owner": "Rust", "boundary": "sanitized_derivative"},
+    {"name": "AiGateway", "owner": "Rust", "boundary": "approval_bound_action"},
+    {"name": "Packaging", "owner": "build_pipeline", "boundary": "unsigned_candidate"},
+    {"name": "Observability", "owner": "Rust", "boundary": "safe_activity_index"}
+  ],
+  "required_interface_fields": ["name", "owner", "boundary"]
+}
