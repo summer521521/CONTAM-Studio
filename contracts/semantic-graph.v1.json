@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "name": "SemanticGraph",
+  "identity": "stable_uuid_v1",
+  "object_id_source": "baseline_hash_category_external_evidence",
+  "ordering": ["category", "object_id"],
+  "edge_ordering": ["source_id", "target_id", "kind"],
+  "reject_codes": ["invalid_object_id", "duplicate_object_id", "dangling_reference", "self_reference", "duplicate_edge", "prohibited_cycle"],
+  "ui_authority_forbidden": ["array_index", "display_label", "contam_number", "source_path"]
+}
