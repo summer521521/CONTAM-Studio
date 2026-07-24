@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-22T03:09:08.6510783Z",
+  "last_updated_utc": "2026-07-24T13:10:11.7545420Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -17,7 +17,8 @@
     "implemented不等于automated_verified、manual_gui、merged_to_main、packaged或user_validated。",
     "没有证据时使用unknown；明确未执行时使用not_run；不适用时使用not_required。",
     "Phase 6A的实现和自动检查已合并到main，但Beta-2本地档案GUI逐项验收仍保持pending_user。",
-    "完整PRJ、分发和AI写入是能力边界行，不把未实现能力写成阶段完成。"
+    "完整PRJ、分发和AI写入是能力边界行，不把未实现能力写成阶段完成。",
+    "内部Python模型或契约测试通过不等于桌面产品已接入；没有Tauri命令、React入口和纵向证据时不得提升产品能力状态。"
   ],
   "capabilities": [
     {
@@ -195,6 +196,17 @@
       "packaged": "not_run",
       "user_validated": "pending_user",
       "evidence": ["docs/development/phase-6a-codex-readonly-assistant-verification.md", "docs/development/task-log/records/phase-6-02-review-and-delivery.md"]
+    },
+    {
+      "id": "candidate-research-foundations",
+      "name": "完整领域、进程、存储、附件与可执行AI内部研究基础",
+      "implemented": "partial",
+      "automated_verified": "partial",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "not_required",
+      "evidence": ["docs/development/task-log/records/h-final-v1-candidate-review.md", "docs/development/task-log/records/batch-c-process-tools-results-distribution.md", "docs/development/task-log/records/batch-d-attachments-ai.md"]
     },
     {
       "id": "distribution",

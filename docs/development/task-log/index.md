@@ -2,10 +2,11 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [H-FINAL v1候选集中复核与主线交付](records/h-final-v1-candidate-review.md) | H-FINAL | in_progress | live |
 | [Batch B Workbench, Supported Domain and Drafts](records/batch-b-workbench-domain-draft.md) | Wave 2-4 | automated_verified | live |
-| [Batch C Process, Tools, Results and Distribution](records/batch-c-process-tools-results-distribution.md) | Wave 5-7 | automated_verified | live |
-| [Batch D Attachments and Semantic AI](records/batch-d-attachments-ai.md) | Wave 8-10 | automated_verified | live |
-| [Batch E Quality, Learning and Close](records/batch-e-quality-learning-close.md) | Wave 11-12 | automated_verified | live |
+| [Batch C Process, Tools, Results and Distribution](records/batch-c-process-tools-results-distribution.md) | Wave 5-7 | blocked | live |
+| [Batch D Attachments and Semantic AI](records/batch-d-attachments-ai.md) | Wave 8-10 | blocked | live |
+| [Batch E Quality, Learning and Close](records/batch-e-quality-learning-close.md) | Wave 11-12 | blocked | live |
 | [Batch A Foundation and Product Baseline](records/batch-a-foundation-product-baseline.md) | Wave 0-1 | automated_verified | live |
 | [FND-06 SAFE、DATA与RESULT证据修复](records/fnd-06-safe-data-result-evidence-remediation.md) | Wave 0 | automated_verified | live |
 | [FND-05 Rust可见性与进程调用清单修复](records/fnd-05-rust-visibility-process-inventory-remediation.md) | Wave 0 | automated_verified | live |

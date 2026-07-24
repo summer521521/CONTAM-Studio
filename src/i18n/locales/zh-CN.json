@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 6A 只读AI"
+    "phase": "安全CONTAM工作台"
   },
   "common": {
     "yes": "是",
@@ -25,7 +25,7 @@
       "patch_review": "Patch审阅",
       "run": "ContamX运行",
       "export": "文件导出",
-      "ingestion": "项目读取",
+      "project_operation": "项目操作",
       "ai_turn": "AI问答"
     }
   },
@@ -607,8 +607,8 @@
     }
   },
   "mock": {
-    "label": "模拟",
-    "placeholder": "{{action}}：Phase 1占位功能，未执行真实操作。",
+    "label": "暂不可用",
+    "placeholder": "当前版本暂不支持{{action}}。",
     "dismiss": "关闭提示"
   }
 }

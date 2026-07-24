@@ -1,28 +1,25 @@
-# CONTAM Studio v1 自动化候选交接
+# CONTAM Studio主线候选复核说明
 
 ## 当前范围
 
-隔离分支 `codex/contam-studio-v1-complete` 已从 `24cb7aa` 继续完成五批连续实现：严格 PRJ/气流/计划/污染物域、Patch/不可变 Revision/Scenario、受控进程与工具身份、Run/Result/Compare/Sweep/Report、AttachmentBroker、AI 证据与批准边界、质量/安全/性能/恢复文档、UAT/发行候选和中文学习集。
+隔离分支`codex/contam-studio-v1-complete`包含两类内容：一类是已接入桌面的工作台导航、控制器拆分、草稿切换和Rust权威退出协议；另一类是完整PRJ投影、进程/存储/结果、附件和AI批准的内部研究模块。后一类只有内部定向测试，没有Tauri命令、React入口或真实工具/GUI证据，不能当作已交付产品功能。
 
 ## 自动化证据
 
-- Batch E 第一次 Full：54项通过。
-- Batch E 第二次稳定性 Full：54项通过。
-- Python 项目解释器：321 passed，Ruff 通过。
-- 前端：150 passed，生产构建通过。
-- Rust：85 passed，1 ignored（需要明确真实 Phase 5A 结果输入），Clippy/Cargo/格式通过。
-- Git `diff --check`、契约和突变测试通过。
+- 原Batch E曾连续两次通过54项Full；该结果只说明当时的代码和契约自洽。
+- H-FINAL新增Rust权威退出状态与伪造另存完成负例后，将重新运行最终Full并把准确数量记录在任务日志。
+- 内部研究模块已从`contam_studio_core`包顶层公开API撤下，防止被误认为受支持接口。
 
 ## 明确未宣称
 
-真实 Windows Job Object/干净机器、官方 ContamX/SimRead 目标工具身份与数值成绩、PDF/Office 视觉渲染、真实 App Server 远程披露、人工 GUI、H/U 评审、签名、推送、发布和用户研究均为 `pending_final_acceptance`。这些行不启用危险能力，也不阻塞离线核心。
+完整PRJ编辑、通用进程控制器、Windows Job Object、运行历史/比较/研究/报告产品流、附件接收、PDF/Office提取、多模态AI、AI写入/审批执行、安装包、签名和发布均未完成。当前AI产品能力仍是既有的结构化只读助手，当前仿真能力仍使用既有官方ContamX/SimRead纵向路径。
 
 ## 下一次人工动作
 
-1. 使用 [UAT-01 矩阵](../uat/manual-acceptance-matrix-v1.md) 在干净 Windows 标准用户环境逐行记录。
-2. 由 H 对域语义、Patch、进程、存储、附件、AI 工具与威胁模型做一次集中复核。
-3. 由 U 决定真实工具、GUI、远程披露和发行许可；发布仍需单独明确指令，当前不得 tag/push/sign/upload。
+1. 对合入主线的导航、草稿切换和退出确认执行一次真实桌面GUI验收。
+2. 后续按独立纵向切片接入完整领域、附件和可执行AI能力，每个切片必须经过Rust权限边界和真实工具证据。
+3. 只有安装包、干净Windows、许可和用户验收完成后，才创建真正的release candidate；发布仍需单独明确指令。
 
 ## 保护声明
 
-正式 `F:\CONTAM Studio`、用户 PRJ/CSV/SIM、真实 AppData、凭据、全局环境和远端均未触碰；所有测试夹具和中间产物留在隔离克隆或项目工具生成目录。
+H-FINAL不读取或修改用户PRJ/CSV/SIM、真实AppData、凭据或全局环境。签名、tag和发布不属于本次主线合并。

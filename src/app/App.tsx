@@ -20,7 +20,6 @@ import {
   clearReadonlyAiSession,
   finishAppCloseDraftExport,
   resolveAppClose,
-  setCloseActivity,
 } from "./desktop-api";
 import { APP_CLOSE_REQUESTED_EVENT, isSafeCloseRequest, isSafeCloseResolution, type CloseRequestView } from "./close-state";
 import {
@@ -213,19 +212,6 @@ function App() {
     draftBusy,
   });
   const patchLocked = patchState.status === "review" || patchState.status === "applying";
-
-  useEffect(() => {
-    void setCloseActivity({
-      draft_dirty: Boolean(projectState.draft?.dirty),
-      draft_exported: Boolean(projectState.draft?.exported),
-      patch_review: ["planning", "review", "applying"].includes(patchState.status),
-      run_active: runState.status === "running",
-      export_active: ["selecting_destination", "exporting"].includes(resultExportState.status),
-      ingestion_active: ["selecting", "loading"].includes(projectState.status)
-        || ["selecting", "loading"].includes(resultState.status),
-      ai_turn_active: ["generating", "interrupting"].includes(aiState.status),
-    }).catch(() => undefined);
-  }, [aiState.status, patchState.status, projectState.draft?.dirty, projectState.draft?.exported, projectState.status, resultExportState.status, resultState.status, runState.status]);
 
   const projectController = useProjectController({
     projectState,

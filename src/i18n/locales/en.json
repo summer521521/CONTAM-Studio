@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "CONTAM Studio",
-    "phase": "Phase 6A read-only AI"
+    "phase": "Safe CONTAM workbench"
   },
   "common": {
     "yes": "Yes",
@@ -25,7 +25,7 @@
       "patch_review": "Patch review",
       "run": "ContamX run",
       "export": "File export",
-      "ingestion": "Project ingestion",
+      "project_operation": "Project operation",
       "ai_turn": "AI turn"
     }
   },
@@ -607,8 +607,8 @@
     }
   },
   "mock": {
-    "label": "Mock",
-    "placeholder": "{{action}}: Phase 1 placeholder; no real operation was performed.",
+    "label": "Unavailable",
+    "placeholder": "{{action}} is not available in this version.",
     "dismiss": "Dismiss notice"
   }
 }

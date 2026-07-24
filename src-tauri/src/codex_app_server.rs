@@ -431,6 +431,11 @@ pub struct AiConversationArchiveStore {
 }
 
 impl CodexAssistantStore {
+    pub(crate) fn close_activity_active(&self) -> bool {
+        let state = self.state.lock().expect("Codex assistant mutex poisoned");
+        state.installing || state.connecting.is_some() || state.active_turn_request_id.is_some()
+    }
+
     fn retain_connection(&self, connection: Arc<AppServerConnection>) {
         let mut retired = self
             .retired_connections

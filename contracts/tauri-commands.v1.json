@@ -169,13 +169,6 @@
       "payload_keys": ["requestId"]
     },
     {
-      "command": "set_close_activity",
-      "rust_module": "close_protocol",
-      "ts_wrapper": "setCloseActivity",
-      "permission": "allow-set-close-activity",
-      "payload_keys": ["activity"]
-    },
-    {
       "command": "resolve_app_close",
       "rust_module": "close_protocol",
       "ts_wrapper": "resolveAppClose",

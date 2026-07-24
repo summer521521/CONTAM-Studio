@@ -3,21 +3,23 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
+use crate::{
+    codex_app_server::CodexAssistantStore,
+    zone_bridge::{DesktopProjectSessionStore, ProjectCloseSnapshot},
+};
+
 pub const CLOSE_REQUESTED_EVENT: &str = "contam-studio://app-close-requested";
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct CloseActivityInput {
-    pub draft_dirty: bool,
-    pub draft_exported: bool,
-    pub patch_review: bool,
-    pub run_active: bool,
-    pub export_active: bool,
-    pub ingestion_active: bool,
-    pub ai_turn_active: bool,
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct CloseActivity {
+    draft_dirty: bool,
+    draft_exported: bool,
+    patch_review: bool,
+    project_operation_active: bool,
+    ai_activity_active: bool,
 }
 
-impl CloseActivityInput {
+impl CloseActivity {
     fn needs_draft_decision(&self) -> bool {
         self.draft_dirty && !self.draft_exported
     }
@@ -27,20 +29,35 @@ impl CloseActivityInput {
         if self.patch_review {
             work.push("patch_review");
         }
-        if self.run_active {
-            work.push("run");
+        if self.project_operation_active {
+            work.push("project_operation");
         }
-        if self.export_active {
-            work.push("export");
-        }
-        if self.ingestion_active {
-            work.push("ingestion");
-        }
-        if self.ai_turn_active {
+        if self.ai_activity_active {
             work.push("ai_turn");
         }
         work
     }
+}
+
+impl From<ProjectCloseSnapshot> for CloseActivity {
+    fn from(value: ProjectCloseSnapshot) -> Self {
+        Self {
+            draft_dirty: value.draft_dirty,
+            draft_exported: value.draft_exported,
+            patch_review: value.patch_review,
+            project_operation_active: value.operation_active,
+            ai_activity_active: false,
+        }
+    }
+}
+
+fn current_activity(
+    project: &DesktopProjectSessionStore,
+    assistant: &CodexAssistantStore,
+) -> CloseActivity {
+    let mut activity = CloseActivity::from(project.close_snapshot());
+    activity.ai_activity_active = assistant.close_activity_active();
+    activity
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -76,7 +93,6 @@ struct PendingClose {
 
 #[derive(Debug, Default)]
 struct CloseState {
-    activity: CloseActivityInput,
     pending: Option<PendingClose>,
     next_request: u64,
     allow_next_close: bool,
@@ -88,13 +104,7 @@ pub struct CloseProtocolStore {
 }
 
 impl CloseProtocolStore {
-    fn set_activity(&self, activity: CloseActivityInput) -> CloseActivityInput {
-        let mut state = self.state.lock().expect("close protocol mutex poisoned");
-        state.activity = activity.clone();
-        activity
-    }
-
-    fn request(&self) -> CloseRequestOutcome {
+    fn request(&self, activity: &CloseActivity) -> CloseRequestOutcome {
         let mut state = self.state.lock().expect("close protocol mutex poisoned");
         if state.allow_next_close {
             state.allow_next_close = false;
@@ -103,9 +113,8 @@ impl CloseProtocolStore {
         if let Some(pending) = state.pending.as_ref() {
             return CloseRequestOutcome::Prompt(CloseRequestView {
                 request_id: pending.request_id.clone(),
-                draft_decision_required: state.activity.needs_draft_decision(),
-                active_work: state
-                    .activity
+                draft_decision_required: activity.needs_draft_decision(),
+                active_work: activity
                     .active_work()
                     .into_iter()
                     .map(str::to_owned)
@@ -113,8 +122,8 @@ impl CloseProtocolStore {
                 repeated: true,
             });
         }
-        let active_work = state.activity.active_work();
-        let draft_decision_required = state.activity.needs_draft_decision();
+        let active_work = activity.active_work();
+        let draft_decision_required = activity.needs_draft_decision();
         if active_work.is_empty() && !draft_decision_required {
             state.allow_next_close = true;
             return CloseRequestOutcome::Allow;
@@ -133,7 +142,12 @@ impl CloseProtocolStore {
         })
     }
 
-    fn resolve(&self, request_id: &str, decision: CloseDecision) -> CloseResolution {
+    fn resolve(
+        &self,
+        request_id: &str,
+        decision: CloseDecision,
+        activity: &CloseActivity,
+    ) -> CloseResolution {
         let mut state = self.state.lock().expect("close protocol mutex poisoned");
         let Some(pending) = state.pending.as_ref() else {
             return invalid_resolution(request_id, "close_not_pending");
@@ -156,11 +170,9 @@ impl CloseProtocolStore {
                 }
             }
             CloseDecision::DiscardDraft => {
-                if !state.activity.active_work().is_empty() {
+                if !activity.active_work().is_empty() {
                     return invalid_resolution(request_id, "close_active_work");
                 }
-                state.activity.draft_dirty = false;
-                state.activity.draft_exported = true;
                 state.pending = None;
                 state.allow_next_close = true;
                 CloseResolution {
@@ -172,8 +184,11 @@ impl CloseProtocolStore {
                 }
             }
             CloseDecision::ExportDraft => {
-                if !state.activity.active_work().is_empty() {
+                if !activity.active_work().is_empty() {
                     return invalid_resolution(request_id, "close_active_work");
+                }
+                if !activity.needs_draft_decision() {
+                    return invalid_resolution(request_id, "close_export_not_required");
                 }
                 if let Some(pending) = state.pending.as_mut() {
                     pending.phase = PendingPhase::DraftExport;
@@ -189,7 +204,12 @@ impl CloseProtocolStore {
         }
     }
 
-    fn finish_export(&self, request_id: &str, succeeded: bool) -> CloseResolution {
+    fn finish_export(
+        &self,
+        request_id: &str,
+        succeeded: bool,
+        activity: &CloseActivity,
+    ) -> CloseResolution {
         let mut state = self.state.lock().expect("close protocol mutex poisoned");
         let Some(pending) = state.pending.as_ref() else {
             return invalid_resolution(request_id, "close_not_pending");
@@ -200,7 +220,7 @@ impl CloseProtocolStore {
         if pending.phase != PendingPhase::DraftExport {
             return invalid_resolution(request_id, "close_export_not_requested");
         }
-        if !succeeded {
+        if !succeeded || activity.needs_draft_decision() || !activity.active_work().is_empty() {
             if let Some(pending) = state.pending.as_mut() {
                 pending.phase = PendingPhase::Decision;
             }
@@ -212,8 +232,6 @@ impl CloseProtocolStore {
                 error_code: Some("draft_export_failed".to_owned()),
             };
         }
-        state.activity.draft_dirty = false;
-        state.activity.draft_exported = true;
         state.pending = None;
         state.allow_next_close = true;
         CloseResolution {
@@ -226,13 +244,12 @@ impl CloseProtocolStore {
     }
 
     #[cfg(test)]
-    fn pending_request(&self) -> Option<CloseRequestView> {
+    fn pending_request(&self, activity: &CloseActivity) -> Option<CloseRequestView> {
         let state = self.state.lock().expect("close protocol mutex poisoned");
         state.pending.as_ref().map(|pending| CloseRequestView {
             request_id: pending.request_id.clone(),
-            draft_decision_required: state.activity.needs_draft_decision(),
-            active_work: state
-                .activity
+            draft_decision_required: activity.needs_draft_decision(),
+            active_work: activity
                 .active_work()
                 .into_iter()
                 .map(str::to_owned)
@@ -274,7 +291,11 @@ fn close_window(app: &AppHandle) {
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
         let store = window.state::<CloseProtocolStore>();
-        match store.request() {
+        let activity = current_activity(
+            &window.state::<DesktopProjectSessionStore>(),
+            &window.state::<CodexAssistantStore>(),
+        );
+        match store.request(&activity) {
             CloseRequestOutcome::Allow => {}
             CloseRequestOutcome::Prompt(view) => {
                 api.prevent_close();
@@ -285,21 +306,16 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
 }
 
 #[tauri::command]
-pub fn set_close_activity(
-    store: tauri::State<'_, CloseProtocolStore>,
-    activity: CloseActivityInput,
-) -> CloseActivityInput {
-    store.set_activity(activity)
-}
-
-#[tauri::command]
 pub fn resolve_app_close(
     app: AppHandle,
     store: tauri::State<'_, CloseProtocolStore>,
+    project: tauri::State<'_, DesktopProjectSessionStore>,
+    assistant: tauri::State<'_, CodexAssistantStore>,
     request_id: String,
     decision: CloseDecision,
 ) -> CloseResolution {
-    let resolution = store.resolve(&request_id, decision);
+    let activity = current_activity(&project, &assistant);
+    let resolution = store.resolve(&request_id, decision, &activity);
     if resolution.close_started {
         close_window(&app);
     }
@@ -310,10 +326,13 @@ pub fn resolve_app_close(
 pub fn finish_app_close_draft_export(
     app: AppHandle,
     store: tauri::State<'_, CloseProtocolStore>,
+    project: tauri::State<'_, DesktopProjectSessionStore>,
+    assistant: tauri::State<'_, CodexAssistantStore>,
     request_id: String,
     succeeded: bool,
 ) -> CloseResolution {
-    let resolution = store.finish_export(&request_id, succeeded);
+    let activity = current_activity(&project, &assistant);
+    let resolution = store.finish_export(&request_id, succeeded, &activity);
     if resolution.close_started {
         close_window(&app);
     }
@@ -324,90 +343,114 @@ pub fn finish_app_close_draft_export(
 mod tests {
     use super::*;
 
-    fn dirty() -> CloseActivityInput {
-        CloseActivityInput {
+    fn dirty() -> CloseActivity {
+        CloseActivity {
             draft_dirty: true,
-            ..CloseActivityInput::default()
+            ..CloseActivity::default()
         }
     }
 
     #[test]
     fn clean_idle_close_is_allowed_without_prompt() {
         let store = CloseProtocolStore::default();
-        store.set_activity(CloseActivityInput::default());
-        assert!(matches!(store.request(), CloseRequestOutcome::Allow));
+        assert!(matches!(
+            store.request(&CloseActivity::default()),
+            CloseRequestOutcome::Allow
+        ));
     }
 
     #[test]
     fn dirty_draft_requires_one_stable_request_and_export() {
         let store = CloseProtocolStore::default();
-        store.set_activity(dirty());
-        let first = match store.request() {
+        let dirty = dirty();
+        let first = match store.request(&dirty) {
             CloseRequestOutcome::Prompt(view) => view,
             CloseRequestOutcome::Allow => panic!("dirty draft must prompt"),
         };
-        let repeated = match store.request() {
+        let repeated = match store.request(&dirty) {
             CloseRequestOutcome::Prompt(view) => view,
             CloseRequestOutcome::Allow => panic!("repeated close must remain pending"),
         };
         assert_eq!(first.request_id, repeated.request_id);
         assert!(repeated.repeated);
-        let prepared = store.resolve(&first.request_id, CloseDecision::ExportDraft);
+        let prepared = store.resolve(&first.request_id, CloseDecision::ExportDraft, &dirty);
         assert_eq!(prepared.status, "awaiting_draft_export");
-        let failed = store.finish_export(&first.request_id, false);
+        let failed = store.finish_export(&first.request_id, false, &dirty);
         assert_eq!(failed.status, "export_failed");
-        let cancelled = store.resolve(&first.request_id, CloseDecision::Cancel);
+        let cancelled = store.resolve(&first.request_id, CloseDecision::Cancel, &dirty);
         assert_eq!(cancelled.status, "cancelled");
-        assert!(store.pending_request().is_none());
+        assert!(store.pending_request(&dirty).is_none());
     }
 
     #[test]
     fn active_work_cannot_be_discarded_or_reported_stopped() {
         let store = CloseProtocolStore::default();
-        store.set_activity(CloseActivityInput {
-            run_active: true,
-            ai_turn_active: true,
+        let active = CloseActivity {
+            project_operation_active: true,
+            ai_activity_active: true,
             ..dirty()
-        });
-        let request = match store.request() {
+        };
+        let request = match store.request(&active) {
             CloseRequestOutcome::Prompt(view) => view,
             CloseRequestOutcome::Allow => panic!("active work must prompt"),
         };
-        let blocked = store.resolve(&request.request_id, CloseDecision::DiscardDraft);
+        let blocked = store.resolve(&request.request_id, CloseDecision::DiscardDraft, &active);
         assert_eq!(blocked.status, "blocked");
         assert_eq!(blocked.error_code.as_deref(), Some("close_active_work"));
-        let cancelled = store.resolve(&request.request_id, CloseDecision::Cancel);
+        let cancelled = store.resolve(&request.request_id, CloseDecision::Cancel, &active);
         assert_eq!(cancelled.status, "cancelled");
     }
 
     #[test]
     fn successful_export_marks_close_ready_only_after_completion() {
         let store = CloseProtocolStore::default();
-        store.set_activity(dirty());
-        let request = match store.request() {
+        let dirty = dirty();
+        let request = match store.request(&dirty) {
             CloseRequestOutcome::Prompt(view) => view,
             CloseRequestOutcome::Allow => panic!("dirty draft must prompt"),
         };
-        let prepared = store.resolve(&request.request_id, CloseDecision::ExportDraft);
+        let prepared = store.resolve(&request.request_id, CloseDecision::ExportDraft, &dirty);
         assert!(!prepared.close_started);
-        let finished = store.finish_export(&request.request_id, true);
+        let exported = CloseActivity {
+            draft_exported: true,
+            ..dirty
+        };
+        let finished = store.finish_export(&request.request_id, true, &exported);
         assert!(finished.close_started);
-        assert!(matches!(store.request(), CloseRequestOutcome::Allow));
+        assert!(matches!(
+            store.request(&exported),
+            CloseRequestOutcome::Allow
+        ));
     }
 
     #[test]
     fn stale_and_duplicate_resolutions_fail_closed() {
         let store = CloseProtocolStore::default();
-        store.set_activity(dirty());
-        let request = match store.request() {
+        let dirty = dirty();
+        let request = match store.request(&dirty) {
             CloseRequestOutcome::Prompt(view) => view,
             CloseRequestOutcome::Allow => panic!("dirty draft must prompt"),
         };
-        let stale = store.resolve("close-999", CloseDecision::Cancel);
+        let stale = store.resolve("close-999", CloseDecision::Cancel, &dirty);
         assert_eq!(stale.error_code.as_deref(), Some("close_request_mismatch"));
-        let cancelled = store.resolve(&request.request_id, CloseDecision::Cancel);
+        let cancelled = store.resolve(&request.request_id, CloseDecision::Cancel, &dirty);
         assert_eq!(cancelled.status, "cancelled");
-        let duplicate = store.resolve(&request.request_id, CloseDecision::Cancel);
+        let duplicate = store.resolve(&request.request_id, CloseDecision::Cancel, &dirty);
         assert_eq!(duplicate.error_code.as_deref(), Some("close_not_pending"));
+    }
+
+    #[test]
+    fn webview_cannot_claim_an_unexported_draft_was_exported() {
+        let store = CloseProtocolStore::default();
+        let dirty = dirty();
+        let request = match store.request(&dirty) {
+            CloseRequestOutcome::Prompt(view) => view,
+            CloseRequestOutcome::Allow => panic!("dirty draft must prompt"),
+        };
+        let prepared = store.resolve(&request.request_id, CloseDecision::ExportDraft, &dirty);
+        assert_eq!(prepared.status, "awaiting_draft_export");
+        let rejected = store.finish_export(&request.request_id, true, &dirty);
+        assert_eq!(rejected.status, "export_failed");
+        assert!(!rejected.close_started);
     }
 }

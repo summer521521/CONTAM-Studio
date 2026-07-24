@@ -35,7 +35,6 @@ pub fn run() {
             codex_app_server::interrupt_readonly_ai_turn,
             codex_app_server::clear_readonly_ai_session,
             codex_app_server::disconnect_codex_app_server,
-            close_protocol::set_close_activity,
             close_protocol::resolve_app_close,
             close_protocol::finish_app_close_draft_export
         ])

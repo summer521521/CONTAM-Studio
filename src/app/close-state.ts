@@ -1,15 +1,5 @@
 export const APP_CLOSE_REQUESTED_EVENT = "contam-studio://app-close-requested";
 
-export interface CloseActivityInput {
-  draft_dirty: boolean;
-  draft_exported: boolean;
-  patch_review: boolean;
-  run_active: boolean;
-  export_active: boolean;
-  ingestion_active: boolean;
-  ai_turn_active: boolean;
-}
-
 export interface CloseRequestView {
   request_id: string;
   draft_decision_required: boolean;
@@ -26,7 +16,7 @@ export interface CloseResolution {
 }
 
 const REQUEST_ID_PATTERN = /^close-[1-9][0-9]{0,18}$/;
-const ACTIVE_WORK = new Set(["patch_review", "run", "export", "ingestion", "ai_turn"]);
+const ACTIVE_WORK = new Set(["patch_review", "project_operation", "ai_turn"]);
 
 export function isSafeCloseRequest(value: CloseRequestView): boolean {
   return REQUEST_ID_PATTERN.test(value.request_id)
@@ -46,16 +36,4 @@ export function isSafeCloseResolution(value: CloseResolution, requestId: string)
     && typeof value.close_started === "boolean"
     && (value.error_code === null || /^[a-z0-9_]{1,80}$/.test(value.error_code))
     && (value.status === "closing" ? value.close_started && !value.needs_export && value.error_code === null : !value.close_started);
-}
-
-export function defaultCloseActivity(): CloseActivityInput {
-  return {
-    draft_dirty: false,
-    draft_exported: false,
-    patch_review: false,
-    run_active: false,
-    export_active: false,
-    ingestion_active: false,
-    ai_turn_active: false,
-  };
 }

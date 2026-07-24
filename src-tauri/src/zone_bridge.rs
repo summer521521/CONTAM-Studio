@@ -1079,6 +1079,14 @@ pub struct DesktopProjectSessionStore {
     operation_busy: AtomicBool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct ProjectCloseSnapshot {
+    pub(crate) draft_dirty: bool,
+    pub(crate) draft_exported: bool,
+    pub(crate) patch_review: bool,
+    pub(crate) operation_active: bool,
+}
+
 struct OperationGuard<'a> {
     busy: &'a AtomicBool,
 }
@@ -1090,6 +1098,20 @@ impl Drop for OperationGuard<'_> {
 }
 
 impl DesktopProjectSessionStore {
+    pub(crate) fn close_snapshot(&self) -> ProjectCloseSnapshot {
+        let state = self.state.lock().expect("desktop session mutex poisoned");
+        let draft = state
+            .active_project
+            .as_ref()
+            .map(ActiveProjectContext::draft_summary);
+        ProjectCloseSnapshot {
+            draft_dirty: draft.as_ref().is_some_and(|value| value.dirty),
+            draft_exported: draft.as_ref().is_some_and(|value| value.exported),
+            patch_review: state.planned_patch.is_some(),
+            operation_active: self.operation_busy.load(Ordering::Acquire),
+        }
+    }
+
     fn try_operation(&self) -> Option<OperationGuard<'_>> {
         self.operation_busy
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)

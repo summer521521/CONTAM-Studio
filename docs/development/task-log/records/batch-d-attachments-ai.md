@@ -5,7 +5,7 @@ task_id: BATCH-D
 phase: Wave 8-10
 checkpoint: D
 title: Bounded multimodal attachments, semantic AI gateway and complete simulation agent boundaries
-status: automated_verified
+status: blocked
 record_origin: live
 started_at_utc: 2026-07-24T12:18:47Z
 ended_at_utc: 2026-07-24T12:39:13.9859801Z
@@ -24,38 +24,38 @@ forbidden_scope:
   - F:\CONTAM Studio原工作区、用户PRJ/SIM/CSV、真实AppData、凭据、系统设置、全局依赖、远程传输、发布
 validation:
   - 开发中运行受影响的Python/Rust/前端定向测试；Batch D结束时运行一次Full和git diff --check。
-delivery_status: automated_verified
+delivery_status: blocked_not_integrated
 token_usage:
   input_tokens: null
   cached_input_tokens: null
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: Batch D功能、契约、Python/前端/Rust测试已纳入Batch E两次干净Full；PDF/Office真实渲染、远程App Server、用户披露和GUI验收标记pending_final_acceptance；当前实现不执行宏、脚本、公式、嵌入二进制或远程发送。
+notes: H-FINAL确认AttachmentBroker和Python AI gateway没有Tauri命令、React入口或Codex App Server接线，且附件类型识别、ZIP/Office/PDF处理、quarantine提交和AI嵌套权限检查仍有安全缺口。它们保留为内部研究代码，不从包顶层导出；本批产品交付状态为blocked。
 ```
 
 ## Status ledger
 
 | Card | Status | Evidence / note |
 | --- | --- | --- |
-| ATT-01 | automated_verified | Closed attachment taxonomy, limits, local-only default, evidence citation and privacy contract. |
-| ATT-02 | automated_verified | AttachmentBroker explicitly classifies, hashes and copies into owned quarantine; safe views omit absolute paths and removal only deletes owned copies. |
-| ATT-03 | automated_verified | ZIP traversal/encryption/executable/compression limits, PDF active-content refusal, image dimension limits and Office macro/external-link refusal are enforced before expensive work. |
-| ATT-04 | automated_verified | PNG/JPEG header dimensions and pixel cap are validated; sanitized derivative/EXIF stripping remains pending_final_acceptance because no renderer is enabled. |
+| ATT-01 | policy_only | 分类和上限契约存在，但没有产品入口。 |
+| ATT-02 | blocked | quarantine提交未达到并发独占要求，broker未接入桌面。 |
+| ATT-03 | blocked | magic、symlink、Unicode碰撞、嵌套和Office外链检查仍需修复。 |
+| ATT-04 | foundation_tested | 仅有图片头尺寸检查；无安全衍生图或GUI。 |
 | ATT-05 | pending_user | Bounded local PDF classification and evidence are present; visual renderer/licence and scanned-page validation remain pending_final_acceptance. |
 | ATT-06 | pending_user | DOCX/PPTX/ODT containers are treated as data with bounded XML text extraction; visual fidelity and renderer review remain pending_final_acceptance. |
-| ATT-07 | automated_verified | CSV/TSV previews enforce row/column/cell caps and keep formulas as untrusted data; no Excel automation or formula execution exists. |
-| ATT-08 | automated_verified | Text/structured/CONTAM artifact categories route through bounded evidence or trusted project/result paths; unsupported encodings fail closed. |
-| ATT-09 | automated_verified | ZIP entries are enumerated before extraction and reject traversal, collisions, encryption, executable content and expansion limits. |
-| ATT-10 | automated_verified | Attachment/AI contract and local tests cover path privacy, limits, active-content refusal, local-only disclosure and safe unsupported states. |
-| AI-01 | automated_verified | AI policy is disabled-by-default and separates local evidence, user-selected disclosure, patch and action-bundle approval risks. |
+| ATT-07 | foundation_tested | CSV/TSV预览函数有定向测试，未接入产品。 |
+| ATT-08 | blocked | 通用附件证据路由未接入可信项目/结果生产路径。 |
+| ATT-09 | blocked | ZIP拒绝规则不完整，不能作为安全解压器使用。 |
+| ATT-10 | blocked | 自动测试未覆盖H-FINAL发现的绕过，不能宣称附件审计完成。 |
+| AI-01 | policy_only | 默认关闭和风险分类仅存在于内部契约。 |
 | AI-02 | pending_user | Exact live App Server schema proof remains pending; no unverified protocol fields are enabled. |
 | AI-03 | pending_user | Existing Rust read-only App Server adapter remains the only live provider path; modular Python policy boundary is added without claiming live provider changes. |
-| AI-04 | automated_verified | AiEvidenceBundle is hash-bound, bounded, expiring and path/raw-PRJ rejecting with exact preview serialization. |
-| AI-05 | automated_verified | DomainToolGateway exposes only fixed read-only semantic tools and rejects path/Shell/raw-content authority. |
-| AI-06 | automated_verified | ApprovalBroker binds exact action hash, user, risk, expiry and single-use consumption. |
-| AI-07 | automated_verified | SimulationPlan records evidence, open questions, assumptions, actions, risks and explicit stop reason; hidden defaults are rejected. |
+| AI-04 | blocked | 顶层路径检查可被嵌套对象绕过，且未接入现有Rust披露路径。 |
+| AI-05 | blocked | Python gateway未接入App Server，不能代表生产语义工具。 |
+| AI-06 | blocked | ApprovalBroker缺少完整TTL上限、生产身份重绑定和持久化。 |
+| AI-07 | foundation_tested | SimulationPlan只是数据模型，不会自动完成仿真。 |
 | AI-08 | pending_user | Remote multimodal transport remains disabled until exact provider schema and user disclosure evidence are available. |
-| AI-09 | automated_verified | AiTrace stores provider/model label, bundle hash, policy decisions and citations without credentials or paths. |
+| AI-09 | blocked | Trace未接入生产路径，且写入提交仍需并发独占修复。 |
 | AI-10 | pending_user | Existing Assistant workbench remains read-only; full multimodal GUI and accessibility acceptance remain pending_final_acceptance. |
-| AI-11 | automated_verified | Automated attachment/AI authority audit is complete; state-changing AI mode remains feature-gated behind the existing Patch/approval contract. |
+| AI-11 | blocked | 状态改变AI尚未实现；现有产品仍严格只读。 |

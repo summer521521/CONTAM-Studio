@@ -1,8 +1,10 @@
 # 当前状态
 
-记录日期：2026-07-22。
+记录日期：2026-07-24。
 
-当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文只保留按阶段组织的摘要。当前已落地顺序为Phase 2只读Zone、Phase 3安全草稿、Phase 4受控运行、Phase 5A/5B/5C官方结果提取与Zone分析、Phase 6A只读AI助手；完整PRJ、AI写入、分发和用户验证状态不从阶段名称推断。
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。当前桌面纵向路径包括受支持PRJ的Zone读取、单Zone体积草稿修改、官方ContamX运行、`zone_air_state`结果分析/CSV导出和Codex只读助手。
+
+候选分支新增的完整PRJ投影、进程/存储/结果、附件和AI批准Python模块是内部研究基础：它们有定向测试，但没有Tauri命令、React入口或真实工具/GUI证据。它们不能被描述为已交付的附件助手、AI写入、自动仿真Agent、完整PRJ编辑器或发行版。
 
 ## Phase 6A Codex只读AI助手
 

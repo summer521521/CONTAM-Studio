@@ -5,7 +5,7 @@ task_id: BATCH-C
 phase: Wave 5-7
 checkpoint: C
 title: Controlled processes, trusted results, studies, reports and Windows candidate boundaries
-status: automated_verified
+status: blocked
 record_origin: live
 started_at_utc: 2026-07-24T12:18:47Z
 ended_at_utc: 2026-07-24T12:39:13.9859801Z
@@ -25,39 +25,39 @@ forbidden_scope:
   - F:\CONTAM Studio原工作区、用户PRJ/SIM/CSV、真实AppData、凭据、系统设置、全局依赖、推送和发布
 validation:
   - 开发中运行受影响的Python/Rust/前端定向测试；Batch C结束时运行一次Full和git diff --check。
-delivery_status: automated_verified
+delivery_status: blocked_not_integrated
 token_usage:
   input_tokens: null
   cached_input_tokens: null
   output_tokens: null
   total_tokens: null
   source: unavailable
-notes: Batch C功能、契约、Python/前端/Rust测试已纳入Batch E两次干净Full；真实Windows Job Object、官方ContamX/SimRead、干净电脑、签名和发行发布证据标记pending_final_acceptance，危险能力保持关闭。
+notes: H-FINAL确认本批新增Python代码是未接入桌面生产路径的研究基础。ProcessController只验证状态词，不控制真实进程或Windows Job Object；存储、运行历史、通用结果、比较、研究和报告也没有Tauri/React入口。本批产品交付状态改为blocked，定向测试仅证明内部模型行为。
 ```
 
 ## Status ledger
 
 | Card | Status | Evidence / note |
 | --- | --- | --- |
-| PROC-01 | automated_verified | Added bounded ProcessController Lease state machine with Job/PID/stream/cleanup proof requirements, shared deadline and honest timeout/cancel/unknown_cleanup states; real Windows Job Object evidence remains pending_final_acceptance. |
+| PROC-01 | blocked | Python状态模型未启动或治理进程，也未接入现有Rust/Python进程入口；Windows Job Object和统一取消/退出证据未实现。 |
 | PROC-02 | pending_user | Existing Rust/Python entrypoints retain their established bounded wrappers; complete bidirectional inventory and real Job Object routing require final Windows evidence and are tracked without enabling a bypass. |
-| TOOL-01 | automated_verified | Added explicit ToolRegistry with missing/unsupported/unverified/verified/changed/blocked states, hash/version/architecture identity, replacement detection and path-free safe views; no PATH/registry scan. |
+| TOOL-01 | foundation_tested | ToolRegistry内部模型有定向测试，但没有桌面生产入口。 |
 | TOOL-02 | pending_user | Existing Settings tool surfaces and safe identity views are present; native chooser and real target-Windows probe remain pending_final_acceptance. |
-| RUN-01 | automated_verified | Process cancellation proof and Run status vocabulary reject late success and preserve prior result identity. |
-| RUN-02 | automated_verified | Added hash-bound RunRecord and non-overwriting persistence for baseline, Revision, Scenario, tools, inputs and evidence. |
+| RUN-01 | foundation_tested | 仅验证候选状态模型；真实ContamX入口仍使用既有运行器。 |
+| RUN-02 | blocked | RunRecord未接入生产路径，且H-FINAL发现其非覆盖写入需要并发提交修复。 |
 | INPUT-01 | automated_verified | Companion boundary from Batch B is reused for explicit hash-bound inputs; recursive discovery and untrusted path expansion remain forbidden. |
-| DATA-01 | automated_verified | Added OwnedArtifactStore categories, commit-last manifests, soft/hard quotas, protected cleanup preview and confirmation-only deletion. |
-| RESULT-01 | automated_verified | Added trusted ResultRecord with run/scenario/baseline/revision/tool/parser/calculator identity, bounded samples and immutable hash. |
-| RESULT-02 | automated_verified | Added closed result paging cursors and deterministic min/max/mean/count/missing statistics. |
+| DATA-01 | blocked | OwnedArtifactStore未接入生产路径，非覆盖提交仍存在检查后替换竞争。 |
+| RESULT-01 | foundation_tested | 通用ResultRecord为内部模型；当前产品仍只启用既有`zone_air_state`纵向路径。 |
+| RESULT-02 | foundation_tested | 分页与统计仅有内部定向测试。 |
 | RESULT-03 | pending_user | Existing official SimRead Zone result adapter remains the only enabled sourced vertical slice; new generic result types are not claimed. |
-| RESULT-04 | automated_verified | Result samples use stable object IDs, exact time grids and bounded pages; no raw path or unbounded transport is exposed by the new backend. |
-| COMPARE-01 | automated_verified | Added exact-match ComparisonRecord requiring profile/object/unit/grid/parser/calculator compatibility and explicit zero/missing policies. |
+| RESULT-04 | foundation_tested | 未形成新的桌面后端或IPC入口。 |
+| COMPARE-01 | foundation_tested | ComparisonRecord尚未接入GUI或真实结果工作流。 |
 | COMPARE-02 | pending_user | Existing UI/export path remains available; manual comparison GUI and target-user evidence remain pending_final_acceptance. |
-| SWEEP-01 | automated_verified | Added bounded registered-parameter SweepPlan with unique values, case list, run/storage caps and approval hash. |
-| REPORT-01 | automated_verified | Added deterministic ReportModel and non-overwriting HTML/JSON output with assumptions, lineage, tools, evidence and separately labeled AI narrative. |
-| RESULT-05 | automated_verified | Automated result/comparison/report boundaries are covered; real official-tool-to-report and clean-machine rows remain pending_final_acceptance. |
-| DIST-01 | automated_verified | Candidate distribution policy remains per-user Tauri, standard-user, offline-first, external official tools, no signing/update channel, and retained data. |
-| DIST-02 | automated_verified | Existing locked Python/Node/Rust manifests and package-origin checks remain the dependency split evidence. |
+| SWEEP-01 | foundation_tested | SweepPlan是未接线的有界数据模型，不会执行参数研究。 |
+| REPORT-01 | blocked | ReportModel未接入产品，输出提交仍需并发安全修复。 |
+| RESULT-05 | blocked | 未完成官方工具到通用结果/比较/报告的生产闭环。 |
+| DIST-01 | policy_only | 只形成候选策略，没有安装包。 |
+| DIST-02 | foundation_tested | 现有锁文件和来源检查通过，不代表打包完成。 |
 | DIST-03 | pending_user | Frozen worker spike is represented by locked source contracts; binary build, size and DLL evidence require target Windows packaging review. |
 | DIST-04 | pending_user | Tauri packaging boundary remains explicit without generic Shell/filesystem capability; packaged sidecar verification awaits clean-machine evidence. |
 | DIST-05 | pending_user | Installer/About/notices/SBOM publication artifacts remain unsigned and unpublished pending target review. |
