@@ -1,0 +1,9 @@
+{
+  "schema_version": "qa_release.v1",
+  "modes": ["Docs", "Fast", "Full", "Package", "RealTool", "Security", "AgentEval", "Release"],
+  "required_local_checks": ["task_log", "contracts", "python", "frontend", "rust", "diff_check"],
+  "security": {"third_party_pen_test": false, "path_leak": false, "source_overwrite": false, "active_content_execution": false},
+  "performance": {"validation_bypass": false, "full_data_required": true, "accessibility_required": true},
+  "release": {"signed": false, "published": false, "auto_update": false, "ai_default": "disabled", "remote_default": "disabled"},
+  "manual_rows": ["gui", "real_tool", "clean_machine", "user_study", "h_review", "u_review"]
+}

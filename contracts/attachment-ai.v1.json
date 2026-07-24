@@ -1,0 +1,24 @@
+{
+  "schema_version": "attachment_ai.v1",
+  "limits": {
+    "file_bytes": 52428800,
+    "batch_bytes": 104857600,
+    "image_pixels": 40000000,
+    "pdf_pages": 200,
+    "workbook_sheets": 20,
+    "rows": 100000,
+    "columns": 200,
+    "cells": 1000000,
+    "archive_entries": 1000,
+    "archive_expanded_bytes": 524288000,
+    "archive_ratio": 20,
+    "archive_nesting": 2
+  },
+  "categories": ["image", "pdf", "office", "spreadsheet", "text", "structured", "archive", "contam_project", "contam_artifact", "unsupported_binary"],
+  "active_content": ["macro", "script", "embedded_executable", "javascript", "encrypted", "external_link"],
+  "remote_default": "disabled",
+  "path_visibility": "never_to_webview_or_model",
+  "ai_modes": ["explain", "collaborate", "prepare", "approved_execute"],
+  "machine_authority": ["shell_forbidden", "generic_filesystem_forbidden", "raw_prj_forbidden", "dynamic_mcp_forbidden"],
+  "approval": {"single_use": true, "hash_bound": true, "expiry_minutes": 15}
+}

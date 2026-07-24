@@ -1,0 +1,42 @@
+{
+  "schema_version": "batch_c.v1",
+  "process": {
+    "statuses": ["queued", "starting", "running", "cancel_requested", "succeeded", "failed", "timed_out", "cancelled", "unknown_cleanup"],
+    "job_proof_required": true,
+    "pid_proof_required": true,
+    "stream_frozen_required": true,
+    "shared_absolute_deadline": true,
+    "late_success": "reject"
+  },
+  "tools": {
+    "states": ["missing", "unsupported", "unverified", "verified", "changed", "blocked"],
+    "identity": ["name", "version", "sha256", "size_bytes", "architecture", "provenance"],
+    "discovery": "explicit_selection_only"
+  },
+  "results": {
+    "max_page_size": 512,
+    "cursor": "result_hash_bound",
+    "statistics": "deterministic_backend",
+    "comparison": "exact_profile_object_unit_grid_parser_calculator_match"
+  },
+  "storage": {
+    "soft_quota_bytes": 10737418240,
+    "hard_quota_bytes": 21474836480,
+    "external_source_cleanup": false,
+    "export_cleanup": false,
+    "commit_last": true
+  },
+  "study": {
+    "registered_parameters": ["volume_m3"],
+    "max_cases": 32,
+    "sequential_default": true,
+    "no_optimization_claim": true
+  },
+  "distribution": {
+    "standard_user": true,
+    "offline_core": true,
+    "official_tools_external": true,
+    "signed_or_published": false,
+    "auto_update": false
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": "supported_domain.v1",
+  "profiles": {
+    "airflow": {
+      "name": "strict_contam_3_4_airflow_v1",
+      "endpoint_categories": ["outdoor", "zone"],
+      "supported_flow_models": ["plr_orfc", "plr_leak3"],
+      "supported_path_flags": [0, 1],
+      "unsupported_policy": "reject_whole_path_as_opaque"
+    },
+    "schedule": {
+      "time_basis": "minutes_since_midnight",
+      "coverage": [0, 1440],
+      "interpolations": ["step", "linear"],
+      "page_limit": 512
+    },
+    "sources": {
+      "kinds": ["source_rate", "occupancy_proxy", "outdoor_concentration"],
+      "units": ["kg/s", "mg/s", "kg/m3", "mg/m3"]
+    }
+  },
+  "compatibility_statuses": ["supported_editable", "supported_readonly", "incompatible", "corrupt", "missing_companion", "tool_incompatible"],
+  "companion_policy": {
+    "explicit_declarations_only": true,
+    "recursive_discovery": false,
+    "path_escape": "reject",
+    "hash_binding": true,
+    "max_bytes": 52428800
+  },
+  "write_gate": {
+    "requires_patch_transaction": true,
+    "raw_prj_write": false,
+    "ai_write_default": false
+  }
+}
