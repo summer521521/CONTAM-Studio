@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "name": "PatchTransaction",
+  "authority": "rust",
+  "schema_version": "patch_transaction.v1",
+  "required_fields": [
+    "transaction_id",
+    "baseline_sha256",
+    "current_revision_id",
+    "profile",
+    "object_id",
+    "operation",
+    "before",
+    "proposed",
+    "preconditions",
+    "evidence",
+    "expires_at_utc",
+    "idempotency_key",
+    "provenance"
+  ],
+  "allowed_operations": [
+    {
+      "kind": "replace_scalar",
+      "object_category": "zone",
+      "field": "volume_m3",
+      "unit": "m3",
+      "cardinality": "one",
+      "requires_reparse": true
+    }
+  ],
+  "forbidden_authority_fields": [
+    "source_path",
+    "output_path",
+    "byte_start",
+    "byte_end",
+    "model_path",
+    "ui_path",
+    "contam_number"
+  ],
+  "stale_conditions": [
+    "baseline_hash_changed",
+    "revision_changed",
+    "object_missing",
+    "precondition_changed",
+    "profile_mismatch",
+    "expired",
+    "duplicate_idempotency_key"
+  ],
+  "approval": {
+    "diff_required": true,
+    "user_confirmation_required": true,
+    "multi_operation": "reject_until_action_bundle_v1",
+    "apply_target": "application_owned_revision_copy",
+    "source_overwrite": false
+  },
+  "provenance_required": ["actor", "entrypoint", "request_id", "created_at_utc"]
+}

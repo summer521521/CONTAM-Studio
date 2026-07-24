@@ -57,7 +57,7 @@ notes: 外部GUI、真实ContamX/SimRead、干净电脑和用户研究只标记p
 | DOM-08 | pending | Minimal controls and companions. |
 | DOM-09 | pending | Compatibility classification. |
 | DOM-10 | pending | Automated domain audit. |
-| DRAFT-01 | pending | PatchTransaction contract. |
+| DRAFT-01 | automated_verified | ADR-015, closed JSON contract, and mutation checks freeze the single verified Zone volume operation and fail-closed authority fields; H-FINAL review remains external. |
 | DRAFT-02 | pending | First semantic operation. |
 | DRAFT-03 | pending | Second sourced operation or reasoned deferral. |
 | DRAFT-04 | pending | Persistent immutable history. |
