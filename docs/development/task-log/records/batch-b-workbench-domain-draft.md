@@ -48,7 +48,7 @@ notes: 外部GUI、真实ContamX/SimRead、干净电脑和用户研究只标记p
 | FE-07 | automated_verified | Supported Zone explorer uses stable zone IDs for selection and search navigation; no-project inspector is an explicit empty state. |
 | FE-08 | automated_verified | Settings destination now presents language/theme, privacy/AI opt-in, tool readiness, offline help, storage and recovery boundaries; system-level configuration and support export remain pending_final_acceptance. |
 | DOM-01 | automated_verified | Fixture manifest binds all tracked PRJ fixtures to provenance, source licence/readme, SHA-256, size, profile, intended test, and exclusions; mutation tests reject identity and derived-output bypasses. |
-| DOM-02 | pending | Lossless document envelope. |
+| DOM-02 | automated_verified | Conservative Python DocumentEnvelope records byte hash/size, ASCII encoding, LF/CRLF/mixed evidence, final newline, bounded line spans, opaque sections and read-only policy; 7 tests plus machine contract pass. |
 | DOM-03 | pending | Stable IDs and reference graph. |
 | DOM-04 | pending | Level and Zone projection. |
 | DOM-05 | pending | Airflow paths/components. |

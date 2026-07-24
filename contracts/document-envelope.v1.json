@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "name": "DocumentEnvelope",
+  "schema_version": "document_envelope.v1",
+  "max_bytes": 16777216,
+  "max_line_bytes": 1048576,
+  "encodings": ["ascii"],
+  "newline_styles": ["lf", "crlf", "mixed", "none"],
+  "required_fields": [
+    "source_sha256",
+    "source_size_bytes",
+    "encoding",
+    "newline_style",
+    "final_newline",
+    "line_spans",
+    "opaque_sections",
+    "profile",
+    "editable"
+  ],
+  "unknown_policy": "preserve_bytes_and_read_only",
+  "write_policy": "reject_until_profile_writer_is_proven"
+}
