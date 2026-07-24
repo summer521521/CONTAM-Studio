@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "root": "fixtures/contam",
+  "redistribution_policy": "only_manifested_sources",
+  "forbidden_derived_extensions": [".sim", ".nfr", ".log", ".csv"],
+  "fixtures": [
+    {
+      "path": "official-contamxpy/test_GetPrjInfo.prj",
+      "provenance": "official-contamxpy",
+      "primary_source": "official-contamxpy repository test fixture",
+      "license_file": "official-contamxpy/LICENSE.txt",
+      "version": "repository fixture; pinned by SHA-256",
+      "sha256": "CE37F7BFB7F95AC49BABB117E49A22BBBA5DA7694491060B3166554EFCCCD96E",
+      "size_bytes": 10978,
+      "profile": "strict_contam_3_4_simple_zone_v1",
+      "intended_test": "official reader and bridge golden",
+      "exclusions": ["not a complete authoring template", "no derived simulation output"]
+    },
+    {
+      "path": "official-contamxpy/valThreeZonesWthCtm-UseApi.prj",
+      "provenance": "official-contamxpy",
+      "primary_source": "official-contamxpy repository validation fixture",
+      "license_file": "official-contamxpy/LICENSE.txt",
+      "version": "repository fixture; pinned by SHA-256",
+      "sha256": "1CAFB2F0FEF511F19EF88358238A1C1175C593187691FF7545DB982F5E6E75ED",
+      "size_bytes": 9932,
+      "profile": "strict_contam_3_4_simple_zone_v1",
+      "intended_test": "multi-Zone identity and bridge contract",
+      "exclusions": ["unsupported non-Zone sections remain opaque", "no derived simulation output"]
+    },
+    {
+      "path": "official-nist-tutorials/demo1c.prj",
+      "provenance": "official-nist-tutorials",
+      "primary_source": "NIST CONTAM tutorial fixture",
+      "license_file": "official-nist-tutorials/README.md",
+      "version": "tutorial fixture; pinned by SHA-256",
+      "sha256": "1E2623D8904C0D37F0EB207099782AD2C1895DBA4032E0511B9C8A188748F406",
+      "size_bytes": 7668,
+      "profile": "strict_contam_3_4_simple_zone_v1",
+      "intended_test": "official tutorial reader coverage",
+      "exclusions": ["not evidence of full PRJ support", "no derived simulation output"]
+    }
+  ]
+}
