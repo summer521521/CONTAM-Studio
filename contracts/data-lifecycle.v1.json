@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "draft_history",
+      "path": "src-tauri/src/zone_bridge.rs",
+      "functions": ["create_controlled_draft_root", "remove_owned_draft_root", "export_active_project_draft_copy"],
+      "joins": ["project-drafts", "snapshots"]
+    },
+    {
+      "id": "run_results",
+      "path": "src-tauri/src/zone_bridge.rs",
+      "functions": ["run_active_contam_project", "validate_contamx_run_result", "canonicalize_manifest_path"],
+      "joins": ["runs", "evidence", "manifest.json"]
+    },
+    {
+      "id": "ai_archive",
+      "path": "src-tauri/src/codex_app_server.rs",
+      "functions": ["archive_file_path", "write_archive_file", "persist_completed_ai_answer"],
+      "joins": ["ai", "conversation-archive", "archive.json"]
+    },
+    {
+      "id": "contamx_workspace",
+      "path": "python/src/contam_studio_core/contamx_runner.py",
+      "functions": ["run_contamx", "_copy_verified_input", "_atomic_manifest_write"],
+      "joins": ["workspace", "evidence", "manifest.json"]
+    },
+    {
+      "id": "simread_workspace",
+      "path": "python/src/contam_studio_core/simread_runner.py",
+      "functions": ["extract_zone_air_state", "_write_manifest", "_failure_manifest"],
+      "joins": ["workspace", "evidence", "result-manifest.json"]
+    }
+  ],
+  "allowed_rust_literal_joins": [
+    "ai", "archive.json", "bin", "codex-installer", "codex-runtime", "codex.exe", "Codex", "conversation-archive",
+    "install-official-codex.ps1", "OpenAI", "powershell.exe", "Programs", "System32", "v1.0", "WindowsPowerShell",
+    ",", "evidence", "manifest.json", "project-drafts", "python/.venv/Scripts/python.exe", "result-extractions", "runs", "snapshots"
+  ]
+}

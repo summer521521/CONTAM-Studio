@@ -4245,6 +4245,7 @@ fn validate_draft_revision(
     active: &ActiveProjectContext,
     revision: &DraftRevision,
     request_id: &str,
+    allow_external_source_path: bool,
 ) -> Result<ProjectInspection, ReaderDiagnostic> {
     let revision_index = active
         .revisions
@@ -4262,7 +4263,7 @@ fn validate_draft_revision(
             && revision.parent_revision_id.is_none()
             && revision.patch.is_none()
             && !revision.application_owned
-            && revision.source_path == active.baseline_source_path
+            && (allow_external_source_path || revision.source_path == active.baseline_source_path)
             && revision.source_sha256 == active.baseline_source_sha256
             && revision.source_size_bytes == active.baseline_source_size_bytes
     } else {
@@ -4423,7 +4424,12 @@ async fn switch_project_draft(
     let target_revision = active.revisions[target_cursor].clone();
     let validation_request = request_id.clone();
     let project = match tauri::async_runtime::spawn_blocking(move || {
-        validate_draft_revision(&validation_active, &target_revision, &validation_request)
+        validate_draft_revision(
+            &validation_active,
+            &target_revision,
+            &validation_request,
+            false,
+        )
     })
     .await
     {
@@ -4548,6 +4554,7 @@ fn validate_draft_export_destination(
     Ok(output)
 }
 
+#[cfg(test)]
 fn copy_draft_atomically(source: &Path, output: &Path) -> Result<(), &'static str> {
     copy_draft_atomically_with_commit(source, output, |temporary, output| {
         std::fs::hard_link(temporary, output)
@@ -4627,8 +4634,52 @@ fn verify_draft_export_copy(
     })?;
     let mut exported_revision = active.active_revision().clone();
     exported_revision.source_path = canonical_output;
-    let project = validate_draft_revision(active, &exported_revision, request_id)?;
+    let project = validate_draft_revision(active, &exported_revision, request_id, true)?;
     Ok((sha256, size, project))
+}
+
+fn remove_owned_draft_export(active: &ActiveProjectContext, output: &Path) {
+    let owned = sha256_file(output).is_ok_and(|(sha256, size)| {
+        size == active.source_size_bytes && sha256.eq_ignore_ascii_case(&active.source_sha256)
+    });
+    if owned {
+        let _ = std::fs::remove_file(output);
+    }
+}
+
+fn export_draft_copy_with_commit<CommitStep>(
+    active: &ActiveProjectContext,
+    output: &Path,
+    request_id: &str,
+    commit_step: CommitStep,
+) -> Result<(String, u64, ProjectInspection), ReaderDiagnostic>
+where
+    CommitStep: FnOnce(&Path, &Path) -> std::io::Result<()>,
+{
+    if let Err(code) = copy_draft_atomically_with_commit(&active.source_path, output, commit_step) {
+        return Err(host_diagnostic(
+            code,
+            "The draft copy could not be written.",
+            BTreeMap::new(),
+        ));
+    }
+    match verify_draft_export_copy(active, output, request_id) {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            remove_owned_draft_export(active, output);
+            Err(error)
+        }
+    }
+}
+
+fn export_draft_copy(
+    active: &ActiveProjectContext,
+    output: &Path,
+    request_id: &str,
+) -> Result<(String, u64, ProjectInspection), ReaderDiagnostic> {
+    export_draft_copy_with_commit(active, output, request_id, |temporary, output| {
+        std::fs::hard_link(temporary, output)
+    })
 }
 
 #[tauri::command]
@@ -4769,27 +4820,15 @@ pub async fn export_active_project_draft_copy(
             )
         }
     };
-    if let Err(code) = copy_draft_atomically(&active.source_path, &output) {
-        return draft_export_failure(
-            &request_id,
-            host_diagnostic(
-                code,
-                "The draft copy could not be written.",
-                BTreeMap::new(),
-            ),
-        );
-    }
-    let verification = verify_draft_export_copy(&active, &output, &request_id);
-    let (sha256, size, project) = match verification {
+    let (sha256, size, project) = match export_draft_copy(&active, &output, &request_id) {
         Ok(value) => value,
         Err(error) => {
-            let _ = std::fs::remove_file(&output);
             return draft_export_failure(&request_id, error);
         }
     };
     let mut state = store.state.lock().expect("desktop session mutex poisoned");
     let Some(current) = state.active_project.as_mut() else {
-        let _ = std::fs::remove_file(&output);
+        remove_owned_draft_export(&active, &output);
         return draft_export_failure(
             &request_id,
             host_diagnostic(
@@ -4802,7 +4841,7 @@ pub async fn export_active_project_draft_copy(
     if current.project_session_id != project_session_id
         || current.active_revision().revision_id != revision_id
     {
-        let _ = std::fs::remove_file(&output);
+        remove_owned_draft_export(&active, &output);
         return draft_export_failure(
             &request_id,
             host_diagnostic(

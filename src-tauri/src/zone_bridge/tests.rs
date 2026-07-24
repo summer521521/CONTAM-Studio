@@ -13,6 +13,11 @@ fn test_draft_root(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("contam-studio-{label}-{}", std::process::id()))
 }
 
+fn fnd06_root(label: &str) -> PathBuf {
+    PathBuf::from(r"F:\Codex_File\temp\contam-studio")
+        .join(format!("fnd-06-{label}-{}", std::process::id()))
+}
+
 fn test_run_summary(run_id: &str) -> ContamXRunSummaryView {
     ContamXRunSummaryView {
         status: "succeeded".into(),
@@ -434,16 +439,18 @@ fn immutable_draft_history_preserves_zone_ids_and_truncates_redo() {
     assert_eq!(active.zones[0].volume_m3, 700.0);
     assert_eq!(fs::read(&revision1_path).unwrap(), revision1_bytes);
 
-    let revision1 = validate_draft_revision(&active, &active.revisions[1], "undo-r1").unwrap();
+    let revision1 =
+        validate_draft_revision(&active, &active.revisions[1], "undo-r1", false).unwrap();
     active.revisions[1].project = revision1;
     active.sync_to_revision(1);
     assert!(active.draft_summary().can_redo);
-    let baseline = validate_draft_revision(&active, &active.revisions[0], "undo-r0").unwrap();
+    let baseline =
+        validate_draft_revision(&active, &active.revisions[0], "undo-r0", false).unwrap();
     active.revisions[0].project = baseline;
     active.sync_to_revision(0);
     assert_eq!(active.zones[0].volume_m3, 600.0);
     assert_eq!(active.zones[0].zone_id, zone_id);
-    let redone = validate_draft_revision(&active, &active.revisions[1], "redo-r1").unwrap();
+    let redone = validate_draft_revision(&active, &active.revisions[1], "redo-r1", false).unwrap();
     active.revisions[1].project = redone;
     active.sync_to_revision(1);
 
@@ -480,7 +487,8 @@ fn changed_baseline_is_rejected_without_moving_the_history_cursor() {
     let mut bytes = fs::read(&source).unwrap();
     bytes.push(b'\n');
     fs::write(&source, bytes).unwrap();
-    let error = validate_draft_revision(&active, &active.revisions[0], "undo-changed").unwrap_err();
+    let error =
+        validate_draft_revision(&active, &active.revisions[0], "undo-changed", false).unwrap_err();
     assert_eq!(error.code, "draft_baseline_changed");
     assert_eq!(active.revision_cursor, 1);
     let _ = fs::remove_dir_all(&active.draft_root);
@@ -568,6 +576,100 @@ fn draft_copy_commit_race_preserves_competing_target_and_cleans_temporary_file()
             .ends_with(".draft.tmp")
     }));
 
+    fs::remove_dir_all(root).unwrap();
+    let _ = fs::remove_dir_all(&active.draft_root);
+}
+
+#[test]
+fn draft_export_command_path_accepts_lowercase_source_hash() {
+    let fixture = primary_fixture();
+    let project = execute_read(&fixture, "draft-command-lowercase")
+        .result
+        .unwrap();
+    let active = active_context("draft-command-lowercase", fixture, &project);
+    let _ = fs::remove_dir_all(&active.draft_root);
+    let root = fnd06_root("lowercase");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let output = root.join("draft-command-lowercase.prj");
+
+    let (sha256, size, verified_project) =
+        export_draft_copy(&active, &output, "draft-command-lowercase-request").unwrap();
+    assert!(sha256.eq_ignore_ascii_case(&active.source_sha256));
+    assert_eq!(size, active.source_size_bytes);
+    assert_eq!(verified_project.zones, active.zones);
+    assert_eq!(sha256, sha256.to_ascii_uppercase());
+
+    fs::remove_dir_all(root).unwrap();
+    let _ = fs::remove_dir_all(&active.draft_root);
+}
+
+#[test]
+fn draft_export_command_path_preserves_competing_target_on_verification_failure() {
+    let fixture = primary_fixture();
+    let project = execute_read(&fixture, "draft-command-verify-race")
+        .result
+        .unwrap();
+    let active = active_context("draft-command-verify-race", fixture, &project);
+    let _ = fs::remove_dir_all(&active.draft_root);
+    let root = fnd06_root("verify-race");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let output = root.join("draft-command-verify-race.prj");
+    let sentinel = b"competing target must survive verification cleanup";
+
+    let result = export_draft_copy_with_commit(
+        &active,
+        &output,
+        "draft-command-verify-race-request",
+        |_, output| {
+            fs::write(output, sentinel)?;
+            Ok(())
+        },
+    );
+
+    assert_eq!(result.unwrap_err().code, "draft_export_verification_failed");
+    assert_eq!(fs::read(&output).unwrap(), sentinel);
+    fs::remove_dir_all(root).unwrap();
+    let _ = fs::remove_dir_all(&active.draft_root);
+}
+
+#[test]
+fn draft_export_command_path_preserves_competing_target_on_commit_failure() {
+    let fixture = primary_fixture();
+    let project = execute_read(&fixture, "draft-command-commit-race")
+        .result
+        .unwrap();
+    let active = active_context("draft-command-commit-race", fixture, &project);
+    let _ = fs::remove_dir_all(&active.draft_root);
+    let root = fnd06_root("commit-race");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let output = root.join("draft-command-commit-race.prj");
+    let sentinel = b"competing target must survive commit failure";
+
+    let result = export_draft_copy_with_commit(
+        &active,
+        &output,
+        "draft-command-commit-race-request",
+        |_, output| {
+            fs::write(output, sentinel)?;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "target was created concurrently",
+            ))
+        },
+    );
+
+    assert_eq!(result.unwrap_err().code, "draft_export_destination_exists");
+    assert_eq!(fs::read(&output).unwrap(), sentinel);
+    assert!(!fs::read_dir(&root).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".draft.tmp")
+    }));
     fs::remove_dir_all(root).unwrap();
     let _ = fs::remove_dir_all(&active.draft_root);
 }

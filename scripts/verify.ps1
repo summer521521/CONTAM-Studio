@@ -296,6 +296,8 @@ function Check-Docs {
     Invoke-Tool "Bridge JSON placeholder mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-bridge-json-placeholder-contract-mutations.ps1")) $Root | Out-Null
     Invoke-Tool "Task log contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-task-log-contract.ps1")) $Root | Out-Null
     Invoke-Tool "Task log contract mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-task-log-contract-mutations.ps1")) $Root | Out-Null
+    Invoke-Tool "Data lifecycle contract" "node" @("scripts\tests\test-data-lifecycle-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Data lifecycle mutations" "node" @("scripts\tests\test-data-lifecycle-contract-mutations.mjs", $Root) | Out-Null
 
     $markdownPaths = @(
         (Get-TrackedPaths "*.md")

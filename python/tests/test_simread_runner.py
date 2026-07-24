@@ -48,6 +48,28 @@ def test_result_root_conflict_diagnostic_code_is_stable() -> None:
     assert "result_root_conflicts_with_source" in simread_runner.ERROR_EXIT_CODES
 
 
+def test_result_process_stability_uses_bounded_metadata() -> None:
+    base = {
+        "extraction_id": "extraction-1",
+        "status": "failed",
+        "started_at_utc": "2026-07-24T00:00:00Z",
+        "ended_at_utc": "2026-07-24T00:00:01Z",
+        "result_type": "zone_air_state",
+        "zone_number": 1,
+        "generated_outputs": [],
+        "diagnostics": [],
+    }
+    cases = (
+        ({"process_started": False}, None, None),
+        ({"process_started": True}, None, False),
+        ({"process_started": True}, 0, True),
+    )
+    for process, exit_code, expected in cases:
+        payload = {**base, "process": process, "exit_code": exit_code}
+        normalized = simread_runner._normalize_result_manifest(payload)
+        assert normalized["process"]["generated_outputs_stable"] is expected
+
+
 def _valid_manifest(tmp_path: Path) -> tuple[Path, dict]:
     run = tmp_path / "run"
     (run / "workspace").mkdir(parents=True)
@@ -1145,6 +1167,7 @@ def test_unconfirmed_process_closes_blocked_streams_and_freezes_evidence(
     assert artifacts["workspace/model.nfr"]["sha256"] is None
     assert artifacts["workspace/model.nfr"]["size_bytes"] is None
     assert artifacts["workspace/model.nfr"]["stable"] is False
+    assert artifacts["workspace/model.nfr"]["evidence_semantics"] == "snapshot_at_manifest_creation"
     stdout_path = result_manifest.parent / "stdout.bin"
     before = (stdout_path.stat().st_mtime_ns, stdout_path.stat().st_size, hashlib.sha256(stdout_path.read_bytes()).hexdigest())
     assert process.stdout.done.wait(1)
