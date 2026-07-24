@@ -290,6 +290,8 @@ function Check-Docs {
 
     Invoke-Tool "Foundation defect ledger" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-foundation-defect-ledger.ps1")) $Root | Out-Null
     Invoke-Tool "Foundation defect ledger mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-foundation-defect-ledger-mutations.ps1")) $Root | Out-Null
+    Invoke-Tool "Rust authority contract" "node" @("scripts\tests\test-rust-authority-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Rust authority mutations" "node" @("scripts\tests\test-rust-authority-contract-mutations.mjs", $Root) | Out-Null
     Invoke-Tool "Bridge JSON placeholder contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-bridge-json-placeholder-contract.ps1")) $Root | Out-Null
     Invoke-Tool "Bridge JSON placeholder mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-bridge-json-placeholder-contract-mutations.ps1")) $Root | Out-Null
     Invoke-Tool "Task log contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-task-log-contract.ps1")) $Root | Out-Null

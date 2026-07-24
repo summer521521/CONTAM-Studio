@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "rust": [
+    {
+      "path": "src-tauri/src/lib.rs",
+      "required_facade": {
+        "functions": ["run"],
+        "reexports": [],
+        "public_modules": []
+      },
+      "expected": {
+        "functions": ["run"],
+        "structs": [],
+        "enums": [],
+        "traits": [],
+        "types": [],
+        "statics": [],
+        "constants": [],
+        "unions": [],
+        "reexports": [],
+        "modules": []
+      }
+    },
+    {
+      "path": "src-tauri/src/zone_bridge.rs",
+      "required_facade": {"functions": [], "reexports": [], "public_modules": []},
+      "expected": {
+        "functions": [
+          "select_and_read_prj_zones",
+          "select_and_extract_zone_air_state",
+          "extract_active_run_zone_air_state",
+          "export_active_zone_air_state_csv",
+          "run_active_contam_project",
+          "plan_zone_volume_patch",
+          "apply_zone_volume_patch_to_draft",
+          "undo_project_draft",
+          "redo_project_draft",
+          "export_active_project_draft_copy"
+        ],
+        "structs": [
+          "ReaderDiagnostic",
+          "ZoneRecord",
+          "ProjectInspection",
+          "BridgeEnvelope",
+          "DesktopOpenResponse",
+          "DraftSummary",
+          "PatchReviewView",
+          "DesktopPlanResponse",
+          "DesktopApplyResponse",
+          "DesktopDraftTransitionResponse",
+          "DraftExportSummary",
+          "DesktopDraftExportResponse",
+          "ZoneAirStateSampleView",
+          "ZoneAirStateResultView",
+          "DesktopZoneAirStateResponse",
+          "ZoneAirStateCsvExportSummary",
+          "DesktopZoneAirStateCsvExportResponse",
+          "ContamXRunSummaryView",
+          "DesktopRunResponse",
+          "DesktopProjectSessionStore"
+        ],
+        "enums": [],
+        "traits": [],
+        "types": [],
+        "statics": [],
+        "constants": [],
+        "unions": [],
+        "reexports": [],
+        "modules": []
+      }
+    },
+    {
+      "path": "src-tauri/src/codex_app_server.rs",
+      "required_facade": {"functions": [], "reexports": [], "public_modules": []},
+      "expected": {
+        "functions": [
+          "install_official_codex_cli",
+          "probe_codex_app_server",
+          "connect_codex_app_server",
+          "refresh_codex_account",
+          "preview_ai_context",
+          "start_readonly_ai_turn",
+          "load_ai_conversation_archive",
+          "set_ai_conversation_archive_enabled",
+          "delete_ai_conversation_archive_entry",
+          "clear_ai_conversation_archive_for_zone",
+          "clear_all_ai_conversation_archive",
+          "interrupt_readonly_ai_turn",
+          "clear_readonly_ai_session",
+          "disconnect_codex_app_server"
+        ],
+        "structs": [
+          "AiDiagnostic",
+          "CodexCliProbeView",
+          "CodexAccountView",
+          "CodexReasoningEffortView",
+          "CodexModelView",
+          "CodexConnectionView",
+          "DesktopCodexProbeResponse",
+          "DesktopCodexConnectionResponse",
+          "DesktopCodexInstallResponse",
+          "AiContextDisclosureView",
+          "AiDisclosureBoundary",
+          "DesktopAiContextPreviewResponse",
+          "StructuredAiAnswer",
+          "AiTokenUsageView",
+          "DesktopAiTurnResponse",
+          "AiArchiveSaveView",
+          "AiArchivedConversationEntryView",
+          "AiConversationArchiveView",
+          "DesktopAiConversationArchiveResponse",
+          "DesktopAiActionResponse",
+          "CodexAssistantStore",
+          "AiConversationArchiveStore"
+        ],
+        "enums": [],
+        "traits": [],
+        "types": [],
+        "statics": [],
+        "constants": [],
+        "unions": [],
+        "reexports": [],
+        "modules": []
+      }
+    }
+  ],
+  "process": [
+    {"path": "src-tauri/src/codex_app_server.rs", "kind": "rust_command", "owner": "AppServerConnection::start", "line": 645},
+    {"path": "src-tauri/src/codex_app_server.rs", "kind": "rust_command", "owner": "probe_codex_version_at", "line": 1189},
+    {"path": "src-tauri/src/codex_app_server.rs", "kind": "rust_command", "owner": "run_official_installer", "line": 1406},
+    {"path": "src-tauri/src/zone_bridge.rs", "kind": "rust_command", "owner": "run_process", "line": 1695},
+    {"path": "python/src/contam_studio_core/contamx_runner.py", "kind": "python_popen", "owner": "_probe_version_command", "line": 229},
+    {"path": "python/src/contam_studio_core/contamx_runner.py", "kind": "python_popen", "owner": "_start_process", "line": 641},
+    {"path": "python/src/contam_studio_core/simread_runner.py", "kind": "python_popen", "owner": "_probe_output", "line": 417},
+    {"path": "python/src/contam_studio_core/simread_runner.py", "kind": "python_popen", "owner": "extract_zone_air_state", "line": 1359}
+  ]
+}
