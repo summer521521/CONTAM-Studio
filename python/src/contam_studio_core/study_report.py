@@ -99,3 +99,15 @@ def make_report_model(*, purpose: str, profile: str, baseline_sha256: str, scena
     if ai_narrative is not None and len(ai_narrative) > 100_000:
         raise StudyError("narrative_too_large", "AI叙述超过报告限制。")
     return ReportModel(str(uuid4()), purpose, profile, baseline_sha256, scenario_id, revision_id, assumptions, dict(sorted(tool_identity.items())), run_ids, result_ids, comparison_ids, limitations, tuple(sorted(evidence_hashes)), ai_narrative)
+
+
+# Multi-parameter study reports use the closed, evidence-bound implementation.
+from .study_engine import (  # noqa: E402,F401
+    StudyReportModel,
+    analyze_study_results,
+    make_study_report,
+    render_study_report_csv,
+    render_study_report_html,
+    render_study_report_pdf,
+    write_study_report,
+)

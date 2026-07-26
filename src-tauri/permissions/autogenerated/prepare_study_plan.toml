@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-prepare-study-plan"
+description = "Enables the prepare_study_plan command without any pre-configured scope."
+commands.allow = ["prepare_study_plan"]
+
+[[permission]]
+identifier = "deny-prepare-study-plan"
+description = "Denies the prepare_study_plan command without any pre-configured scope."
+commands.deny = ["prepare_study_plan"]

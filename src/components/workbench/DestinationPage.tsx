@@ -7,6 +7,7 @@ import type { ResultState } from "../../app/result-state";
 import type { ResultExportState } from "../../app/result-export-state";
 import type { AppTheme, WorkbenchDestination } from "../../app/workbench-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
+import { StudyWorkspace } from "./StudyWorkspace";
 
 interface DestinationPageProps {
   destination: Exclude<WorkbenchDestination, "project">;
@@ -23,6 +24,9 @@ interface DestinationPageProps {
   onSelectManifestResults: () => void;
   onExportResults: () => void;
   onSettingsReset: () => void;
+  projectSessionId?: string | null;
+  revisionId?: string | null;
+  onNotice?: (message: string) => void;
 }
 
 export function DestinationPage({
@@ -40,6 +44,9 @@ export function DestinationPage({
   onSelectManifestResults,
   onExportResults,
   onSettingsReset,
+  projectSessionId = null,
+  revisionId = null,
+  onNotice,
 }: DestinationPageProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -99,6 +106,10 @@ export function DestinationPage({
         {project ? <section className="destination-section"><p>{t("run.readinessBody")}</p><button className="primary-action" type="button" disabled={availability.runProject === false} onClick={onRunProject}><Play size={16} />{t("toolbar.run")}</button></section> : <EmptyDestination onOpenProject={onOpenProject} availability={availability} />}
       </section>
     );
+  }
+
+  if (destination === "studies") {
+    return <StudyWorkspace project={project} projectSessionId={projectSessionId} revisionId={revisionId} onNotice={onNotice} />;
   }
 
   return (

@@ -49,12 +49,13 @@ const AI_CONVERSATION_ARCHIVE_NAMESPACE: Uuid =
     Uuid::from_u128(0x05d637d2_faaa_5f3e_8a40_f657c1f755e3);
 const AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION: &str = "1.0";
 static ARCHIVE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
-const ALL_CONTEXT_SCOPES: [&str; 9] = [
+const ALL_CONTEXT_SCOPES: [&str; 10] = [
     "project_summary",
     "selected_zone",
     "draft_summary",
     "run_summary",
     "result_summary",
+    "study_summary",
     "diagnostics",
     "attachment_evidence",
     "semantic_project",

@@ -40,6 +40,9 @@ interface WelcomePageProps {
   onSelectZone?: (zoneId: string) => void;
   onRunProject?: () => void;
   onSettingsReset?: () => void;
+  projectSessionId?: string | null;
+  revisionId?: string | null;
+  onNotice?: (message: string) => void;
 }
 
 export function WelcomePage({
@@ -61,6 +64,9 @@ export function WelcomePage({
   onSelectZone = () => undefined,
   onRunProject = () => undefined,
   onSettingsReset = () => undefined,
+  projectSessionId = null,
+  revisionId = null,
+  onNotice = () => undefined,
 }: WelcomePageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -111,6 +117,9 @@ export function WelcomePage({
             onExportResults={onExportResults}
             onSettingsReset={onSettingsReset}
             availability={availability}
+            projectSessionId={projectSessionId}
+            revisionId={revisionId}
+            onNotice={onNotice}
           />
         ) : project ? (
           <div className="project-summary">

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-analyze-study-results"
+description = "Enables the analyze_study_results command without any pre-configured scope."
+commands.allow = ["analyze_study_results"]
+
+[[permission]]
+identifier = "deny-analyze-study-results"
+description = "Denies the analyze_study_results command without any pre-configured scope."
+commands.deny = ["analyze_study_results"]

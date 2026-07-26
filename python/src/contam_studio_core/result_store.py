@@ -168,3 +168,8 @@ def compare_results(a: ResultRecord, b: ResultRecord) -> ComparisonRecord:
     comparison_id = str(uuid4())
     evidence_hash = hashlib.sha256(f"{comparison_id}:{a.sha256}:{b.sha256}".encode("ascii")).hexdigest()
     return ComparisonRecord(comparison_id, a.result_id, b.result_id, a.unit, tuple(values), "b_minus_a", "zero_is_null", "preserve_missing", evidence_hash)
+
+
+# Study-scoped persistence lives in a separate module to keep the trusted
+# single-result contract stable while exposing one discoverable storage API.
+from .study_engine import StudyResultStore, StudySampleResult, aggregate_study_status  # noqa: E402,F401

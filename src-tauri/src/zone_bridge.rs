@@ -818,6 +818,15 @@ pub struct DesktopRunResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopStudyResponse {
+    request_id: String,
+    project_session_id: Option<String>,
+    study_id: Option<String>,
+    result: Option<Value>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct ZoneResultStageEvent {
     request_id: String,
     stage: &'static str,
@@ -1024,6 +1033,14 @@ struct ActiveResultContext {
     unit_system: String,
 }
 
+#[derive(Clone, Debug)]
+struct ActiveStudyControl {
+    project_session_id: String,
+    revision_id: String,
+    study_id: String,
+    cancel_path: PathBuf,
+}
+
 impl ActiveResultContext {
     fn new(
         active: &ActiveProjectContext,
@@ -1143,6 +1160,8 @@ struct DesktopSessionState {
     active_run: Option<ActiveRunContext>,
     active_result: Option<ActiveResultContext>,
     last_trusted_result: Option<ActiveResultContext>,
+    active_study: Option<Value>,
+    active_study_control: Option<ActiveStudyControl>,
 }
 
 #[derive(Default)]
@@ -1237,6 +1256,8 @@ impl DesktopProjectSessionStore {
         state.active_run = None;
         state.active_result = None;
         state.last_trusted_result = None;
+        state.active_study = None;
+        state.active_study_control = None;
         drop(state);
         if let Some(previous) = previous {
             let _ = remove_owned_draft_root(&previous);
@@ -1452,6 +1473,26 @@ impl DesktopProjectSessionStore {
                             }
                             None => json!({"available": false}),
                         },
+                    );
+                }
+                "study_summary" => {
+                    let summary = state.active_study.as_ref().filter(|value| {
+                        value.get("project_session_id").and_then(Value::as_str)
+                            == Some(active.project_session_id.as_str())
+                            && value.get("revision_id").and_then(Value::as_str)
+                                == Some(active.active_revision().revision_id.as_str())
+                            && value
+                                .get("project_sha256")
+                                .and_then(Value::as_str)
+                                .is_some_and(|hash| {
+                                    hash.eq_ignore_ascii_case(&active.source_sha256)
+                                })
+                    });
+                    payload.insert(
+                        scope.clone(),
+                        summary
+                            .cloned()
+                            .unwrap_or_else(|| json!({"available": false})),
                     );
                 }
                 "diagnostics" => {
@@ -5813,6 +5854,626 @@ pub async fn export_active_project_draft_copy(
             revision_number: active.active_revision().revision_number,
             matches_active_revision: true,
         }),
+        error: None,
+    }
+}
+
+fn study_failure(
+    request_id: &str,
+    project_session_id: Option<String>,
+    error: ReaderDiagnostic,
+) -> DesktopStudyResponse {
+    DesktopStudyResponse {
+        request_id: request_id.to_string(),
+        project_session_id,
+        study_id: None,
+        result: None,
+        error: Some(error),
+    }
+}
+
+fn study_context(
+    store: &DesktopProjectSessionStore,
+    project_session_id: &str,
+    revision_id: &str,
+) -> Result<ActiveProjectContext, ReaderDiagnostic> {
+    let state = store.state.lock().expect("desktop session mutex poisoned");
+    let active = state.active_project.clone().ok_or_else(|| {
+        host_diagnostic("project_session_missing", "没有活动项目。", BTreeMap::new())
+    })?;
+    if active.project_session_id != project_session_id {
+        return Err(host_diagnostic(
+            "project_session_mismatch",
+            "项目会话不匹配。",
+            BTreeMap::new(),
+        ));
+    }
+    if active.active_revision().revision_id != revision_id {
+        return Err(host_diagnostic(
+            "draft_revision_changed",
+            "研究方案Revision已变化。",
+            BTreeMap::new(),
+        ));
+    }
+    if !active_project_source_matches(&active) {
+        return Err(host_diagnostic(
+            "source_changed",
+            "项目源文件已变化，研究操作被拒绝。",
+            BTreeMap::new(),
+        ));
+    }
+    Ok(active)
+}
+
+async fn execute_study_bridge(
+    request: Value,
+    request_id: String,
+    timeout: Duration,
+) -> Result<RawBridgeEnvelope, ReaderDiagnostic> {
+    tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &request_id, timeout)
+    })
+    .await
+    .map_err(|_| {
+        host_diagnostic(
+            "bridge_task_failed",
+            "研究桥接任务异常结束。",
+            BTreeMap::new(),
+        )
+    })?
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn prepare_study_plan(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    parameters: Vec<Value>,
+    mode: String,
+    user_combinations: Option<Vec<Value>>,
+    patch_sha256: Option<String>,
+    max_combinations: u64,
+) -> DesktopStudyResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || Uuid::parse_str(&revision_id).is_err()
+    {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "bridge_request_invalid",
+                "研究方案请求无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "project_operation_busy",
+                "另一个项目操作正在进行。",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let active = match study_context(&store, &project_session_id, &revision_id) {
+        Ok(value) => value,
+        Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": "create_study_plan",
+        "baseline_project_sha256": active.source_sha256,
+        "revision_id": revision_id,
+        "parameters": parameters,
+        "mode": mode,
+        "user_combinations": user_combinations,
+        "patch_sha256": patch_sha256,
+        "max_combinations": max_combinations,
+    });
+    let raw = match execute_study_bridge(request, request_id.clone(), Duration::from_secs(10)).await
+    {
+        Ok(value) => value,
+        Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    if !raw.ok {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let result = raw.result.unwrap_or(Value::Null);
+    if result.get("result_type").and_then(Value::as_str) != Some("study_plan")
+        || semantic_value_has_forbidden_key(&result)
+    {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "study_response_contract_invalid",
+                "研究方案响应契约无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let study_id = result
+        .get("plan")
+        .and_then(|value| value.get("study_id"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    DesktopStudyResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        study_id,
+        result: Some(result),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn run_study(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    plan: Value,
+    solver_path: Option<String>,
+    simread_path: Option<String>,
+) -> DesktopStudyResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || Uuid::parse_str(&revision_id).is_err()
+    {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "bridge_request_invalid",
+                "研究运行请求无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "project_operation_busy",
+                "另一个项目操作正在进行。",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let active = match study_context(&store, &project_session_id, &revision_id) {
+        Ok(value) => value,
+        Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    let run_root = match app.path().app_local_data_dir() {
+        Ok(path) => path.join("study-runs"),
+        Err(_) => {
+            return study_failure(
+                &request_id,
+                Some(project_session_id),
+                host_diagnostic(
+                    "run_root_invalid",
+                    "研究运行工作区不可用。",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let study_id = match plan.get("study_id").and_then(Value::as_str) {
+        Some(value) if Uuid::parse_str(value).is_ok() => value.to_owned(),
+        _ => {
+            return study_failure(
+                &request_id,
+                Some(project_session_id),
+                host_diagnostic("study_plan_invalid", "研究方案ID无效。", BTreeMap::new()),
+            )
+        }
+    };
+    if std::fs::create_dir_all(&run_root).is_err() {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "run_root_invalid",
+                "研究运行工作区不可用。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let cancel_path = run_root.join(format!("{study_id}.cancel"));
+    let _ = std::fs::remove_file(&cancel_path);
+    {
+        let mut state = store.state.lock().expect("desktop session mutex poisoned");
+        state.active_study_control = Some(ActiveStudyControl {
+            project_session_id: project_session_id.clone(),
+            revision_id: revision_id.clone(),
+            study_id: study_id.clone(),
+            cancel_path: cancel_path.clone(),
+        });
+    }
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": "run_study",
+        "source_path": active.source_path,
+        "source_sha256": active.source_sha256,
+        "run_root": run_root,
+        "plan": plan,
+        "solver_path": solver_path,
+        "simread_path": simread_path,
+        "cancel_path": cancel_path,
+    });
+    let raw =
+        match execute_study_bridge(request, request_id.clone(), Duration::from_secs(600)).await {
+            Ok(value) => value,
+            Err(error) => {
+                let mut state = store.state.lock().expect("desktop session mutex poisoned");
+                state.active_study_control = None;
+                let _ = std::fs::remove_file(&cancel_path);
+                return study_failure(&request_id, Some(project_session_id), error);
+            }
+        };
+    {
+        let mut state = store.state.lock().expect("desktop session mutex poisoned");
+        state.active_study_control = None;
+    }
+    let _ = std::fs::remove_file(&cancel_path);
+    if !raw.ok {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let result = raw.result.unwrap_or(Value::Null);
+    if result.get("result_type").and_then(Value::as_str) != Some("study_run")
+        || semantic_value_has_forbidden_key(&result)
+    {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "study_response_contract_invalid",
+                "研究运行响应契约无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let study_summary = json!({
+        "project_session_id": project_session_id,
+        "revision_id": revision_id,
+        "project_sha256": active.source_sha256,
+        "study_id": result.get("study_id"),
+        "study_hash": result.get("study_hash"),
+        "status": result.get("status"),
+        "results": result
+            .get("results")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .take(32)
+                    .map(|item| {
+                        json!({
+                            "sample_id": item.get("sample_id"),
+                            "status": item.get("status"),
+                            "parameters": item.get("parameters"),
+                            "statistics": item.get("statistics"),
+                            "result_hash": item.get("result_hash"),
+                            "evidence": item.get("evidence"),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+    });
+    {
+        let mut state = store.state.lock().expect("desktop session mutex poisoned");
+        state.active_study = Some(study_summary);
+    }
+    let study_id = result
+        .get("study_id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    DesktopStudyResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        study_id,
+        result: Some(result),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_study(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    study_id: String,
+) -> DesktopStudyResponse {
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || study_id.is_empty()
+        || study_id.len() > 128
+    {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "bridge_request_invalid",
+                "研究取消请求无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let store = app.state::<DesktopProjectSessionStore>();
+    let control = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let current_revision = state
+            .active_project
+            .as_ref()
+            .map(|project| project.active_revision().revision_id.as_str());
+        state.active_study_control.clone().filter(|control| {
+            control.project_session_id == project_session_id
+                && control.study_id == study_id
+                && current_revision == Some(control.revision_id.as_str())
+        })
+    };
+    let status = if let Some(control) = control {
+        match OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&control.cancel_path)
+        {
+            Ok(mut marker) => {
+                let _ = marker.write_all(b"cancel\n");
+                "cancellation_requested"
+            }
+            Err(_) => {
+                return study_failure(
+                    &request_id,
+                    Some(project_session_id),
+                    host_diagnostic(
+                        "study_cancel_failed",
+                        "研究取消请求无法写入安全标记。",
+                        BTreeMap::new(),
+                    ),
+                )
+            }
+        }
+    } else {
+        "cancelled"
+    };
+    DesktopStudyResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        study_id: Some(study_id.clone()),
+        result: Some(
+            json!({"result_type": "study_cancel", "study_id": study_id, "status": status}),
+        ),
+        error: None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn page_study_results(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    study_id: String,
+    plan_hash: String,
+    page: u64,
+    limit: u64,
+    parameter: Option<String>,
+    value: Option<Value>,
+    object_id: Option<String>,
+    time_seconds: Option<f64>,
+    sort_by: String,
+    descending: bool,
+) -> DesktopStudyResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    let revision_id = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        state
+            .active_project
+            .as_ref()
+            .map(|item| item.active_revision().revision_id.clone())
+            .unwrap_or_default()
+    };
+    let active = match study_context(&store, &project_session_id, &revision_id) {
+        Ok(value) => value,
+        Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    let root = match app.path().app_local_data_dir() {
+        Ok(path) => path.join("study-runs").join("study-results"),
+        Err(_) => {
+            return study_failure(
+                &request_id,
+                Some(project_session_id),
+                host_diagnostic(
+                    "result_root_invalid",
+                    "研究结果目录不可用。",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": request_id, "operation": "page_study_results", "results_root": root, "study_id": study_id, "plan_hash": plan_hash, "page": page, "limit": limit, "parameter": parameter, "value": value, "object_id": object_id, "time_seconds": time_seconds, "sort_by": sort_by, "descending": descending});
+    let raw = match execute_study_bridge(request, request_id.clone(), Duration::from_secs(10)).await
+    {
+        Ok(value) => value,
+        Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    if !raw.ok {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let mut result = raw.result.unwrap_or(Value::Null);
+    if semantic_value_has_forbidden_key(&result) {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "study_response_contract_invalid",
+                "研究结果响应包含受保护路径。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    if let Some(page) = result.get_mut("page").and_then(Value::as_object_mut) {
+        let stored_project_sha256 = page
+            .get("project_sha256")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let project_stale = !stored_project_sha256.is_empty()
+            && !stored_project_sha256.eq_ignore_ascii_case(&active.source_sha256);
+        let plan_stale = page.get("stale").and_then(Value::as_bool).unwrap_or(false);
+        page.insert("stale".to_owned(), Value::Bool(plan_stale || project_stale));
+    }
+    DesktopStudyResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        study_id: Some(study_id),
+        result: Some(result),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn analyze_study_results(
+    _app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    results: Vec<Value>,
+    baseline_sample_id: Option<String>,
+) -> DesktopStudyResponse {
+    let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": request_id, "operation": "analyze_study_results", "results": results, "baseline_sample_id": baseline_sample_id});
+    let raw = match execute_study_bridge(request, request_id.clone(), Duration::from_secs(10)).await
+    {
+        Ok(value) => value,
+        Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    if !raw.ok {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let result = raw.result.unwrap_or(Value::Null);
+    if semantic_value_has_forbidden_key(&result) {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "study_response_contract_invalid",
+                "研究分析响应契约无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    DesktopStudyResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        study_id: None,
+        result: Some(result),
+        error: None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn export_study_report(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    plan: Value,
+    results: Vec<Value>,
+    solver_manifest: Value,
+    analysis: Option<Value>,
+    provenance: String,
+    format: String,
+) -> DesktopStudyResponse {
+    if !matches!(format.as_str(), "html" | "pdf" | "csv" | "json") {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "report_output_invalid",
+                "研究报告格式不受支持。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let root = match app.path().app_local_data_dir() {
+        Ok(path) => path.join("study-reports"),
+        Err(_) => {
+            return study_failure(
+                &request_id,
+                Some(project_session_id),
+                host_diagnostic(
+                    "report_output_invalid",
+                    "研究报告目录不可用。",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if let Err(error) = std::fs::create_dir_all(&root) {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic("report_output_invalid", &error.to_string(), BTreeMap::new()),
+        );
+    }
+    let report_name = request_id.clone();
+    let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": request_id, "operation": "export_study_report", "output_path": root.join(format!("study-{}.{}", report_name, format)), "plan": plan, "results": results, "solver_manifest": solver_manifest, "analysis": analysis, "provenance": provenance});
+    let raw = match execute_study_bridge(request, request_id.clone(), Duration::from_secs(20)).await
+    {
+        Ok(value) => value,
+        Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    if !raw.ok {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let result = raw.result.unwrap_or(Value::Null);
+    if semantic_value_has_forbidden_key(&result) {
+        return study_failure(
+            &request_id,
+            Some(project_session_id),
+            host_diagnostic(
+                "study_response_contract_invalid",
+                "研究报告响应契约无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    DesktopStudyResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        study_id: None,
+        result: Some(result),
         error: None,
     }
 }

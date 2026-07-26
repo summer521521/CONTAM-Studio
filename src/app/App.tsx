@@ -1018,6 +1018,9 @@ function App() {
                   onLoadLatestResults={loadLatestRunResults}
                   onSelectManifestResults={selectRunManifestResults}
                   onExportResults={exportZoneResults}
+                  projectSessionId={projectState.projectSessionId}
+                  revisionId={projectState.draft?.revision_id ?? null}
+                  onNotice={setPlaceholderNotice}
                 />
               </Panel>
               <Separator className="resize-handle resize-handle-vertical" />

@@ -12,6 +12,7 @@ import type { CloseResolution } from "./close-state";
 import type { DesktopSimulationExecutionResponse, DesktopSimulationPlanResponse } from "./simulation-state";
 import type { AttachmentEvidenceBundleView, AttachmentView } from "./attachment-state";
 import type { SemanticOperationRequest, DesktopSemanticPatchPlanResponse, DesktopSemanticApplyResponse, DesktopSemanticSnapshotResponse } from "./semantic-state";
+import type { DesktopStudyResponse, StudyPlan, StudySampleResult } from "./study-state";
 import type {
   AiContextScope,
   DesktopAiConversationArchiveResponse,
@@ -178,6 +179,120 @@ export async function approveAndRunSimulationPlan(
     projectSessionId,
     planId,
     zoneId,
+  });
+}
+
+export async function prepareStudyPlan(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  parameters: unknown[],
+  mode: string,
+  userCombinations: unknown[] | null,
+  patchSha256: string | null,
+  maxCombinations: number,
+): Promise<DesktopStudyResponse> {
+  return invoke<DesktopStudyResponse>("prepare_study_plan", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    parameters,
+    mode,
+    userCombinations,
+    patchSha256,
+    maxCombinations,
+  });
+}
+
+export async function runStudy(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  plan: StudyPlan,
+  solverPath: string | null,
+  simreadPath: string | null,
+): Promise<DesktopStudyResponse> {
+  return invoke<DesktopStudyResponse>("run_study", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    plan,
+    solverPath,
+    simreadPath,
+  });
+}
+
+export async function cancelStudy(
+  requestId: string,
+  projectSessionId: string,
+  studyId: string,
+): Promise<DesktopStudyResponse> {
+  return invoke<DesktopStudyResponse>("cancel_study", { requestId, projectSessionId, studyId });
+}
+
+export async function pageStudyResults(
+  requestId: string,
+  projectSessionId: string,
+  studyId: string,
+  planHash: string,
+  page: number,
+  limit: number,
+  parameter: string | null,
+  value: string | number | null,
+  objectId: string | null,
+  timeSeconds: number | null,
+  sortBy: string,
+  descending: boolean,
+): Promise<DesktopStudyResponse> {
+  return invoke<DesktopStudyResponse>("page_study_results", {
+    requestId,
+    projectSessionId,
+    studyId,
+    planHash,
+    page,
+    limit,
+    parameter,
+    value,
+    objectId,
+    timeSeconds,
+    sortBy,
+    descending,
+  });
+}
+
+export async function analyzeStudyResults(
+  requestId: string,
+  projectSessionId: string,
+  results: StudySampleResult[],
+  baselineSampleId: string | null,
+): Promise<DesktopStudyResponse> {
+  return invoke<DesktopStudyResponse>("analyze_study_results", {
+    requestId,
+    projectSessionId,
+    results,
+    baselineSampleId,
+  });
+}
+
+export async function exportStudyReport(
+  requestId: string,
+  projectSessionId: string,
+  plan: StudyPlan,
+  results: StudySampleResult[],
+  solverManifest: Record<string, string>,
+  analysis: unknown,
+  provenance: string,
+  format: string,
+): Promise<DesktopStudyResponse> {
+  return invoke<DesktopStudyResponse>("export_study_report", {
+    requestId,
+    projectSessionId,
+    plan,
+    results,
+    solverManifest,
+    analysis,
+    provenance,
+    format,
   });
 }
 

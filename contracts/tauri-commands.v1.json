@@ -120,6 +120,48 @@
       "payload_keys": ["requestId", "projectSessionId", "planId", "zoneId"]
     },
     {
+      "command": "prepare_study_plan",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "prepareStudyPlan",
+      "permission": "allow-prepare-study-plan",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "parameters", "mode", "userCombinations", "patchSha256", "maxCombinations"]
+    },
+    {
+      "command": "run_study",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "runStudy",
+      "permission": "allow-run-study",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "plan", "solverPath", "simreadPath"]
+    },
+    {
+      "command": "cancel_study",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "cancelStudy",
+      "permission": "allow-cancel-study",
+      "payload_keys": ["requestId", "projectSessionId", "studyId"]
+    },
+    {
+      "command": "page_study_results",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "pageStudyResults",
+      "permission": "allow-page-study-results",
+      "payload_keys": ["requestId", "projectSessionId", "studyId", "planHash", "page", "limit", "parameter", "value", "objectId", "timeSeconds", "sortBy", "descending"]
+    },
+    {
+      "command": "analyze_study_results",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "analyzeStudyResults",
+      "permission": "allow-analyze-study-results",
+      "payload_keys": ["requestId", "projectSessionId", "results", "baselineSampleId"]
+    },
+    {
+      "command": "export_study_report",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "exportStudyReport",
+      "permission": "allow-export-study-report",
+      "payload_keys": ["requestId", "projectSessionId", "plan", "results", "solverManifest", "analysis", "provenance", "format"]
+    },
+    {
       "command": "select_and_import_attachments",
       "rust_module": "zone_bridge",
       "ts_wrapper": "selectAndImportAttachments",

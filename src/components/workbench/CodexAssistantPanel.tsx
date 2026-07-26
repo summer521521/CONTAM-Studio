@@ -13,6 +13,7 @@ const SCOPES: AiContextScope[] = [
   "draft_summary",
   "run_summary",
   "result_summary",
+  "study_summary",
   "diagnostics",
   "attachment_evidence",
   "semantic_project",

@@ -17,6 +17,7 @@ export type AiContextScope =
   | "draft_summary"
   | "run_summary"
   | "result_summary"
+  | "study_summary"
   | "diagnostics"
   | "attachment_evidence"
   | "semantic_project"
@@ -454,7 +455,7 @@ export function isSafeAiPreview(preview: AiContextDisclosureView): boolean {
   return preview.preview_id.length > 0
     && preview.context_fingerprint.length > 0
     && preview.included_scopes.length > 0
-    && preview.included_scopes.every((scope) => DEFAULT_AI_SCOPES.includes(scope) || ["project_summary", "run_summary", "result_summary", "diagnostics", "attachment_evidence", "semantic_project", "semantic_object"].includes(scope))
+    && preview.included_scopes.every((scope) => DEFAULT_AI_SCOPES.includes(scope) || ["project_summary", "run_summary", "result_summary", "study_summary", "diagnostics", "attachment_evidence", "semantic_project", "semantic_object"].includes(scope))
     && !preview.disclosure.contains_local_paths
     && !preview.disclosure.contains_prj_text
     && !preview.disclosure.contains_complete_result_series
@@ -590,6 +591,7 @@ export function isSafeAiArchive(value: unknown): value is AiConversationArchiveV
         "draft_summary",
         "run_summary",
         "result_summary",
+        "study_summary",
         "diagnostics",
         "attachment_evidence",
         "semantic_project",

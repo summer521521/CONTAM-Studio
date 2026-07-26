@@ -14,6 +14,12 @@
       "joins": ["runs", "evidence", "manifest.json"]
     },
     {
+      "id": "study_results",
+      "path": "src-tauri/src/zone_bridge.rs",
+      "functions": ["prepare_study_plan", "run_study", "cancel_study", "page_study_results", "analyze_study_results", "export_study_report"],
+      "joins": ["study-runs", "study-results", "study-reports"]
+    },
+    {
       "id": "ai_archive",
       "path": "src-tauri/src/codex_app_server.rs",
       "functions": ["archive_file_path", "write_archive_file", "persist_completed_ai_answer"],
@@ -35,6 +41,6 @@
   "allowed_rust_literal_joins": [
     "ai", "archive.json", "bin", "codex-installer", "codex-runtime", "codex.exe", "Codex", "conversation-archive",
     "install-official-codex.ps1", "OpenAI", "powershell.exe", "Programs", "System32", "v1.0", "WindowsPowerShell",
-    ",", "evidence", "manifest.json", "project-drafts", "python/.venv/Scripts/python.exe", "result-extractions", "runs", "snapshots"
+    ",", "evidence", "manifest.json", "project-drafts", "python/.venv/Scripts/python.exe", "result-extractions", "runs", "snapshots", "study-runs", "study-results", "study-reports"
   ]
 }

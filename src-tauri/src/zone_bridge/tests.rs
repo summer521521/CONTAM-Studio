@@ -1782,6 +1782,12 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         "apply_zone_volume_patch_to_draft",
         "prepare_simulation_plan",
         "approve_and_run_simulation_plan",
+        "prepare_study_plan",
+        "run_study",
+        "cancel_study",
+        "page_study_results",
+        "analyze_study_results",
+        "export_study_report",
         "select_and_import_attachments",
         "list_attachments",
         "set_attachment_ai_selection",
@@ -1813,7 +1819,7 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     ] {
         assert!(build_script.contains(command));
     }
-    assert_eq!(capability["permissions"].as_array().unwrap().len(), 39);
+    assert_eq!(capability["permissions"].as_array().unwrap().len(), 45);
     let forbidden = [
         "sourcePath",
         "outputPath",
@@ -1829,6 +1835,12 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     assert!(desktop_api.contains("applyZoneVolumePatchToDraft"));
     assert!(desktop_api.contains("prepareSimulationPlan"));
     assert!(desktop_api.contains("approveAndRunSimulationPlan"));
+    assert!(desktop_api.contains("prepareStudyPlan"));
+    assert!(desktop_api.contains("runStudy"));
+    assert!(desktop_api.contains("cancelStudy"));
+    assert!(desktop_api.contains("pageStudyResults"));
+    assert!(desktop_api.contains("analyzeStudyResults"));
+    assert!(desktop_api.contains("exportStudyReport"));
     assert!(desktop_api.contains("selectAndImportAttachments"));
     assert!(desktop_api.contains("previewAttachmentEvidence"));
     assert!(desktop_api.contains("removeStudioAttachment"));

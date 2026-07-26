@@ -1,4 +1,4 @@
-import { BarChart3, FolderTree, Play, Search } from "lucide-react";
+import { BarChart3, FlaskConical, FolderTree, Play, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { WorkbenchDestination } from "../../app/workbench-state";
@@ -20,7 +20,7 @@ export function ActivityBar({
 }: ActivityBarProps) {
   const { t } = useTranslation();
   const items: Array<{
-    key: "projects" | "search" | "run" | "results";
+    key: "projects" | "search" | "run" | "results" | "studies";
     icon: LucideIcon;
     onClick?: () => void;
   }> = [
@@ -28,6 +28,7 @@ export function ActivityBar({
     { key: "search", icon: Search },
     { key: "run", icon: Play },
     { key: "results", icon: BarChart3 },
+    { key: "studies", icon: FlaskConical },
   ];
 
   return (

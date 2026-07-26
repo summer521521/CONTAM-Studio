@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-page-study-results"
+description = "Enables the page_study_results command without any pre-configured scope."
+commands.allow = ["page_study_results"]
+
+[[permission]]
+identifier = "deny-page-study-results"
+description = "Denies the page_study_results command without any pre-configured scope."
+commands.deny = ["page_study_results"]
