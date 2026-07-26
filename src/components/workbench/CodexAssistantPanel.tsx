@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Archive, Bot, CircleStop, Download, Eye, Link2, RefreshCw, Send, ShieldCheck, Trash2, Unplug, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { AiContextScope, AiState } from "../../app/ai-state";
+import type { AiContextScope, AiSemanticPatchSuggestion, AiState } from "../../app/ai-state";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
 import { SimulationPlanPanel } from "./SimulationPlanPanel";
 import { AttachmentCenterPanel } from "./AttachmentCenterPanel";
@@ -15,6 +15,8 @@ const SCOPES: AiContextScope[] = [
   "result_summary",
   "diagnostics",
   "attachment_evidence",
+  "semantic_project",
+  "semantic_object",
 ];
 
 interface CodexAssistantPanelProps {
@@ -37,6 +39,7 @@ interface CodexAssistantPanelProps {
   onArchiveDelete?: (entryId: string) => void;
   onArchiveClearZone?: () => void;
   onArchiveClearAll?: () => void;
+  onUseSemanticPatch?: (patch: AiSemanticPatchSuggestion) => void;
   simulationState?: SimulationState;
   onModeChange?: (mode: AssistantMode) => void;
   onSimulationGoalChange?: (goal: string) => void;
@@ -71,6 +74,7 @@ export function CodexAssistantPanel({
   onArchiveDelete = () => undefined,
   onArchiveClearZone = () => undefined,
   onArchiveClearAll = () => undefined,
+  onUseSemanticPatch = () => undefined,
   simulationState = INITIAL_SIMULATION_STATE,
   onModeChange = () => undefined,
   onSimulationGoalChange = () => undefined,
@@ -369,6 +373,13 @@ export function CodexAssistantPanel({
                         {entry.answer.suggested_questions.length > 0 ? (
                           <section><h5>{t("assistant.suggestedQuestions")}</h5><ul>{entry.answer.suggested_questions.map((item) => <li key={item}>{item}</li>)}</ul></section>
                         ) : null}
+                        {entry.answer.semantic_patch ? (
+                          <section className="assistant-semantic-patch">
+                            <h5>{t("assistant.semanticPatchTitle")}</h5>
+                            <p>{t("assistant.semanticPatchSummary", { count: entry.answer.semantic_patch.operations.length })}</p>
+                            <button type="button" className="secondary-action" onClick={() => onUseSemanticPatch(entry.answer.semantic_patch!)}>{t("assistant.reviewSemanticPatch")}</button>
+                          </section>
+                        ) : null}
                         <p className="assistant-safe-note">{t("assistant.archive.notReused")}</p>
                       </article>
                     ))}
@@ -427,6 +438,13 @@ export function CodexAssistantPanel({
                   <section><h5>{t("assistant.limitations")}</h5><ul>{entry.answer.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>
                   {entry.answer.suggested_questions.length > 0 ? (
                     <section><h5>{t("assistant.suggestedQuestions")}</h5><ul>{entry.answer.suggested_questions.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                  ) : null}
+                  {entry.answer.semantic_patch ? (
+                    <section className="assistant-semantic-patch">
+                      <h5>{t("assistant.semanticPatchTitle")}</h5>
+                      <p>{t("assistant.semanticPatchSummary", { count: entry.answer.semantic_patch.operations.length })}</p>
+                      <button type="button" className="secondary-action" onClick={() => onUseSemanticPatch(entry.answer.semantic_patch!)}>{t("assistant.reviewSemanticPatch")}</button>
+                    </section>
                   ) : null}
                   <p className="assistant-safe-note">{t("assistant.factsCaveat")}</p>
                 </article>

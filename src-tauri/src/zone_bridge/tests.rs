@@ -131,6 +131,7 @@ fn append_test_revision(
             old_token: planned.patch.preconditions.old_token,
             new_token: planned.patch.replacement.new_token,
         }),
+        semantic_patch: None,
         created_at_unix_ms: unix_time_ms(),
         application_owned: true,
     };
@@ -393,12 +394,11 @@ fn zone_uuid_is_deterministic_project_bound_and_well_formed() {
     let fixture = primary_fixture();
     let project = execute_read(&fixture, "uuid-baseline").result.unwrap();
     let first = &project.zones[0];
-    let repeated = zone_uuid(
+    let repeated = stable_zone_uuid(
         &project.source_sha256,
         "zone",
         first.contam_number,
         first.source_line_number,
-        &first.name,
     );
     assert_eq!(first.zone_id, repeated);
     assert!(Uuid::parse_str(&first.zone_id).is_ok());
@@ -1813,7 +1813,7 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     ] {
         assert!(build_script.contains(command));
     }
-    assert_eq!(capability["permissions"].as_array().unwrap().len(), 34);
+    assert_eq!(capability["permissions"].as_array().unwrap().len(), 39);
     let forbidden = [
         "sourcePath",
         "outputPath",

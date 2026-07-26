@@ -4,10 +4,12 @@ import type { CommandAvailability } from "../../app/command-availability";
 import type { PatchState } from "../../app/patch-state";
 import type { ContextTab } from "../../app/workbench-state";
 import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
-import { INITIAL_AI_STATE, type AiContextScope, type AiState } from "../../app/ai-state";
+import { INITIAL_AI_STATE, type AiContextScope, type AiSemanticPatchSuggestion, type AiState } from "../../app/ai-state";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
 import { CodexAssistantPanel } from "./CodexAssistantPanel";
 import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
+import type { SemanticNode, SemanticOperationRequest, SemanticState } from "../../app/semantic-state";
+import { SemanticPropertyPanel } from "./SemanticPropertyPanel";
 
 interface ContextSidebarProps {
   activeTab: ContextTab;
@@ -41,6 +43,7 @@ interface ContextSidebarProps {
   onAiArchiveDelete?: (entryId: string) => void;
   onAiArchiveClearZone?: () => void;
   onAiArchiveClearAll?: () => void;
+  onUseSemanticPatch?: (patch: AiSemanticPatchSuggestion) => void;
   simulationState?: SimulationState;
   onAiModeChange?: (mode: AssistantMode) => void;
   onSimulationGoalChange?: (goal: string) => void;
@@ -53,6 +56,15 @@ interface ContextSidebarProps {
   onAttachmentSelect?: (attachment: AttachmentView, selected: boolean) => void;
   onAttachmentPreview?: () => void;
   onAttachmentRemove?: (attachment: AttachmentView) => void;
+  semanticState?: SemanticState;
+  selectedSemanticNode?: SemanticNode | null;
+  selectedSemanticNodes?: SemanticNode[];
+  onSemanticEdit?: (operations: SemanticOperationRequest[]) => void;
+  onSemanticUndo?: () => void;
+  onSemanticRedo?: () => void;
+  onSemanticPlan?: () => void;
+  onSemanticApply?: () => void;
+  onSemanticDiscard?: () => void;
 }
 
 export function ContextSidebar({
@@ -86,6 +98,7 @@ export function ContextSidebar({
   onAiArchiveDelete = () => undefined,
   onAiArchiveClearZone = () => undefined,
   onAiArchiveClearAll = () => undefined,
+  onUseSemanticPatch = () => undefined,
   simulationState = INITIAL_SIMULATION_STATE,
   onAiModeChange = () => undefined,
   onSimulationGoalChange = () => undefined,
@@ -98,6 +111,15 @@ export function ContextSidebar({
   onAttachmentSelect = () => undefined,
   onAttachmentPreview = () => undefined,
   onAttachmentRemove = () => undefined,
+  semanticState,
+  selectedSemanticNode = null,
+  selectedSemanticNodes = [],
+  onSemanticEdit = () => undefined,
+  onSemanticUndo = () => undefined,
+  onSemanticRedo = () => undefined,
+  onSemanticPlan = () => undefined,
+  onSemanticApply = () => undefined,
+  onSemanticDiscard = () => undefined,
 }: ContextSidebarProps) {
   const { t } = useTranslation();
 
@@ -216,6 +238,7 @@ export function ContextSidebar({
               <p>{t("inspector.noProject")}</p>
             </div>
           ) : null}
+          {semanticState && selectedSemanticNode ? <SemanticPropertyPanel node={selectedSemanticNode} selectedNodes={selectedSemanticNodes} state={semanticState} onEdit={onSemanticEdit} onUndo={onSemanticUndo} onRedo={onSemanticRedo} onPlan={onSemanticPlan} onApply={onSemanticApply} onDiscard={onSemanticDiscard} /> : null}
           <div className="context-note">
             <Info size={16} aria-hidden="true" />
             <p>{t(project ? "inspector.realReadOnly" : "inspector.noProjectBody")}</p>
@@ -242,6 +265,7 @@ export function ContextSidebar({
           onArchiveDelete={onAiArchiveDelete}
           onArchiveClearZone={onAiArchiveClearZone}
           onArchiveClearAll={onAiArchiveClearAll}
+          onUseSemanticPatch={onUseSemanticPatch}
           simulationState={simulationState}
           onModeChange={onAiModeChange}
           onSimulationGoalChange={onSimulationGoalChange}

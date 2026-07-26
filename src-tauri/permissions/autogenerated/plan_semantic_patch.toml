@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-plan-semantic-patch"
+description = "Enables the plan_semantic_patch command without any pre-configured scope."
+commands.allow = ["plan_semantic_patch"]
+
+[[permission]]
+identifier = "deny-plan-semantic-patch"
+description = "Denies the plan_semantic_patch command without any pre-configured scope."
+commands.deny = ["plan_semantic_patch"]

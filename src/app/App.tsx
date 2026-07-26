@@ -26,11 +26,16 @@ import {
   resolveAppClose,
   selectAndImportAttachments,
   setAttachmentAiSelection,
+  readSemanticProject,
+  planSemanticPatch,
+  applySemanticPatchToDraft,
+  discardSemanticPatch,
 } from "./desktop-api";
 import { APP_CLOSE_REQUESTED_EVENT, isSafeCloseRequest, isSafeCloseResolution, type CloseRequestView } from "./close-state";
 import {
   aiReducer,
   INITIAL_AI_STATE,
+  type AiSemanticPatchSuggestion,
 } from "./ai-state";
 import {
   INITIAL_SIMULATION_STATE,
@@ -70,6 +75,7 @@ import {
 } from "./result-export-state";
 import { INITIAL_RUN_STATE, runReducer } from "./run-state";
 import { draftShortcutAction } from "./draft-shortcuts";
+import { INITIAL_SEMANTIC_STATE, findSemanticNode, semanticReducer, type SemanticOperationRequest } from "./semantic-state";
 import {
   getCenterLayout,
   getMainLayout,
@@ -94,6 +100,7 @@ function App() {
   const [aiState, dispatchAi] = useReducer(aiReducer, INITIAL_AI_STATE);
   const [simulationState, dispatchSimulation] = useReducer(simulationReducer, INITIAL_SIMULATION_STATE);
   const [attachmentState, dispatchAttachment] = useReducer(attachmentReducer, INITIAL_ATTACHMENT_STATE);
+  const [semanticState, dispatchSemantic] = useReducer(semanticReducer, INITIAL_SEMANTIC_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const [draftGuardOpen, setDraftGuardOpen] = useState(false);
   const [draftGuardBusy, setDraftGuardBusy] = useState(false);
@@ -507,6 +514,29 @@ function App() {
     dispatchAttachment({ type: "context_changed" });
   }, [aiState.modelId, projectState.draft?.revision_id, projectState.projectSessionId, workbench.language]);
 
+  useEffect(() => {
+    const sessionId = projectState.projectSessionId;
+    const revisionId = projectState.draft?.revision_id;
+    if (!sessionId || !revisionId) {
+      dispatchSemantic({ type: "context_changed" });
+      return;
+    }
+    let disposed = false;
+    const requestId = crypto.randomUUID();
+    dispatchSemantic({ type: "snapshot_loading" });
+    void readSemanticProject(requestId, sessionId, revisionId).then((response) => {
+      if (disposed) return;
+      if (response.request_id !== requestId || response.error || !response.snapshot || response.snapshot.result_type !== "semantic_project_snapshot") {
+        dispatchSemantic({ type: "failed", issue: response.error ?? { code: "semantic_snapshot_invalid", message: "Semantic project snapshot invalid", source_line_number: null, context: {} } });
+        return;
+      }
+      dispatchSemantic({ type: "snapshot_received", snapshot: response.snapshot });
+    }).catch(() => {
+      if (!disposed) dispatchSemantic({ type: "failed", issue: { code: "semantic_snapshot_failed", message: "Semantic project snapshot failed", source_line_number: null, context: {} } });
+    });
+    return () => { disposed = true; };
+  }, [projectState.draft?.revision_id, projectState.projectSessionId]);
+
   const createSimulationPlan = useCallback(async () => {
     if (
       simulationState.status === "executing" ||
@@ -763,6 +793,96 @@ function App() {
     void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
   }, [commandAvailability.zoneSelect, projectState.project]);
 
+  const selectedSemanticNode = findSemanticNode(semanticState.snapshot, semanticState.selectedObjectId);
+  const selectedSemanticNodes = semanticState.selectedObjectIds.map((objectId) => findSemanticNode(semanticState.snapshot, objectId)).filter((node): node is NonNullable<typeof node> => Boolean(node));
+  const selectSemanticObject = useCallback((objectId: string, additive = false) => {
+    dispatchSemantic({ type: "object_selected", objectId, append: additive });
+    const zone = projectState.project?.zones.find((candidate) => candidate.zone_id === objectId);
+    if (zone && !additive) selectZoneById(zone.zone_id);
+  }, [projectState.project, selectZoneById]);
+  const editSemanticOperations = useCallback((operations: SemanticOperationRequest[]) => {
+    if (simulationState.status === "executing" || attachmentState.busy) return;
+    dispatchSemantic({ type: "edit", operations });
+    dispatchAi({ type: "context_changed" });
+    dispatchSimulation({ type: "context_changed" });
+  }, [attachmentState.busy, simulationState.status]);
+  const useAiSemanticPatch = useCallback((suggestion: AiSemanticPatchSuggestion) => {
+    const snapshot = semanticState.snapshot;
+    const identity = snapshot && typeof snapshot.identity_sha256 === "string" ? snapshot.identity_sha256 : snapshot?.source_sha256;
+    if (!snapshot || !identity || identity.toLowerCase() !== suggestion.baseline_source_sha256.toLowerCase()) {
+      dispatchSemantic({ type: "failed", issue: { code: "semantic_ai_patch_stale", message: "AI语义Patch基线已变化，必须重新生成。", source_line_number: null, context: {} } });
+      return;
+    }
+    const operations: SemanticOperationRequest[] = suggestion.operations.map((item) => ({
+      operation: item.operation,
+      object_id: item.object_id,
+      new_value: item.new_value,
+      unit: item.unit,
+    }));
+    const invalid = suggestion.operations.some((item) => {
+      const node = findSemanticNode(snapshot, item.object_id);
+      if (!node) return true;
+      const expectedKind = item.operation.startsWith("set_zone_") ? "Zone" : "FlowPath";
+      const expectedField = item.operation === "set_zone_name" ? "name" : item.operation === "set_zone_volume" ? "volume_m3" : "multiplier";
+      return node.object_kind !== expectedKind || item.field !== expectedField || node.capabilities?.[expectedField]?.state !== "editable_via_patch";
+    });
+    if (invalid) {
+      dispatchSemantic({ type: "failed", issue: { code: "semantic_ai_patch_unsupported", message: "AI语义Patch包含未识别或只读对象。", source_line_number: null, context: {} } });
+      return;
+    }
+    editSemanticOperations(operations);
+    setActiveDestination("project");
+    updateWorkbench({ contextTab: "inspector", contextCollapsed: false });
+  }, [editSemanticOperations, semanticState.snapshot, updateWorkbench]);
+  const planSemanticOperations = useCallback(async () => {
+    if (!projectState.projectSessionId || !projectState.draft || !semanticState.operations.length || ["planning", "applying"].includes(semanticState.status)) return;
+    const requestId = crypto.randomUUID();
+    dispatchSemantic({ type: "plan_started" });
+    try {
+      const response = await planSemanticPatch(requestId, projectState.projectSessionId, projectState.draft.revision_id, semanticState.operations);
+      if (!mounted.current) return;
+      if (response.request_id !== requestId || response.error || !response.patch_id || !response.diff) {
+        dispatchSemantic({ type: "failed", issue: response.error ?? { code: "semantic_plan_invalid", message: "Semantic patch plan invalid", source_line_number: null, context: {} } });
+        return;
+      }
+      dispatchSemantic({ type: "plan_received", plan: response });
+    } catch {
+      if (mounted.current) dispatchSemantic({ type: "failed", issue: { code: "semantic_plan_failed", message: "Semantic patch plan failed", source_line_number: null, context: {} } });
+    }
+  }, [projectState.draft, projectState.projectSessionId, semanticState.operations, semanticState.status]);
+  const applySemanticOperations = useCallback(async () => {
+    const plan = semanticState.plan;
+    if (!plan?.patch_id || semanticState.status !== "review" || !projectState.projectSessionId) return;
+    const requestId = crypto.randomUUID();
+    dispatchSemantic({ type: "apply_started" });
+    try {
+      const response = await applySemanticPatchToDraft(requestId, projectState.projectSessionId, plan.patch_id);
+      if (!mounted.current) return;
+      if (response.request_id !== requestId || response.error || !response.project || !response.draft || !response.project_session_id) {
+        dispatchSemantic({ type: "failed", issue: response.error ?? { code: "semantic_apply_invalid", message: "Semantic patch application invalid", source_line_number: null, context: {} } });
+        return;
+      }
+      dispatchProject({ type: "draft_replaced", project: response.project, projectSessionId: response.project_session_id, targetZoneId: currentZone?.zone_id ?? response.project.zones[0]?.zone_id ?? "", draft: response.draft });
+      dispatchSemantic({ type: "applied" });
+      dispatchPatch({ type: "project_or_zone_changed" });
+      dispatchResult({ type: "project_or_zone_changed" });
+      dispatchResultExport({ type: "result_changed" });
+      dispatchRun({ type: "project_changed" });
+      dispatchAi({ type: "context_changed" });
+      dispatchSimulation({ type: "context_changed" });
+      setPlaceholderNotice(t("patch.draftAppliedSuccess", { revision: response.draft.revision_number }));
+    } catch {
+      if (mounted.current) dispatchSemantic({ type: "failed", issue: { code: "semantic_apply_failed", message: "Semantic patch application failed", source_line_number: null, context: {} } });
+    }
+  }, [currentZone?.zone_id, projectState.projectSessionId, semanticState.plan, semanticState.status, t]);
+  const discardSemanticOperations = useCallback(async () => {
+    const plan = semanticState.plan;
+    if (plan?.patch_id && projectState.projectSessionId) {
+      try { await discardSemanticPatch(crypto.randomUUID(), projectState.projectSessionId, plan.patch_id); } catch { /* local discard still clears the review */ }
+    }
+    dispatchSemantic({ type: "discarded" });
+  }, [projectState.projectSessionId, semanticState.plan]);
+
   const toggleContext = () => {
     if (workbench.contextCollapsed) contextPanelRef.current?.expand();
     else contextPanelRef.current?.collapse();
@@ -865,6 +985,8 @@ function App() {
               onSelectZone={(zone) =>
                 selectZoneById(zone.zone_id)
               }
+              semanticState={semanticState}
+              onSelectSemantic={selectSemanticObject}
               onCollapse={toggleProject}
             />
           </Panel>
@@ -963,6 +1085,15 @@ function App() {
               onAttachmentSelect={(attachment, selected) => void selectAttachmentEvidence(attachment, selected)}
               onAttachmentPreview={() => void previewAttachmentDisclosure()}
               onAttachmentRemove={(attachment) => void removeAttachment(attachment)}
+              semanticState={semanticState}
+              selectedSemanticNode={selectedSemanticNode}
+              selectedSemanticNodes={selectedSemanticNodes}
+              onSemanticEdit={editSemanticOperations}
+              onSemanticUndo={() => dispatchSemantic({ type: "undo" })}
+              onSemanticRedo={() => dispatchSemantic({ type: "redo" })}
+              onSemanticPlan={() => void planSemanticOperations()}
+              onSemanticApply={() => void applySemanticOperations()}
+              onSemanticDiscard={() => void discardSemanticOperations()}
               onAiConnect={() => void updateAiConnection(false)}
               onAiInstall={() => void installCodexCli()}
               onAiRefresh={() => void updateAiConnection(true)}
@@ -980,6 +1111,7 @@ function App() {
               onAiArchiveDelete={(entryId) => void mutateAiArchive("delete", entryId)}
               onAiArchiveClearZone={() => void mutateAiArchive("clear_zone")}
               onAiArchiveClearAll={() => void mutateAiArchive("clear_all")}
+              onUseSemanticPatch={useAiSemanticPatch}
             />
           </Panel>
         </Group>

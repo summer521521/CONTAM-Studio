@@ -391,3 +391,15 @@ def test_volume_token_and_request_size_limits_are_enforced() -> None:
     assert envelope["ok"] is False
     assert envelope["error"]["code"] == "bridge_request_invalid"
     assert MAX_REQUEST_BYTES == 128 * 1024
+
+
+def test_semantic_snapshot_is_path_free_and_includes_supported_tree() -> None:
+    envelope = handle_request(_request(OFFICIAL_PRJ, operation="read_semantic_project"))
+    assert envelope["ok"] is True
+    result = envelope["result"]
+    assert result["result_type"] == "semantic_project_snapshot"
+    assert isinstance(result["zones"], list) and isinstance(result["levels"], list)
+    assert result["zones"][0]["source_span"]["byte_start"] < result["zones"][0]["source_span"]["byte_end"]
+    assert result["flow_paths"][0]["source_span"]["line_number"] == result["flow_paths"][0]["source_line_number"]
+    assert result["species"][0]["source_span"]["line_number"] == result["species"][0]["source_line_number"]
+    assert "source_path" not in json.dumps(result)

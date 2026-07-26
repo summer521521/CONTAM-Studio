@@ -5,7 +5,7 @@ use crate::zone_bridge::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::cmp::Reverse;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
@@ -41,6 +41,7 @@ const MAX_CONTEXT_BYTES: usize = 32 * 1024;
 const MAX_QUESTION_CHARS: usize = 2_000;
 const MAX_AGENT_RESPONSE_CHARS: usize = 24_000;
 const MAX_RESPONSE_ITEM_CHARS: usize = 1_200;
+const MAX_SEMANTIC_PATCH_OPERATIONS: usize = 128;
 const MAX_ARCHIVE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES: usize = 200;
 const CONTEXT_FINGERPRINT_NAMESPACE: Uuid = Uuid::from_u128(0x4bf2190f_8f82_56aa_9720_19aa44ab2a6d);
@@ -48,7 +49,7 @@ const AI_CONVERSATION_ARCHIVE_NAMESPACE: Uuid =
     Uuid::from_u128(0x05d637d2_faaa_5f3e_8a40_f657c1f755e3);
 const AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION: &str = "1.0";
 static ARCHIVE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
-const ALL_CONTEXT_SCOPES: [&str; 7] = [
+const ALL_CONTEXT_SCOPES: [&str; 9] = [
     "project_summary",
     "selected_zone",
     "draft_summary",
@@ -56,6 +57,8 @@ const ALL_CONTEXT_SCOPES: [&str; 7] = [
     "result_summary",
     "diagnostics",
     "attachment_evidence",
+    "semantic_project",
+    "semantic_object",
 ];
 const TOOL_ITEM_TYPES: [&str; 9] = [
     "commandExecution",
@@ -177,11 +180,33 @@ pub struct DesktopAiContextPreviewResponse {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct AiSemanticPatchOperation {
+    operation: String,
+    object_id: String,
+    field: String,
+    new_value: String,
+    unit: Option<String>,
+    evidence: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AiSemanticPatchSuggestion {
+    schema_version: String,
+    baseline_source_sha256: String,
+    operations: Vec<AiSemanticPatchOperation>,
+    affected_object_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct StructuredAiAnswer {
     deterministic_facts: Vec<String>,
     interpretation: String,
     limitations: Vec<String>,
     suggested_questions: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    semantic_patch: Option<AiSemanticPatchSuggestion>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2276,7 +2301,7 @@ fn thread_system_instructions(language: &str) -> String {
         "English"
     };
     format!(
-        "You are the strictly read-only CONTAM Studio explanation assistant. Use only the structured context included in user messages. Do not read files, run commands, call tools, use web search, modify a project, run ContamX, create patches, or claim access to undisclosed data. Answer in {language_name}. Separate deterministic facts from interpretation. State uncertainty and limitations. Do not provide regulatory compliance or health-risk conclusions. Never claim that you modified, ran, or verified the project. The complete result series is not disclosed unless explicitly stated; do not claim curve-wide analysis."
+        "You are the strictly read-only CONTAM Studio explanation assistant. Use only the structured context included in user messages. Do not read files, run commands, call tools, use web search, modify a project, run ContamX, apply a patch, or claim access to undisclosed data. When the user explicitly requests a supported semantic edit and the disclosed context is sufficient, you may return an optional semantic_patch suggestion using only the exact schema and operations documented in the context. A suggestion is never an execution, and you must ask for missing object, field, unit, or value information instead of guessing. Answer in {language_name}. Separate deterministic facts from interpretation. State uncertainty and limitations. Do not provide regulatory compliance or health-risk conclusions. Never claim that you modified, ran, or verified the project. The complete result series is not disclosed unless explicitly stated; do not claim curve-wide analysis."
     )
 }
 
@@ -2403,11 +2428,149 @@ fn answer_schema() -> Value {
                 "type": "array",
                 "items": {"type": "string", "maxLength": MAX_RESPONSE_ITEM_CHARS},
                 "maxItems": 6
+            },
+            "semantic_patch": {
+                "type": "object",
+                "properties": {
+                    "schema_version": {"type": "string", "const": "semantic_patch_suggestion.v1"},
+                    "baseline_source_sha256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
+                    "operations": {
+                        "type": "array",
+                        "maxItems": MAX_SEMANTIC_PATCH_OPERATIONS,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "operation": {"type": "string", "enum": ["set_zone_volume", "set_zone_name", "set_flow_path_multiplier", "set_flow_path_coefficient"]},
+                                "object_id": {"type": "string", "format": "uuid"},
+                                "field": {"type": "string", "enum": ["volume_m3", "name", "multiplier"]},
+                                "new_value": {"type": "string", "maxLength": 80},
+                                "unit": {"type": ["string", "null"]},
+                                "evidence": {"type": "string", "enum": ["semantic_project", "semantic_object", "user_request"]}
+                            },
+                            "required": ["operation", "object_id", "field", "new_value", "unit", "evidence"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "affected_object_ids": {"type": "array", "maxItems": MAX_SEMANTIC_PATCH_OPERATIONS, "items": {"type": "string", "format": "uuid"}}
+                },
+                "required": ["schema_version", "baseline_source_sha256", "operations", "affected_object_ids"],
+                "additionalProperties": false
             }
         },
         "required": ["deterministic_facts", "interpretation", "limitations", "suggested_questions"],
         "additionalProperties": false
     })
+}
+
+fn validate_semantic_patch_suggestion(
+    patch: &AiSemanticPatchSuggestion,
+) -> Result<(), AiDiagnostic> {
+    if patch.schema_version != "semantic_patch_suggestion.v1"
+        || patch.operations.is_empty()
+        || patch.operations.len() > MAX_SEMANTIC_PATCH_OPERATIONS
+        || patch.affected_object_ids.len() != patch.operations.len()
+    {
+        return Err(AiDiagnostic::new(
+            "ai_semantic_patch_invalid",
+            "The AI semantic patch suggestion was empty or exceeded safe limits.",
+        ));
+    }
+    if patch.baseline_source_sha256.len() != 64
+        || !patch.baseline_source_sha256.is_ascii()
+        || patch
+            .baseline_source_sha256
+            .bytes()
+            .any(|byte| !byte.is_ascii_hexdigit())
+    {
+        return Err(AiDiagnostic::new(
+            "ai_semantic_patch_invalid",
+            "The AI semantic patch baseline hash was invalid.",
+        ));
+    }
+    let mut operation_ids = HashSet::new();
+    let mut affected_ids = HashSet::<String>::new();
+    for id in &patch.affected_object_ids {
+        if Uuid::parse_str(id).is_err() || !affected_ids.insert(id.clone()) {
+            return Err(AiDiagnostic::new(
+                "ai_semantic_patch_invalid",
+                "The AI semantic patch affected-object list was invalid.",
+            ));
+        }
+    }
+    for operation in &patch.operations {
+        if Uuid::parse_str(&operation.object_id).is_err()
+            || operation.new_value.is_empty()
+            || operation.new_value.len() > 80
+            || !operation.new_value.is_ascii()
+            || operation.new_value.chars().any(|character| {
+                character.is_control() || contains_sensitive_path(&character.to_string())
+            })
+            || !matches!(
+                operation.evidence.as_str(),
+                "semantic_project" | "semantic_object" | "user_request"
+            )
+        {
+            return Err(AiDiagnostic::new(
+                "ai_semantic_patch_invalid",
+                "The AI semantic patch operation contained unsafe text or evidence.",
+            ));
+        }
+        let expected = match operation.operation.as_str() {
+            "set_zone_volume"
+                if operation.field == "volume_m3" && operation.unit.as_deref() == Some("m3") =>
+            {
+                "zone_volume"
+            }
+            "set_zone_name" if operation.field == "name" && operation.unit.is_none() => "zone_name",
+            "set_flow_path_multiplier" | "set_flow_path_coefficient"
+                if operation.field == "multiplier" && operation.unit.as_deref() == Some("1") =>
+            {
+                "flow_path_multiplier"
+            }
+            _ => {
+                return Err(AiDiagnostic::new(
+                    "ai_semantic_patch_invalid",
+                    "The AI semantic patch operation used an unsupported field or unit.",
+                ))
+            }
+        };
+        let valid_value = match expected {
+            "zone_name" => {
+                operation.new_value.len() <= 15
+                    && operation.new_value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
+                    })
+            }
+            _ => operation
+                .new_value
+                .parse::<f64>()
+                .is_ok_and(|value| value.is_finite() && value > 0.0 && value <= 1_000_000_000.0),
+        };
+        if !valid_value
+            || !operation_ids.insert((operation.object_id.clone(), operation.field.clone()))
+        {
+            return Err(AiDiagnostic::new(
+                "ai_semantic_patch_invalid",
+                "The AI semantic patch operation was invalid or duplicated.",
+            ));
+        }
+    }
+    let operation_targets = patch
+        .operations
+        .iter()
+        .map(|operation| operation.object_id.as_str())
+        .collect::<HashSet<_>>();
+    if affected_ids.len() != operation_targets.len()
+        || affected_ids
+            .iter()
+            .any(|id| !operation_targets.contains(id.as_str()))
+    {
+        return Err(AiDiagnostic::new(
+            "ai_semantic_patch_invalid",
+            "The AI semantic patch affected-object list did not match its operations.",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_answer(answer: StructuredAiAnswer) -> Result<StructuredAiAnswer, AiDiagnostic> {
@@ -2428,6 +2591,14 @@ fn validate_answer(answer: StructuredAiAnswer) -> Result<StructuredAiAnswer, AiD
             "ai_response_contract_invalid",
             "The AI response did not match the safe response contract.",
         ));
+    }
+    if let Some(patch) = &answer.semantic_patch {
+        validate_semantic_patch_suggestion(patch).map_err(|_| {
+            AiDiagnostic::new(
+                "ai_response_contract_invalid",
+                "The AI semantic patch suggestion did not match the safe response contract.",
+            )
+        })?;
     }
     Ok(answer)
 }

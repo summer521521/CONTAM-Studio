@@ -89,8 +89,12 @@ def parse_species_section(section: PrjSection, baseline_sha256: str) -> tuple[Sp
     species: list[SpeciesProjection] = []
     numbers: set[int] = set()
     for line in section.lines:
+        if "species:" in line.text.casefold() or line.text.lstrip().startswith("!"):
+            continue
         tokens = line.text.partition("!")[0].split()
         if not tokens or not tokens[0].lstrip("+").isdigit():
+            continue
+        if len(tokens) == 1:
             continue
         if len(tokens) < 17:
             raise SourceProjectionError("unsupported_species_layout", "Species记录字段不足，整体拒绝。", line.line_number)

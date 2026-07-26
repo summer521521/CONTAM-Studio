@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-semantic-project"
+description = "Enables the read_semantic_project command without any pre-configured scope."
+commands.allow = ["read_semantic_project"]
+
+[[permission]]
+identifier = "deny-read-semantic-project"
+description = "Denies the read_semantic_project command without any pre-configured scope."
+commands.deny = ["read_semantic_project"]

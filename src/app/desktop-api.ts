@@ -11,6 +11,7 @@ import type { DesktopRunResponse } from "./run-state";
 import type { CloseResolution } from "./close-state";
 import type { DesktopSimulationExecutionResponse, DesktopSimulationPlanResponse } from "./simulation-state";
 import type { AttachmentEvidenceBundleView, AttachmentView } from "./attachment-state";
+import type { SemanticOperationRequest, DesktopSemanticPatchPlanResponse, DesktopSemanticApplyResponse, DesktopSemanticSnapshotResponse } from "./semantic-state";
 import type {
   AiContextScope,
   DesktopAiConversationArchiveResponse,
@@ -52,6 +53,26 @@ export async function applyZoneVolumePatchToDraft(
     projectSessionId,
     patchId,
   });
+}
+
+export async function readSemanticProject(requestId: string, projectSessionId: string, revisionId: string): Promise<DesktopSemanticSnapshotResponse> {
+  return invoke<DesktopSemanticSnapshotResponse>("read_semantic_project", { requestId, projectSessionId, revisionId });
+}
+
+export async function getSemanticObject(requestId: string, projectSessionId: string, revisionId: string, objectId: string): Promise<DesktopSemanticSnapshotResponse> {
+  return invoke<DesktopSemanticSnapshotResponse>("get_semantic_object", { requestId, projectSessionId, revisionId, objectId });
+}
+
+export async function planSemanticPatch(requestId: string, projectSessionId: string, revisionId: string, operations: SemanticOperationRequest[]): Promise<DesktopSemanticPatchPlanResponse> {
+  return invoke<DesktopSemanticPatchPlanResponse>("plan_semantic_patch", { requestId, projectSessionId, revisionId, operations });
+}
+
+export async function applySemanticPatchToDraft(requestId: string, projectSessionId: string, patchId: string): Promise<DesktopSemanticApplyResponse> {
+  return invoke<DesktopSemanticApplyResponse>("apply_semantic_patch_to_draft", { requestId, projectSessionId, patchId });
+}
+
+export async function discardSemanticPatch(requestId: string, projectSessionId: string, patchId: string): Promise<DesktopSemanticPatchPlanResponse> {
+  return invoke<DesktopSemanticPatchPlanResponse>("discard_semantic_patch", { requestId, projectSessionId, patchId });
 }
 
 export async function selectAndExtractZoneAirState(

@@ -154,6 +154,35 @@
     "collapse": "Collapse context panel",
     "expand": "Expand context panel"
   },
+  "semantic": {
+    "projectTree": "Semantic project tree",
+    "properties": "Semantic properties",
+    "levels": "Levels ({{count}})",
+    "zones": "Zones ({{count}})",
+    "flowPaths": "FlowPaths ({{count}})",
+    "schedules": "Schedules ({{count}})",
+    "species": "Species ({{count}})",
+    "sources": "Sources ({{count}})",
+    "object": "Semantic object",
+    "objectType": "Object type",
+    "objectId": "Stable ID",
+    "selectionCount": "Selected objects",
+    "sourceLine": "Source line",
+    "sourceHash": "Source hash",
+    "sourceSpan": "Original byte span",
+    "multiplier": "Path multiplier",
+    "status": "Status",
+    "readOnly": "Read-only",
+    "readOnlyReason": "Read-only reason: {{reason}}",
+    "pendingChanges": "Pending changes ({{count}})",
+    "reviewTitle": "Patch Diff ({{count}})",
+    "patchHash": "Patch hash",
+    "reviewDiff": "Review Diff",
+    "apply": "Apply Patch",
+    "discard": "Discard Patch",
+    "undo": "Undo",
+    "redo": "Redo"
+  },
   "assistant": {
     "tab": "AI assistant",
     "title": "Read-only Codex assistant",
@@ -211,6 +240,9 @@
     "interpretation": "AI interpretation",
     "limitations": "Limitations",
     "suggestedQuestions": "Suggested questions",
+    "semanticPatchTitle": "Semantic Patch suggestion",
+    "semanticPatchSummary": "{{count}} supported operation(s) are ready for deterministic review. Nothing has been written.",
+    "reviewSemanticPatch": "Review semantic Patch",
     "factsCaveat": "These facts are the model's restatement of disclosed data and do not replace the application's deterministic panels.",
     "archive": {
       "title": "Local conversation archive",
@@ -252,6 +284,8 @@
       "result_summary": "Result summary",
       "diagnostics": "Sanitized diagnostics",
       "attachment_evidence": "Confirmed attachment evidence"
+      ,"semantic_project": "Semantic project tree"
+      ,"semantic_object": "Current semantic object"
     }
   },
   "simulation": {

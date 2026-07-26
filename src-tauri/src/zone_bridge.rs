@@ -347,12 +347,11 @@ fn zone_uuid(
 
 fn assign_baseline_zone_ids(zones: &mut [ZoneRecord], baseline_sha256: &str) {
     for zone in zones {
-        zone.zone_id = zone_uuid(
+        zone.zone_id = stable_zone_uuid(
             baseline_sha256,
             "zone",
             zone.contam_number,
             zone.source_line_number,
-            &zone.name,
         );
     }
 }
@@ -372,7 +371,6 @@ fn bind_revision_zone_ids(
         let Some(baseline) = baseline_zones.iter().find(|candidate| {
             candidate.contam_number == zone.contam_number
                 && candidate.source_line_number == zone.source_line_number
-                && candidate.name == zone.name
         }) else {
             return Err(host_diagnostic(
                 "draft_identity_mismatch",
@@ -849,8 +847,70 @@ struct DraftRevision {
     source_size_bytes: u64,
     project: ProjectInspection,
     patch: Option<DraftPatchSummary>,
+    semantic_patch: Option<SemanticRevisionSummary>,
     created_at_unix_ms: u128,
     application_owned: bool,
+}
+
+fn stable_zone_uuid(
+    baseline_sha256: &str,
+    object_type: &str,
+    contam_number: i64,
+    source_line_number: u64,
+) -> String {
+    zone_uuid(
+        baseline_sha256,
+        object_type,
+        contam_number,
+        source_line_number,
+        "",
+    )
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SemanticOperationRequest {
+    pub(crate) operation: String,
+    pub(crate) object_id: String,
+    pub(crate) new_value: String,
+    pub(crate) unit: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopSemanticSnapshotResponse {
+    request_id: String,
+    project_session_id: Option<String>,
+    revision_id: Option<String>,
+    snapshot: Option<Value>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopSemanticPatchPlanResponse {
+    request_id: String,
+    project_session_id: Option<String>,
+    revision_id: Option<String>,
+    patch_id: Option<String>,
+    source_sha256: Option<String>,
+    patch_sha256: Option<String>,
+    diff: Option<Vec<Value>>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopSemanticApplyResponse {
+    request_id: String,
+    project_session_id: Option<String>,
+    project: Option<ProjectInspection>,
+    draft: Option<DraftSummary>,
+    patch_id: Option<String>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug)]
+struct SemanticRevisionSummary {
+    patch_sha256: String,
+    operation_count: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -918,6 +978,16 @@ struct PlannedPatchContext {
     new_volume_token: String,
     source_sha256: String,
     revision_id: String,
+}
+
+#[derive(Clone, Debug)]
+struct SemanticPatchContext {
+    patch_id: String,
+    project_session_id: String,
+    revision_id: String,
+    source_sha256: String,
+    transaction: Value,
+    diff: Vec<Value>,
 }
 
 #[derive(Clone, Debug)]
@@ -1069,6 +1139,7 @@ impl ActiveRunContext {
 struct DesktopSessionState {
     active_project: Option<ActiveProjectContext>,
     planned_patch: Option<PlannedPatchContext>,
+    semantic_patch: Option<SemanticPatchContext>,
     active_run: Option<ActiveRunContext>,
     active_result: Option<ActiveResultContext>,
     last_trusted_result: Option<ActiveResultContext>,
@@ -1108,7 +1179,7 @@ impl DesktopProjectSessionStore {
         ProjectCloseSnapshot {
             draft_dirty: draft.as_ref().is_some_and(|value| value.dirty),
             draft_exported: draft.as_ref().is_some_and(|value| value.exported),
-            patch_review: state.planned_patch.is_some(),
+            patch_review: state.planned_patch.is_some() || state.semantic_patch.is_some(),
             operation_active: self.operation_busy.load(Ordering::Acquire),
         }
     }
@@ -1139,6 +1210,7 @@ impl DesktopProjectSessionStore {
             source_size_bytes: project.source_size_bytes,
             project: project.clone(),
             patch: None,
+            semantic_patch: None,
             created_at_unix_ms: unix_time_ms(),
             application_owned: false,
         };
@@ -1161,6 +1233,7 @@ impl DesktopProjectSessionStore {
         let mut state = self.state.lock().expect("desktop session mutex poisoned");
         let previous = state.active_project.replace(context);
         state.planned_patch = None;
+        state.semantic_patch = None;
         state.active_run = None;
         state.active_result = None;
         state.last_trusted_result = None;
@@ -1247,6 +1320,45 @@ impl DesktopProjectSessionStore {
                             "reader_mode": active.reader_mode,
                             "header_version": active.header_version,
                             "revision_number": active.active_revision().revision_number,
+                        }),
+                    );
+                }
+                "semantic_project" => {
+                    payload.insert(
+                        scope.clone(),
+                        json!({
+                            "baseline_sha256": active.baseline_source_sha256,
+                            "revision_id": active.active_revision().revision_id,
+                            "known_object_kinds": ["Project", "Level", "Zone", "FlowPath", "Schedule", "Species", "Source"],
+                            "zone_count": active.zones.len(),
+                            "zones": active.zones.iter().take(64).map(|item| json!({
+                                "object_kind": "Zone",
+                                "object_id": item.zone_id,
+                                "contam_number": item.contam_number,
+                                "name": item.name,
+                                "fields": {"name": item.name, "volume_m3": item.volume_m3, "level_number": item.level_number, "relative_height": item.relative_height},
+                                "source_line_number": item.source_line_number,
+                                "editable_fields": ["name", "volume_m3"]
+                            })).collect::<Vec<_>>(),
+                            "zone_index_truncated": active.zones.len() > 64,
+                            "unknown_content": "preserved_as_opaque_bytes",
+                            "editable_fields": ["Zone.name", "Zone.volume_m3", "FlowPath.multiplier"],
+                            "ai_patch_evidence": "semantic_project"
+                        }),
+                    );
+                }
+                "semantic_object" => {
+                    payload.insert(
+                        scope.clone(),
+                        json!({
+                            "object_kind": "Zone",
+                            "object_id": zone.zone_id,
+                            "name": zone.name,
+                            "contam_number": zone.contam_number,
+                            "fields": {"name": zone.name, "volume_m3": zone.volume_m3, "level_number": zone.level_number, "relative_height": zone.relative_height},
+                            "source_line_number": zone.source_line_number,
+                            "source_sha256": active.source_sha256,
+                            "editable": true,
                         }),
                     );
                 }
@@ -2302,6 +2414,69 @@ fn apply_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopApplyRespo
     }
 }
 
+fn semantic_snapshot_failure(
+    request_id: &str,
+    error: ReaderDiagnostic,
+) -> DesktopSemanticSnapshotResponse {
+    DesktopSemanticSnapshotResponse {
+        request_id: request_id.into(),
+        project_session_id: None,
+        revision_id: None,
+        snapshot: None,
+        error: Some(error),
+    }
+}
+
+fn semantic_plan_failure(
+    request_id: &str,
+    error: ReaderDiagnostic,
+) -> DesktopSemanticPatchPlanResponse {
+    DesktopSemanticPatchPlanResponse {
+        request_id: request_id.into(),
+        project_session_id: None,
+        revision_id: None,
+        patch_id: None,
+        source_sha256: None,
+        patch_sha256: None,
+        diff: None,
+        error: Some(error),
+    }
+}
+
+fn semantic_apply_failure(
+    request_id: &str,
+    error: ReaderDiagnostic,
+) -> DesktopSemanticApplyResponse {
+    DesktopSemanticApplyResponse {
+        request_id: request_id.into(),
+        project_session_id: None,
+        project: None,
+        draft: None,
+        patch_id: None,
+        error: Some(error),
+    }
+}
+
+fn semantic_value_has_forbidden_key(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, child)| {
+            matches!(
+                key.as_str(),
+                "source_path" | "output_path" | "working_directory" | "command"
+            ) || semantic_value_has_forbidden_key(child)
+        }),
+        Value::Array(values) => values.iter().any(semantic_value_has_forbidden_key),
+        _ => false,
+    }
+}
+
+fn semantic_string_is_valid(value: &str, max: usize) -> bool {
+    !value.is_empty()
+        && value.len() <= max
+        && value.is_ascii()
+        && !value.contains(['\r', '\n', '\0'])
+}
+
 fn canonicalize_manifest_path(path: &Path) -> Result<PathBuf, &'static str> {
     if !path.is_file()
         || !path
@@ -3080,6 +3255,732 @@ pub async fn select_and_read_prj_zones(app: AppHandle, request_id: String) -> De
         envelope: Some(envelope),
         draft,
     }
+}
+
+async fn semantic_bridge_snapshot(
+    active: &ActiveProjectContext,
+    request_id: &str,
+) -> Result<Value, ReaderDiagnostic> {
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": "read_semantic_project",
+        "source_path": active.source_path,
+        "baseline_sha256": active.baseline_source_sha256,
+    });
+    let bridge_id = request_id.to_owned();
+    let raw = tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, READ_AND_PLAN_TIMEOUT)
+    })
+    .await
+    .map_err(|_| {
+        host_diagnostic(
+            "bridge_task_failed",
+            "语义项目读取任务异常结束。",
+            BTreeMap::new(),
+        )
+    })??;
+    if !raw.ok {
+        return Err(sanitize_python_error(&raw).unwrap_or_else(|error| error));
+    }
+    let result = raw.result.ok_or_else(|| {
+        host_diagnostic(
+            "python_response_result_invalid",
+            "语义项目结果为空。",
+            BTreeMap::new(),
+        )
+    })?;
+    if result.get("result_type").and_then(Value::as_str) != Some("semantic_project_snapshot")
+        || semantic_value_has_forbidden_key(&result)
+        || !result
+            .get("source_sha256")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.eq_ignore_ascii_case(&active.source_sha256))
+        || !result
+            .get("identity_sha256")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.eq_ignore_ascii_case(&active.baseline_source_sha256))
+    {
+        return Err(host_diagnostic(
+            "semantic_snapshot_invalid",
+            "语义项目快照契约无效。",
+            BTreeMap::new(),
+        ));
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn read_semantic_project(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+) -> DesktopSemanticSnapshotResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || Uuid::parse_str(&revision_id).is_err()
+    {
+        return semantic_snapshot_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "语义项目请求无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return semantic_snapshot_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "另一个项目操作正在进行。",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let active = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return semantic_snapshot_failure(
+                &request_id,
+                host_diagnostic("project_session_missing", "没有活动项目。", BTreeMap::new()),
+            );
+        };
+        if active.project_session_id != project_session_id
+            || active.active_revision().revision_id != revision_id
+        {
+            return semantic_snapshot_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_mismatch",
+                    "项目Revision不匹配。",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if !active_project_source_matches(&active) {
+            return semantic_snapshot_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_revision_changed",
+                    "项目Revision在读取前发生变化。",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        active
+    };
+    match semantic_bridge_snapshot(&active, &request_id).await {
+        Ok(snapshot) => DesktopSemanticSnapshotResponse {
+            request_id,
+            project_session_id: Some(project_session_id),
+            revision_id: Some(revision_id),
+            snapshot: Some(snapshot),
+            error: None,
+        },
+        Err(error) => semantic_snapshot_failure(&request_id, error),
+    }
+}
+
+#[tauri::command]
+pub async fn get_semantic_object(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    object_id: String,
+) -> DesktopSemanticSnapshotResponse {
+    if !semantic_string_is_valid(&object_id, 160) {
+        return semantic_snapshot_failure(
+            &request_id,
+            host_diagnostic("object_id_invalid", "语义对象标识无效。", BTreeMap::new()),
+        );
+    }
+    let response =
+        read_semantic_project(app, request_id.clone(), project_session_id, revision_id).await;
+    if let Some(snapshot) = response.snapshot.clone() {
+        let matches_id = |value: &Value| {
+            value.get("object_id").and_then(Value::as_str) == Some(object_id.as_str())
+                || value.get("zone_id").and_then(Value::as_str) == Some(object_id.as_str())
+                || value.get("level_id").and_then(Value::as_str) == Some(object_id.as_str())
+                || value.get("path_id").and_then(Value::as_str) == Some(object_id.as_str())
+                || value.get("species_id").and_then(Value::as_str) == Some(object_id.as_str())
+                || value.get("source_id").and_then(Value::as_str) == Some(object_id.as_str())
+        };
+        let matches = snapshot
+            .get("project")
+            .filter(|value| matches_id(value))
+            .cloned()
+            .or_else(|| {
+                [
+                    "levels",
+                    "zones",
+                    "flow_paths",
+                    "schedules",
+                    "species",
+                    "sources",
+                ]
+                .iter()
+                .filter_map(|key| snapshot.get(*key))
+                .flat_map(|value| value.as_array().into_iter().flatten())
+                .find(|value| matches_id(value))
+                .cloned()
+            });
+        return match matches {
+            Some(value) => DesktopSemanticSnapshotResponse {
+                snapshot: Some(json!({"result_type":"semantic_object","object":value})),
+                ..response
+            },
+            None => semantic_snapshot_failure(
+                &response.request_id,
+                host_diagnostic(
+                    "semantic_object_not_found",
+                    "语义对象不存在。",
+                    BTreeMap::new(),
+                ),
+            ),
+        };
+    }
+    response
+}
+
+#[tauri::command]
+pub async fn plan_semantic_patch(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    operations: Vec<SemanticOperationRequest>,
+) -> DesktopSemanticPatchPlanResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || Uuid::parse_str(&revision_id).is_err()
+        || operations.is_empty()
+        || operations.len() > 128
+    {
+        return semantic_plan_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "语义Patch请求无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return semantic_plan_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "另一个项目操作正在进行。",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    for item in &operations {
+        if !matches!(
+            item.operation.as_str(),
+            "set_zone_volume"
+                | "set_zone_name"
+                | "set_flow_path_multiplier"
+                | "set_flow_path_coefficient"
+        ) || !semantic_string_is_valid(&item.object_id, 160)
+            || !semantic_string_is_valid(&item.new_value, 80)
+            || item
+                .unit
+                .as_deref()
+                .is_some_and(|value| !semantic_string_is_valid(value, 16))
+        {
+            return semantic_plan_failure(
+                &request_id,
+                host_diagnostic(
+                    "operation_invalid",
+                    "语义操作不受支持或包含危险字符。",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+    }
+    let active = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return semantic_plan_failure(
+                &request_id,
+                host_diagnostic("project_session_missing", "没有活动项目。", BTreeMap::new()),
+            );
+        };
+        if active.project_session_id != project_session_id
+            || active.active_revision().revision_id != revision_id
+        {
+            return semantic_plan_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_mismatch",
+                    "项目Revision不匹配。",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if !active_project_source_matches(&active) {
+            return semantic_plan_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_revision_changed",
+                    "项目Revision已变化。",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        active
+    };
+    let request_operations: Vec<Value> = operations.iter().map(|item| json!({"operation": item.operation, "object_id": item.object_id, "new_value": item.new_value, "unit": item.unit})).collect();
+    let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": request_id, "operation": "plan_semantic_patch", "source_path": active.source_path, "baseline_sha256": active.baseline_source_sha256, "revision_id": revision_id, "operations": request_operations});
+    let bridge_id = request_id.clone();
+    let raw = match tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, READ_AND_PLAN_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => return semantic_plan_failure(&request_id, error),
+        Err(_) => {
+            return semantic_plan_failure(
+                &request_id,
+                host_diagnostic(
+                    "bridge_task_failed",
+                    "语义Patch计划任务异常结束。",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if !raw.ok {
+        return semantic_plan_failure(
+            &request_id,
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let result = match raw.result {
+        Some(value) => value,
+        None => {
+            return semantic_plan_failure(
+                &request_id,
+                host_diagnostic(
+                    "patch_contract_invalid",
+                    "语义Patch计划为空。",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let transaction = result.get("transaction").cloned().unwrap_or(Value::Null);
+    let diff = result
+        .get("diff")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let source_sha256 = transaction
+        .get("source_sha256")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let patch_sha256 = transaction
+        .get("patch_sha256")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let identity_sha256 = transaction
+        .get("identity_sha256")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if result.get("result_type").and_then(Value::as_str) != Some("semantic_patch_plan")
+        || semantic_value_has_forbidden_key(&result)
+        || !source_sha256.eq_ignore_ascii_case(&active.source_sha256)
+        || !identity_sha256.eq_ignore_ascii_case(&active.baseline_source_sha256)
+        || transaction.get("revision_id").and_then(Value::as_str) != Some(revision_id.as_str())
+        || patch_sha256.len() != 64
+        || !patch_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || diff.len() != operations.len()
+    {
+        return semantic_plan_failure(
+            &request_id,
+            host_diagnostic(
+                "patch_contract_invalid",
+                "语义Patch计划契约无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    if state.active_project.as_ref().is_none_or(|value| {
+        value.project_session_id != project_session_id
+            || value.active_revision().revision_id != revision_id
+    }) {
+        return semantic_plan_failure(
+            &request_id,
+            host_diagnostic(
+                "project_session_mismatch",
+                "项目在计划期间发生变化。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    state.semantic_patch = Some(SemanticPatchContext {
+        patch_id: request_id.clone(),
+        project_session_id: project_session_id.clone(),
+        revision_id: revision_id.clone(),
+        source_sha256: source_sha256.clone(),
+        transaction,
+        diff: diff.clone(),
+    });
+    state.planned_patch = None;
+    DesktopSemanticPatchPlanResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        revision_id: Some(revision_id),
+        patch_id: Some(
+            state
+                .semantic_patch
+                .as_ref()
+                .expect("stored semantic patch")
+                .patch_id
+                .clone(),
+        ),
+        source_sha256: Some(source_sha256),
+        patch_sha256: Some(patch_sha256),
+        diff: Some(diff),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn apply_semantic_patch_to_draft(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    patch_id: String,
+) -> DesktopSemanticApplyResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || !request_id_is_valid(&patch_id)
+    {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "语义Patch应用请求无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "另一个项目操作正在进行。",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    let (active, planned) = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return semantic_apply_failure(
+                &request_id,
+                host_diagnostic("project_session_missing", "没有活动项目。", BTreeMap::new()),
+            );
+        };
+        let Some(planned) = state.semantic_patch.clone() else {
+            return semantic_apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "patch_plan_missing",
+                    "没有待应用的语义Patch。",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id
+            || planned.patch_id != patch_id
+            || planned.project_session_id != project_session_id
+            || planned.revision_id != active.active_revision().revision_id
+            || planned.source_sha256 != active.source_sha256
+        {
+            return semantic_apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "patch_session_mismatch",
+                    "语义Patch不属于当前Revision。",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        if active.revision_cursor + 1 >= MAX_DRAFT_REVISIONS
+            || !active_project_source_matches(&active)
+        {
+            return semantic_apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_revision_changed",
+                    "草稿Revision已变化。",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        (active, planned)
+    };
+    let revision_number = active.active_revision().revision_number + 1;
+    let output = active.draft_root.join("snapshots").join(format!(
+        "revision-{revision_number}-semantic-{request_id}.prj"
+    ));
+    if output.exists() || !output.starts_with(active.draft_root.join("snapshots")) {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_apply_failed",
+                "无法分配内部草稿副本。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let request = json!({"protocol_version": PROTOCOL_VERSION, "request_id": request_id, "operation": "apply_semantic_patch_to_copy", "source_path": active.source_path, "output_path": output, "transaction": planned.transaction});
+    let bridge_id = request_id.clone();
+    let raw = match tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, APPLY_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => return semantic_apply_failure(&request_id, error),
+        Err(_) => {
+            return semantic_apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "bridge_task_failed",
+                    "语义Patch应用任务异常结束。",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if !raw.ok {
+        return semantic_apply_failure(
+            &request_id,
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        );
+    }
+    let application = match raw.result {
+        Some(value) => value,
+        None => {
+            return semantic_apply_failure(
+                &request_id,
+                host_diagnostic(
+                    "patch_contract_invalid",
+                    "语义Patch应用结果为空。",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    if application.get("result_type").and_then(Value::as_str) != Some("semantic_patch_application")
+        || semantic_value_has_forbidden_key(&application)
+        || application.get("source_unchanged").and_then(Value::as_bool) != Some(true)
+    {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "patch_contract_invalid",
+                "语义Patch应用契约无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let output_hash = application
+        .get("output_sha256")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let output_size = application
+        .get("output_size_bytes")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if output_hash.len() != 64
+        || !output_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || !output.is_file()
+    {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "patch_contract_invalid",
+                "草稿输出校验失败。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let envelope = execute_read(&output, &request_id);
+    let mut project = match envelope.result {
+        Some(value) if envelope.ok => value,
+        _ => {
+            return semantic_apply_failure(
+                &request_id,
+                envelope.error.unwrap_or_else(|| {
+                    host_diagnostic(
+                        "draft_apply_failed",
+                        "草稿副本无法重新读取。",
+                        BTreeMap::new(),
+                    )
+                }),
+            )
+        }
+    };
+    let output_evidence = sha256_file(&output).ok();
+    if output_evidence
+        .as_ref()
+        .is_none_or(|(hash, size)| !hash.eq_ignore_ascii_case(output_hash) || *size != output_size)
+    {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_apply_failed",
+                "草稿副本哈希校验失败。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    if let Err(error) = bind_revision_zone_ids(&mut project, &active.revisions[0].project.zones) {
+        return semantic_apply_failure(&request_id, error);
+    }
+    project.source_path = safe_project_file_name(&active.baseline_source_path);
+    let revision = DraftRevision {
+        revision_id: request_id.clone(),
+        revision_number,
+        parent_revision_id: Some(active.active_revision().revision_id.clone()),
+        source_path: output.clone(),
+        source_sha256: output_hash.to_owned(),
+        source_size_bytes: output_size,
+        project: project.clone(),
+        patch: None,
+        semantic_patch: Some(SemanticRevisionSummary {
+            patch_sha256: planned
+                .transaction
+                .get("patch_sha256")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            operation_count: planned.diff.len(),
+        }),
+        created_at_unix_ms: unix_time_ms(),
+        application_owned: true,
+    };
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    let semantic_matches = state
+        .semantic_patch
+        .as_ref()
+        .is_some_and(|value| value.patch_id == patch_id);
+    let Some(current) = state.active_project.as_mut() else {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "draft_session_missing",
+                "草稿会话在应用期间结束。",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    if current.project_session_id != project_session_id
+        || current.active_revision().revision_id != planned.revision_id
+        || !semantic_matches
+    {
+        return semantic_apply_failure(
+            &request_id,
+            host_diagnostic(
+                "patch_session_mismatch",
+                "草稿会话在应用期间发生变化。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let truncated = current.revisions.split_off(current.revision_cursor + 1);
+    current.revisions.push(revision);
+    current.sync_to_revision(current.revisions.len() - 1);
+    let draft = current.draft_summary();
+    state.semantic_patch = None;
+    state.planned_patch = None;
+    state.active_run = None;
+    state.active_result = None;
+    drop(state);
+    for old in truncated {
+        if old.application_owned
+            && old
+                .source_path
+                .starts_with(active.draft_root.join("snapshots"))
+        {
+            let _ = std::fs::remove_file(old.source_path);
+        }
+    }
+    app.state::<crate::codex_app_server::CodexAssistantStore>()
+        .invalidate_context();
+    DesktopSemanticApplyResponse {
+        request_id,
+        project_session_id: Some(project_session_id),
+        project: Some(project),
+        draft: Some(draft),
+        patch_id: Some(patch_id),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn discard_semantic_patch(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    patch_id: String,
+) -> DesktopSemanticPatchPlanResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || !request_id_is_valid(&patch_id)
+    {
+        return semantic_plan_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "语义Patch放弃请求无效。",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let mut state = store.state.lock().expect("desktop session mutex poisoned");
+    if let Some(planned) = state.semantic_patch.as_ref().filter(|value| {
+        value.project_session_id == project_session_id && value.patch_id == patch_id
+    }) {
+        let revision_id = planned.revision_id.clone();
+        state.semantic_patch = None;
+        return DesktopSemanticPatchPlanResponse {
+            request_id,
+            project_session_id: Some(project_session_id),
+            revision_id: Some(revision_id),
+            patch_id: None,
+            source_sha256: None,
+            patch_sha256: None,
+            diff: None,
+            error: None,
+        };
+    }
+    semantic_plan_failure(
+        &request_id,
+        host_diagnostic(
+            "patch_plan_missing",
+            "没有匹配的语义Patch。",
+            BTreeMap::new(),
+        ),
+    )
 }
 
 #[tauri::command]
@@ -4186,6 +5087,7 @@ pub async fn apply_zone_volume_patch_to_draft(
             old_token: planned.patch.preconditions.old_token.clone(),
             new_token: planned.patch.replacement.new_token.clone(),
         }),
+        semantic_patch: None,
         created_at_unix_ms: unix_time_ms(),
         application_owned: true,
     };
@@ -4298,6 +5200,7 @@ fn validate_draft_revision(
         revision.revision_number == 0
             && revision.parent_revision_id.is_none()
             && revision.patch.is_none()
+            && revision.semantic_patch.is_none()
             && !revision.application_owned
             && (allow_external_source_path || revision.source_path == active.baseline_source_path)
             && revision.source_sha256 == active.baseline_source_sha256
@@ -4305,11 +5208,12 @@ fn validate_draft_revision(
     } else {
         let previous = &active.revisions[revision_index - 1];
         let patch = revision.patch.as_ref();
+        let semantic_patch = revision.semantic_patch.as_ref();
         revision.revision_number == previous.revision_number + 1
             && revision.parent_revision_id.as_deref() == Some(previous.revision_id.as_str())
             && revision.application_owned
             && revision.created_at_unix_ms > 0
-            && patch.is_some_and(|patch| {
+            && (patch.is_some_and(|patch| {
                 !patch.old_token.is_empty()
                     && !patch.new_token.is_empty()
                     && patch.old_token != patch.new_token
@@ -4321,7 +5225,14 @@ fn validate_draft_revision(
                                 .parse::<f64>()
                                 .is_ok_and(|value| value.is_finite() && value == zone.volume_m3)
                     })
-            })
+            }) || semantic_patch.is_some_and(|patch| {
+                patch.patch_sha256.len() == 64
+                    && patch
+                        .patch_sha256
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit())
+                    && patch.operation_count > 0
+            }))
     };
     if !metadata_valid {
         return Err(host_diagnostic(

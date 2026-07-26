@@ -154,6 +154,35 @@
     "collapse": "折叠上下文面板",
     "expand": "展开上下文面板"
   },
+  "semantic": {
+    "projectTree": "语义项目树",
+    "properties": "语义属性",
+    "levels": "Levels（{{count}}）",
+    "zones": "Zones（{{count}}）",
+    "flowPaths": "FlowPaths（{{count}}）",
+    "schedules": "Schedules（{{count}}）",
+    "species": "Species（{{count}}）",
+    "sources": "Sources（{{count}}）",
+    "object": "语义对象",
+    "objectType": "对象类型",
+    "objectId": "稳定ID",
+    "selectionCount": "已选对象",
+    "sourceLine": "来源行",
+    "sourceHash": "原文件哈希",
+    "sourceSpan": "原始字节范围",
+    "multiplier": "路径系数",
+    "status": "状态",
+    "readOnly": "只读",
+    "readOnlyReason": "只读原因：{{reason}}",
+    "pendingChanges": "待审阅修改（{{count}}）",
+    "reviewTitle": "Patch Diff（{{count}}）",
+    "patchHash": "Patch哈希",
+    "reviewDiff": "审阅Diff",
+    "apply": "应用Patch",
+    "discard": "放弃Patch",
+    "undo": "撤销",
+    "redo": "重做"
+  },
   "assistant": {
     "tab": "AI助手",
     "title": "Codex只读助手",
@@ -211,6 +240,9 @@
     "interpretation": "AI解释",
     "limitations": "限制",
     "suggestedQuestions": "后续问题",
+    "semanticPatchTitle": "语义Patch建议",
+    "semanticPatchSummary": "有{{count}}项受支持操作可进入确定性审阅，尚未写入任何文件。",
+    "reviewSemanticPatch": "审阅语义Patch",
     "factsCaveat": "这里的确定性事实是模型对已披露数据的复述，不能替代应用的确定性面板。",
     "archive": {
       "title": "本地对话档案",
@@ -252,6 +284,8 @@
       "result_summary": "结果摘要",
       "diagnostics": "清理后的诊断",
       "attachment_evidence": "已确认的附件证据"
+      ,"semantic_project": "语义项目树"
+      ,"semantic_object": "当前语义对象"
     }
   },
   "simulation": {

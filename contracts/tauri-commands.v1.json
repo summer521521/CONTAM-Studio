@@ -22,6 +22,41 @@
       "payload_keys": ["requestId", "projectSessionId", "patchId"]
     },
     {
+      "command": "read_semantic_project",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "readSemanticProject",
+      "permission": "allow-read-semantic-project",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId"]
+    },
+    {
+      "command": "get_semantic_object",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "getSemanticObject",
+      "permission": "allow-get-semantic-object",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "objectId"]
+    },
+    {
+      "command": "plan_semantic_patch",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "planSemanticPatch",
+      "permission": "allow-plan-semantic-patch",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "operations"]
+    },
+    {
+      "command": "apply_semantic_patch_to_draft",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "applySemanticPatchToDraft",
+      "permission": "allow-apply-semantic-patch-to-draft",
+      "payload_keys": ["requestId", "projectSessionId", "patchId"]
+    },
+    {
+      "command": "discard_semantic_patch",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "discardSemanticPatch",
+      "permission": "allow-discard-semantic-patch",
+      "payload_keys": ["requestId", "projectSessionId", "patchId"]
+    },
+    {
       "command": "undo_project_draft",
       "rust_module": "zone_bridge",
       "ts_wrapper": "undoProjectDraft",

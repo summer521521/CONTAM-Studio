@@ -18,7 +18,9 @@ export type AiContextScope =
   | "run_summary"
   | "result_summary"
   | "diagnostics"
-  | "attachment_evidence";
+  | "attachment_evidence"
+  | "semantic_project"
+  | "semantic_object";
 
 export interface AiDiagnostic {
   code: string;
@@ -78,11 +80,28 @@ export interface AiContextDisclosureView {
   };
 }
 
+export type AiSemanticPatchOperation = {
+  operation: "set_zone_volume" | "set_zone_name" | "set_flow_path_multiplier" | "set_flow_path_coefficient";
+  object_id: string;
+  field: "volume_m3" | "name" | "multiplier";
+  new_value: string;
+  unit: "m3" | "1" | null;
+  evidence: "semantic_project" | "semantic_object" | "user_request";
+};
+
+export interface AiSemanticPatchSuggestion {
+  schema_version: "semantic_patch_suggestion.v1";
+  baseline_source_sha256: string;
+  operations: AiSemanticPatchOperation[];
+  affected_object_ids: string[];
+}
+
 export interface StructuredAiAnswer {
   deterministic_facts: string[];
   interpretation: string;
   limitations: string[];
   suggested_questions: string[];
+  semantic_patch?: AiSemanticPatchSuggestion;
 }
 
 export interface AiTokenUsageView {
@@ -435,7 +454,7 @@ export function isSafeAiPreview(preview: AiContextDisclosureView): boolean {
   return preview.preview_id.length > 0
     && preview.context_fingerprint.length > 0
     && preview.included_scopes.length > 0
-    && preview.included_scopes.every((scope) => DEFAULT_AI_SCOPES.includes(scope) || ["project_summary", "run_summary", "result_summary", "diagnostics", "attachment_evidence"].includes(scope))
+    && preview.included_scopes.every((scope) => DEFAULT_AI_SCOPES.includes(scope) || ["project_summary", "run_summary", "result_summary", "diagnostics", "attachment_evidence", "semantic_project", "semantic_object"].includes(scope))
     && !preview.disclosure.contains_local_paths
     && !preview.disclosure.contains_prj_text
     && !preview.disclosure.contains_complete_result_series
@@ -447,16 +466,49 @@ export function isStructuredAiAnswer(value: unknown): value is StructuredAiAnswe
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const answer = value as Record<string, unknown>;
   const expectedKeys = ["deterministic_facts", "interpretation", "limitations", "suggested_questions"];
-  if (Object.keys(answer).length !== expectedKeys.length || !expectedKeys.every((key) => key in answer)) return false;
+  if ((Object.keys(answer).length !== expectedKeys.length && Object.keys(answer).length !== expectedKeys.length + 1) || !expectedKeys.every((key) => key in answer) || Object.keys(answer).some((key) => !expectedKeys.includes(key) && key !== "semantic_patch")) return false;
   const validItems = (items: unknown, limit: number) => Array.isArray(items)
     && items.length <= limit
     && items.every((item) => typeof item === "string" && item.trim().length > 0 && item.length <= 1200);
+  if ("semantic_patch" in answer && !isSafeSemanticPatchSuggestion(answer.semantic_patch)) return false;
   return validItems(answer.deterministic_facts, 8)
     && typeof answer.interpretation === "string"
     && answer.interpretation.trim().length > 0
     && answer.interpretation.length <= 4000
     && validItems(answer.limitations, 8)
     && validItems(answer.suggested_questions, 6);
+}
+
+function isSafeSemanticPatchSuggestion(value: unknown): value is AiSemanticPatchSuggestion {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const patch = value as Record<string, unknown>;
+  const required = ["schema_version", "baseline_source_sha256", "operations", "affected_object_ids"];
+  if (Object.keys(patch).length !== required.length || !required.every((key) => key in patch)) return false;
+  if (patch.schema_version !== "semantic_patch_suggestion.v1" || typeof patch.baseline_source_sha256 !== "string" || !/^[0-9a-f]{64}$/i.test(patch.baseline_source_sha256)) return false;
+  if (!Array.isArray(patch.operations) || patch.operations.length < 1 || patch.operations.length > 128 || !Array.isArray(patch.affected_object_ids) || patch.affected_object_ids.length !== patch.operations.length) return false;
+  const ids = new Set<string>();
+  const targets = new Set<string>();
+  for (const item of patch.affected_object_ids) {
+    if (typeof item !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item) || ids.has(item)) return false;
+    ids.add(item);
+  }
+  for (const item of patch.operations) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const operation = item as Record<string, unknown>;
+    const keys = ["operation", "object_id", "field", "new_value", "unit", "evidence"];
+    if (Object.keys(operation).length !== keys.length || !keys.every((key) => key in operation)) return false;
+    if (typeof operation.object_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operation.object_id)) return false;
+    if (typeof operation.new_value !== "string" || operation.new_value.length === 0 || operation.new_value.length > 80 || /[\u0000-\u001f\u007f]|[A-Za-z]:\\|\\\\|file:\/\//i.test(operation.new_value)) return false;
+    const valid = (operation.operation === "set_zone_volume" && operation.field === "volume_m3" && operation.unit === "m3")
+      || (operation.operation === "set_zone_name" && operation.field === "name" && operation.unit === null)
+      || ((operation.operation === "set_flow_path_multiplier" || operation.operation === "set_flow_path_coefficient") && operation.field === "multiplier" && operation.unit === "1");
+    if (!valid || !["semantic_project", "semantic_object", "user_request"].includes(String(operation.evidence))) return false;
+    if (operation.field === "name" ? !/^[A-Za-z0-9_.-]{1,15}$/.test(operation.new_value) : !Number.isFinite(Number(operation.new_value)) || Number(operation.new_value) <= 0 || Number(operation.new_value) > 1_000_000_000) return false;
+    const key = `${operation.object_id}:${operation.field}`;
+    if (targets.has(key)) return false;
+    targets.add(key);
+  }
+  return [...targets].every((key) => ids.has(key.split(":", 1)[0])) && ids.size === new Set([...targets].map((key) => key.split(":", 1)[0])).size;
 }
 
 function containsSensitivePath(value: string): boolean {
@@ -540,6 +592,8 @@ export function isSafeAiArchive(value: unknown): value is AiConversationArchiveV
         "result_summary",
         "diagnostics",
         "attachment_evidence",
+        "semantic_project",
+        "semantic_object",
       ].includes(scope))
       && typeof item.completed_at_unix_ms === "number"
       && Number.isInteger(item.completed_at_unix_ms)

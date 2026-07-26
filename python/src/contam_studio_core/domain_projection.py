@@ -131,6 +131,7 @@ def _zone_projection(document: PrjZoneDocument, zone: ZoneDocumentRecord, level_
     evidence = _evidence(document.source_sha256, zone.source_line_number)
     zone_id = _stable_id(document.source_sha256, "zone", f"{zone.contam_number}:{zone.source_line_number}")
     capabilities = {
+        "name": FieldCapability("editable_via_patch", None, evidence),
         "flags": FieldCapability("read_only", None, evidence),
         "level_number": FieldCapability("read_only", None, evidence),
         "relative_height": FieldCapability("read_only", "m", evidence),

@@ -5,8 +5,13 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, NoReturn
+from uuid import NAMESPACE_URL, uuid5
 
 from .attachment_broker import AttachmentBroker, AttachmentError
+from .compatibility import classify_project
+from .domain_projection import DomainProjectionError, project_levels_and_zones
+from .document_envelope import read_document_envelope
+from .prj_sections import read_prj_sections
 from .contamx_runner import ContamXRunnerError, run_contamx
 from .prj_zone_models import ReaderDiagnostic
 from .prj_zone_reader import PrjZoneReaderError, read_simple_zones
@@ -24,6 +29,7 @@ from .zone_volume_patch import (
     plan_zone_volume_patch,
     render_zone_volume_patch_diff,
 )
+from .semantic_patch import PatchTransaction, SemanticOperation, SemanticPatchError, apply_transaction_to_copy, plan_zone_transaction, stable_zone_id
 
 PROTOCOL_VERSION = "1.2"
 OPERATION_READ_SIMPLE_ZONES = "read_simple_zones"
@@ -32,10 +38,21 @@ OPERATION_APPLY_ZONE_VOLUME_PATCH = "apply_zone_volume_patch_to_copy"
 OPERATION_EXTRACT_ZONE_AIR_STATE = "extract_zone_air_state"
 OPERATION_RUN_ACTIVE_PROJECT = "run_active_project"
 OPERATION_IMPORT_ATTACHMENT = "import_attachment"
+OPERATION_READ_SEMANTIC_PROJECT = "read_semantic_project"
+OPERATION_PLAN_SEMANTIC_PATCH = "plan_semantic_patch"
+OPERATION_APPLY_SEMANTIC_PATCH = "apply_semantic_patch_to_copy"
 MAX_REQUEST_BYTES = 128 * 1024
 MAX_REQUEST_ID_LENGTH = 128
 MAX_SOURCE_PATH_LENGTH = 32_768
 MAX_VOLUME_TOKEN_LENGTH = 80
+
+
+def _digest_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _semantic_object_id(identity_sha256: str, kind: str, external_identity: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"contam-studio:{identity_sha256}:{kind}:{external_identity}"))
 
 
 class BridgeRequestError(Exception):
@@ -113,6 +130,11 @@ def _require_string(
     return value
 
 
+def _semantic_identity(request: dict[str, Any], document_sha256: str, request_id: str) -> str:
+    value = request.get("baseline_sha256", document_sha256)
+    return _require_string(value, "baseline_sha256", request_id, max_length=64, ascii_only=True).lower()
+
+
 def _require_int(value: object, name: str, request_id: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         _fail_request("bridge_request_invalid", f"{name}必须是整数。", request_id)
@@ -149,6 +171,9 @@ def _require_common(payload: object) -> tuple[dict[str, Any], str, str]:
         OPERATION_EXTRACT_ZONE_AIR_STATE,
         OPERATION_RUN_ACTIVE_PROJECT,
         OPERATION_IMPORT_ATTACHMENT,
+        OPERATION_READ_SEMANTIC_PROJECT,
+        OPERATION_PLAN_SEMANTIC_PATCH,
+        OPERATION_APPLY_SEMANTIC_PATCH,
     }:
         _fail_request("bridge_operation_unsupported", "桥接操作不受支持。", request_id)
     return request, request_id, operation
@@ -318,6 +343,186 @@ def handle_request(payload: object) -> dict[str, object]:
                 request_id,
                 {"result_type": "read_zones", "project": document.to_dict()},
             )
+        if operation == OPERATION_READ_SEMANTIC_PROJECT:
+            if not isinstance(request, dict) or set(request) not in ({"protocol_version", "request_id", "operation", "source_path"}, {"protocol_version", "request_id", "operation", "source_path", "baseline_sha256"}):
+                _fail_request("bridge_request_invalid", "request结构无效。", request_id)
+            source_path = Path(_require_string(request["source_path"], "source_path", request_id))
+            document = read_simple_zones(source_path)
+            identity_sha256 = _semantic_identity(request, document.source_sha256, request_id)
+            projection = None
+            try:
+                projection = project_levels_and_zones(document)
+                projection_reason = None
+            except DomainProjectionError as error:
+                projection_reason = error.code
+            sections = read_prj_sections(source_path)
+            compatibility = classify_project(source_path)
+            envelope = read_document_envelope(source_path)
+            line_spans = {span.line_number: span.to_dict() for span in envelope.line_spans}
+
+            def source_span(line_number: int | None) -> dict[str, int] | None:
+                return None if line_number is None else line_spans.get(line_number)
+
+            section_views = [
+                {
+                    "name": item.name,
+                    "marker_line_number": item.marker_line_number,
+                    "terminator_line_number": item.terminator_line_number,
+                    "declared_count": item.declared_count,
+                    "editable": False,
+                }
+                for item in sections.sections
+            ]
+            zone_views = []
+            for item in document.zones:
+                zone_id = stable_zone_id(identity_sha256, item.contam_number, item.source_line_number)
+                zone_views.append({
+                    "object_id": zone_id,
+                    "object_kind": "Zone",
+                    "contam_number": item.contam_number,
+                    "name": item.name,
+                    "section": "Zones",
+                    "source_line_number": item.source_line_number,
+                    "source_span": source_span(item.source_line_number),
+                    "source_sha256": document.source_sha256,
+                    "revision_state": "baseline",
+                    "fields": {"name": item.name, "flags": item.flags, "level_number": item.level_number, "relative_height": item.relative_height, "volume_m3": item.volume_m3},
+                    "capabilities": {"name": {"state": "editable_via_patch", "unit": None}, "volume_m3": {"state": "editable_via_patch", "unit": "m3"}, "flags": {"state": "read_only", "unit": None}, "level_number": {"state": "read_only", "unit": None}, "relative_height": {"state": "read_only", "unit": "m"}},
+                    "editable": projection_reason is None,
+                })
+            level_views = []
+            if projection_reason is None:
+                try:
+                    level_views = [
+                        {
+                            **item.to_dict(),
+                            "object_id": _semantic_object_id(identity_sha256, "level", str(item.level_number)),
+                            "zone_ids": [str(zone["object_id"]) for zone in zone_views if int(zone["fields"]["level_number"]) == item.level_number],
+                            "object_kind": "Level",
+                            "section": "Levels",
+                            "source_sha256": document.source_sha256,
+                            "source_line_number": item.evidence.source_line_number,
+                            "source_span": source_span(item.evidence.source_line_number),
+                            "editable": False,
+                        }
+                        for item in projection.levels
+                    ]
+                except AttributeError:
+                    level_views = []
+            if not level_views:
+                by_level: dict[int, list[str]] = {}
+                for item in zone_views:
+                    by_level.setdefault(int(item["fields"]["level_number"]), []).append(str(item["object_id"]))
+                level_views = [
+                    {
+                        "object_id": _semantic_object_id(identity_sha256, "level", str(number)),
+                        "object_kind": "Level",
+                        "level_number": number,
+                        "label": f"Level {number}",
+                        "zone_ids": identifiers,
+                        "section": "Levels plus icon data",
+                        "source_line_number": min((int(item["source_line_number"]) for item in zone_views), default=1),
+                        "source_span": source_span(min((int(item["source_line_number"]) for item in zone_views), default=1)),
+                        "source_sha256": document.source_sha256,
+                        "editable": False,
+                    }
+                    for number, identifiers in sorted(by_level.items())
+                ]
+            return _success_envelope(request_id, {
+                "result_type": "semantic_project_snapshot", "source_sha256": document.source_sha256, "identity_sha256": identity_sha256,
+                "revision_state": "baseline_readonly" if compatibility.status.value != "supported_editable" or projection_reason else "baseline_editable",
+                "project": {"object_id": f"project-{identity_sha256[:16]}", "name": source_path.name, "source_sha256": document.source_sha256, "source_span": {"line_number": 1, "byte_start": 0, "byte_end": envelope.source_size_bytes}, "editable": False},
+                "levels": level_views, "zones": zone_views, "read_only_reason": projection_reason,
+                "flow_paths": [] if compatibility.airflow is None else [
+                    {
+                        **item.to_dict(),
+                        "object_id": _semantic_object_id(identity_sha256, "flow-path", f"{item.contam_number}:{item.source_line_number}"),
+                        "path_id": _semantic_object_id(identity_sha256, "flow-path", f"{item.contam_number}:{item.source_line_number}"),
+                        "object_kind": "FlowPath",
+                        "section": "Flow Paths",
+                        "source_sha256": document.source_sha256,
+                        "source_span": source_span(item.source_line_number),
+                        "editable": item.capability == "inspect",
+                        "fields": {
+                            "multiplier": item.multiplier,
+                            "flags": item.flags,
+                            "direction": item.direction,
+                        },
+                        "capabilities": {
+                            "multiplier": {
+                                "state": "editable_via_patch" if item.capability == "inspect" else "read_only",
+                                "unit": "1",
+                            },
+                            "flags": {"state": "read_only", "unit": None},
+                            "direction": {"state": "read_only", "unit": None},
+                        },
+                    }
+                    for item in compatibility.airflow.paths
+                ],
+                "flow_elements": [] if compatibility.airflow is None else [item.to_dict() for item in compatibility.airflow.components],
+                "schedules": [], "sources": [],
+                 "species": [{**item.to_dict(), "species_id": _semantic_object_id(identity_sha256, "species", f"{item.contam_number}:{item.source_line_number}"), "object_kind": "Species", "section": "Species", "source_sha256": document.source_sha256, "source_span": source_span(item.source_line_number), "editable": False} for item in compatibility.species],
+                "sections": section_views,
+                "document_envelope": {"schema_version": envelope.schema_version, "source_sha256": envelope.source_sha256, "source_size_bytes": envelope.source_size_bytes, "encoding": envelope.encoding, "newline_style": envelope.newline_style, "final_newline": envelope.final_newline, "opaque_sections": list(envelope.opaque_sections), "profile": envelope.profile, "editable": False},
+                "unknown_content": {"preserved": True, "reason": "unsupported_or_unverified_sections_remain_byte_opaque"},
+            })
+        if operation == OPERATION_PLAN_SEMANTIC_PATCH:
+            if not isinstance(request, dict) or set(request) not in ({"protocol_version", "request_id", "operation", "source_path", "revision_id", "operations"}, {"protocol_version", "request_id", "operation", "source_path", "revision_id", "operations", "baseline_sha256"}):
+                _fail_request("bridge_request_invalid", "request结构无效。", request_id)
+            source_path = Path(_require_string(request["source_path"], "source_path", request_id))
+            revision_id = _require_string(request["revision_id"], "revision_id", request_id, max_length=64, ascii_only=True)
+            identity_sha256 = _semantic_identity(request, _digest_file(source_path), request_id)
+            raw_operations = request["operations"]
+            if not isinstance(raw_operations, list) or not 1 <= len(raw_operations) <= 128:
+                _fail_request("operation_invalid", "Patch操作列表无效。", request_id)
+            operations: list[dict[str, str | None]] = []
+            for raw in raw_operations:
+                item = _require_object(raw, "operation", {"operation", "object_id", "new_value", "unit"}, request_id)
+                operations.append({
+                    "operation": _require_string(item["operation"], "operation", request_id, max_length=80, ascii_only=True),
+                    "object_id": _require_string(item["object_id"], "object_id", request_id, max_length=128, ascii_only=True),
+                    "new_value": _require_string(item["new_value"], "new_value", request_id, max_length=80, ascii_only=True),
+                    "unit": item["unit"] if item["unit"] is None else _require_string(item["unit"], "unit", request_id, max_length=16, ascii_only=True),
+                })
+            transaction = plan_zone_transaction(source_path, revision_id, tuple(operations), identity_sha256=identity_sha256)
+            return _success_envelope(request_id, {"result_type": "semantic_patch_plan", "transaction": transaction.to_dict(), "diff": [{**item.to_dict(), "source_sha256": transaction.source_sha256} for item in transaction.operations]})
+        if operation == OPERATION_APPLY_SEMANTIC_PATCH:
+            _require_object(request, "request", {"protocol_version", "request_id", "operation", "source_path", "output_path", "transaction"}, request_id)
+            source_path = Path(_require_string(request["source_path"], "source_path", request_id))
+            output_path = Path(_require_string(request["output_path"], "output_path", request_id))
+            raw = _require_object(request["transaction"], "transaction", {"schema_version", "source_sha256", "identity_sha256", "revision_id", "operations", "patch_sha256"}, request_id)
+            raw_ops = raw["operations"]
+            if raw["schema_version"] != "semantic_patch.v1" or not isinstance(raw_ops, list) or not raw_ops:
+                _fail_request("patch_contract_invalid", "语义Patch事务契约无效。", request_id)
+            ops: list[SemanticOperation] = []
+            for raw_op in raw_ops:
+                item = _require_object(raw_op, "transaction.operation", {"operation", "operation_id", "object_id", "field", "old_value", "new_value", "unit", "evidence_span"}, request_id)
+                span = item["evidence_span"]
+                if not isinstance(span, list) or len(span) != 2 or any(isinstance(value, bool) or not isinstance(value, int) for value in span):
+                    _fail_request("patch_contract_invalid", "语义Patch证据范围无效。", request_id)
+                ops.append(SemanticOperation(
+                    _require_string(item["operation"], "operation", request_id, max_length=80, ascii_only=True),
+                    _require_string(item["operation_id"], "operation_id", request_id, max_length=128, ascii_only=True),
+                    _require_string(item["object_id"], "object_id", request_id, max_length=128, ascii_only=True),
+                    _require_string(item["field"], "field", request_id, max_length=64, ascii_only=True),
+                    _require_string(item["old_value"], "old_value", request_id, max_length=80, ascii_only=True),
+                    _require_string(item["new_value"], "new_value", request_id, max_length=80, ascii_only=True),
+                    item["unit"] if item["unit"] is None else _require_string(item["unit"], "unit", request_id, max_length=16, ascii_only=True),
+                    (span[0], span[1]),
+                ))
+            transaction = PatchTransaction(
+                _require_string(raw["source_sha256"], "source_sha256", request_id, max_length=64, ascii_only=True).lower(),
+                _require_string(raw["identity_sha256"], "identity_sha256", request_id, max_length=64, ascii_only=True).lower(),
+                _require_string(raw["revision_id"], "revision_id", request_id, max_length=64, ascii_only=True),
+                tuple(ops),
+                _require_string(raw["patch_sha256"], "patch_sha256", request_id, max_length=64, ascii_only=True),
+            )
+            expected = plan_zone_transaction(source_path, transaction.revision_id, tuple({"operation": op.operation, "object_id": op.object_id, "new_value": op.new_value, "unit": op.unit} for op in transaction.operations), identity_sha256=transaction.identity_sha256)
+            if expected.patch_sha256 != transaction.patch_sha256 or expected.source_sha256 != transaction.source_sha256 or expected.identity_sha256 != transaction.identity_sha256:
+                _fail_request("patch_hash_mismatch", "语义Patch哈希或源文件哈希不匹配。", request_id)
+            apply_transaction_to_copy(source_path, output_path, transaction)
+            snapshot = read_simple_zones(output_path)
+            return _success_envelope(request_id, {"result_type": "semantic_patch_application", "transaction": transaction.to_dict(), "output_sha256": snapshot.source_sha256, "output_size_bytes": snapshot.source_size_bytes, "source_unchanged": _digest_file(source_path) == transaction.source_sha256, "project": {"source_sha256": snapshot.source_sha256, "source_size_bytes": snapshot.source_size_bytes, "declared_zone_count": snapshot.declared_zone_count}})
         if operation == OPERATION_PLAN_ZONE_VOLUME_PATCH:
             _require_object(
                 request,
@@ -462,6 +667,10 @@ def handle_request(payload: object) -> dict[str, object]:
         if created_output:
             _cleanup_verified_output(*created_output)
         return _error_envelope(request_id, error.diagnostic)
+    except SemanticPatchError as error:
+        if created_output:
+            _cleanup_verified_output(*created_output)
+        return _error_envelope(request_id, _diagnostic(error.code, str(error)))
     except Exception:
         if created_output:
             _cleanup_verified_output(*created_output)

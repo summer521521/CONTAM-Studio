@@ -405,6 +405,19 @@ describe("read-only AI state", () => {
     expect(isStructuredAiAnswer({ deterministic_facts: [], interpretation: "ok", limitations: [], suggested_questions: [], raw_path: "C:\\private" })).toBe(false);
   });
 
+  it("accepts only a bounded, baseline-bound semantic patch suggestion", () => {
+    const zoneId = "00000000-0000-5000-8000-000000000101";
+    const patch = {
+      schema_version: "semantic_patch_suggestion.v1",
+      baseline_source_sha256: "a".repeat(64),
+      operations: [{ operation: "set_zone_volume", object_id: zoneId, field: "volume_m3", new_value: "650", unit: "m3", evidence: "semantic_project" }],
+      affected_object_ids: [zoneId],
+    };
+    expect(isStructuredAiAnswer({ ...structuredAnswer, semantic_patch: patch })).toBe(true);
+    expect(isStructuredAiAnswer({ ...structuredAnswer, semantic_patch: { ...patch, operations: [{ ...patch.operations[0], field: "raw_prj", unit: null }] } })).toBe(false);
+    expect(isStructuredAiAnswer({ ...structuredAnswer, semantic_patch: { ...patch, affected_object_ids: ["00000000-0000-5000-8000-000000000102"] } })).toBe(false);
+  });
+
   it("renders network disclosure, context preview, and completed structured exchanges", () => {
     const html = renderToStaticMarkup(
       <CodexAssistantPanel

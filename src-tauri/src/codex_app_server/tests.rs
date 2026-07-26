@@ -17,6 +17,7 @@ fn archive_test_answer() -> StructuredAiAnswer {
         interpretation: "The disclosed Zone volume is stable in the current snapshot.".to_string(),
         limitations: vec!["No complete result series was disclosed.".to_string()],
         suggested_questions: vec!["What does the Zone volume represent?".to_string()],
+        semantic_patch: None,
     }
 }
 
@@ -128,11 +129,36 @@ fn answer_contract_rejects_extra_fields_and_oversized_items() {
         interpretation: "ok".into(),
         limitations: vec![],
         suggested_questions: vec![],
+        semantic_patch: None,
     };
     assert_eq!(
         validate_answer(invalid).unwrap_err().code,
         "ai_response_contract_invalid"
     );
+}
+
+#[test]
+fn semantic_patch_suggestion_is_closed_bounded_and_baseline_bound() {
+    let zone_id = "00000000-0000-5000-8000-000000000101".to_string();
+    let patch = AiSemanticPatchSuggestion {
+        schema_version: "semantic_patch_suggestion.v1".into(),
+        baseline_source_sha256: "a".repeat(64),
+        operations: vec![AiSemanticPatchOperation {
+            operation: "set_zone_volume".into(),
+            object_id: zone_id.clone(),
+            field: "volume_m3".into(),
+            new_value: "650".into(),
+            unit: Some("m3".into()),
+            evidence: "semantic_project".into(),
+        }],
+        affected_object_ids: vec![zone_id],
+    };
+    let mut answer = archive_test_answer();
+    answer.semantic_patch = Some(patch);
+    assert!(validate_answer(answer).is_ok());
+
+    let invalid = r#"{"deterministic_facts":[],"interpretation":"ok","limitations":[],"suggested_questions":[],"semantic_patch":{"schema_version":"semantic_patch_suggestion.v1","baseline_source_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","operations":[{"operation":"set_zone_volume","object_id":"00000000-0000-5000-8000-000000000101","field":"volume_m3","new_value":"650","unit":"m3","evidence":"semantic_project","path":"C:\\private"}],"affected_object_ids":["00000000-0000-5000-8000-000000000101"]}}"#;
+    assert!(serde_json::from_str::<StructuredAiAnswer>(invalid).is_err());
 }
 
 #[test]
@@ -415,6 +441,10 @@ fn response_schema_is_closed_and_bounded() {
     assert_eq!(
         schema.pointer("/properties/suggested_questions/maxItems"),
         Some(&json!(6))
+    );
+    assert_eq!(
+        schema.pointer("/properties/semantic_patch/additionalProperties"),
+        Some(&json!(false))
     );
 }
 

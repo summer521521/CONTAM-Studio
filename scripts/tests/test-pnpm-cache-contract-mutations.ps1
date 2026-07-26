@@ -18,7 +18,10 @@ function Invoke-ExpectedFailure {
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        $output = @(& powershell.exe -NoProfile -File $checker -Root $root -WorkflowPath $workflowPath -ConfigRoot $caseRoot -ResolvedStorePath $StorePath 2>&1)
+        $output = @(& powershell.exe -NoProfile -File $checker -Root $root -WorkflowPath $workflowPath -ConfigRoot $caseRoot -ResolvedStorePath $StorePath 2>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message }
+                else { [string]$_ }
+            })
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -27,7 +30,8 @@ function Invoke-ExpectedFailure {
     if ($exitCode -eq 0) {
         throw "Mutation '${Name}' unexpectedly passed."
     }
-    if (($output -join "`n") -notmatch [regex]::Escape($Diagnostic)) {
+    $diagnosticText = (($output -join "`n") -replace "\s+", "")
+    if ($diagnosticText -notmatch [regex]::Escape(($Diagnostic -replace "\s+", ""))) {
         throw "Mutation '${Name}' failed without ${Diagnostic}; output=$($output -join ' | ')"
     }
 }

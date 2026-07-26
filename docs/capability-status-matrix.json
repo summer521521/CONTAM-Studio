@@ -220,6 +220,17 @@
       "evidence": ["docs/architecture/agent-01-approvable-simulation-loop.md", "docs/development/task-log/records/agent-01-approvable-ai-simulation-loop.md"]
     },
     {
+      "id": "agent-03-full-prj-domain",
+      "name": "AGENT-03受限PRJ语义树与多对象草稿Patch",
+      "implemented": "partial",
+      "automated_verified": "passed",
+      "manual_gui": "pending_user",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "pending_user",
+      "evidence": ["docs/architecture/agent-03-full-prj-domain.md", "docs/development/task-log/records/agent-03-full-prj-domain.md"]
+    },
+    {
       "id": "distribution",
       "name": "Windows分发、安装、签名、自动更新与工具捆绑",
       "implemented": "not_started",

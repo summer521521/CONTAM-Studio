@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [AGENT-03 完整PRJ语义模型与多字段草稿编辑](records/agent-03-full-prj-domain.md) | Phase 7 | automated_verified | live |
 | [AGENT-02 附件中心与证据披露](records/agent-02-attachment-center.md) | Phase 7 | automated_verified | live |
 | [AGENT-01 可审批AI自动仿真闭环](records/agent-01-approvable-ai-simulation-loop.md) | Phase 7 | automated_verified | live |
 | [RUN-ARCH-01 ContamX架构契约修复](records/run-arch-01-contamx-architecture-contract.md) | Runtime | completed | live |

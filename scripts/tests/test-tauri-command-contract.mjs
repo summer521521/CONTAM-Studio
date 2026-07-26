@@ -148,8 +148,8 @@ function check() {
   }
 
   const commands = Array.isArray(registry.commands) ? registry.commands : [];
-  if (commands.length !== 33) {
-    fail(`registry must contain exactly 33 commands, got ${commands.length}`);
+  if (commands.length !== 38) {
+    fail(`registry must contain exactly 38 commands, got ${commands.length}`);
   }
   const commandNames = commands.map((entry) => entry.command);
   if (new Set(commandNames).size !== commandNames.length) {
@@ -231,8 +231,8 @@ function check() {
   } finally {
     typeScriptApi.close();
   }
-  if (invokes.length !== 33) {
-    fail(`desktop-api.ts must contain exactly 33 invoke wrappers, got ${invokes.length}`);
+  if (invokes.length !== 38) {
+    fail(`desktop-api.ts must contain exactly 38 invoke wrappers, got ${invokes.length}`);
   }
   const expectedByCommand = new Map(commands.map((entry) => [entry.command, entry]));
   compareSets(
@@ -263,5 +263,5 @@ if (failures.length > 0) {
   }
   process.exitCode = 1;
 } else {
-    console.log("Tauri command contract passed: 33 commands, exact Rust/capability/permission/TypeScript sets.");
+    console.log("Tauri command contract passed: 38 commands, exact Rust/capability/permission/TypeScript sets.");
 }

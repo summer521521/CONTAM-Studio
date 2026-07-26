@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { ProjectState, ZoneRecord } from "../../app/project-state";
 import { projectFileName, zoneSelectionKey } from "../../app/project-state";
+import type { SemanticState } from "../../app/semantic-state";
+import { SemanticProjectTree } from "./SemanticProjectTree";
 
 interface ProjectSidebarProps {
   projectState: ProjectState;
@@ -12,6 +14,8 @@ interface ProjectSidebarProps {
   onSelectObject: (translationKey: string) => void;
   onSelectZone: (zone: ZoneRecord) => void;
   onCollapse: () => void;
+  semanticState?: SemanticState;
+  onSelectSemantic?: (objectId: string, additive?: boolean) => void;
 }
 
 interface TreeRowProps {
@@ -46,6 +50,8 @@ export function ProjectSidebar({
   availability = { zoneSelect: true, navigation: true },
   onSelectZone,
   onCollapse,
+  semanticState,
+  onSelectSemantic = () => undefined,
 }: ProjectSidebarProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -106,6 +112,7 @@ export function ProjectSidebar({
             {project.zones.length === 0 ? (
               <p className="tree-empty">{t("navigation.noZones")}</p>
             ) : null}
+            <SemanticProjectTree snapshot={semanticState?.snapshot ?? null} selectedObjectId={semanticState?.selectedObjectId ?? null} selectedObjectIds={semanticState?.selectedObjectIds ?? []} onSelect={(node, additive) => { const id = node.object_id ?? node.zone_id ?? node.level_id ?? node.path_id ?? node.species_id ?? node.source_id; if (id) onSelectSemantic(id, additive); }} />
           </>
         ) : projectState.status === "selecting" || projectState.status === "loading" ? (
           <div className="tree-loading" role="status">

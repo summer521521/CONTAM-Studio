@@ -391,6 +391,37 @@ input:focus-visible,
   list-style: none;
 }
 
+.semantic-tree {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.semantic-tree-heading,
+.semantic-tree-project,
+.semantic-tree-group-title,
+.semantic-tree-group li button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 27px;
+  padding: 0 9px;
+  color: var(--text-secondary);
+  text-align: left;
+  background: transparent;
+}
+.semantic-tree-heading { padding-top: 9px; color: var(--text-primary); font-size: 11px; }
+.semantic-tree-project { font-weight: 650; }
+.semantic-tree-group-title { color: var(--text-muted); font-size: 11px; }
+.semantic-tree-group ul { margin: 0; padding: 0 0 3px 20px; list-style: none; }
+.semantic-tree-group li button { min-height: 25px; padding-inline-start: 8px; border-left: 2px solid transparent; font-size: 11px; }
+.semantic-tree-project:hover,
+.semantic-tree-group li button:hover { color: var(--text-primary); background: var(--bg-surface-subtle); }
+.semantic-tree-project.is-selected,
+.semantic-tree-group li button.is-selected { color: var(--text-primary); background: var(--accent-soft); border-left-color: var(--accent); }
+.semantic-tree-group li button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.semantic-tree-group li button small { margin-left: auto; color: var(--text-muted); font-size: 10px; }
+.semantic-readonly-reason { margin: 7px 9px 0; color: var(--text-muted); font-size: 10px; line-height: 1.4; }
+
 .tree-row {
   display: flex;
   align-items: center;
@@ -1018,6 +1049,18 @@ input:focus-visible,
   overflow-wrap: anywhere;
   color: var(--text-primary);
 }
+
+.semantic-property-panel { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.semantic-field-input { width: 100%; min-width: 0; height: 28px; padding: 0 6px; color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: var(--radius); font: 11px Consolas, "Cascadia Mono", monospace; }
+.field-unit { display: block; margin-top: 3px; color: var(--text-muted); font-size: 10px; }
+.semantic-diff { display: grid; gap: 5px; margin-top: 12px; padding: 8px; background: var(--bg-surface-subtle); border-left: 2px solid var(--accent); font-size: 10px; }
+.semantic-review { border: 1px solid var(--accent); }
+.semantic-review p { margin: 0; color: var(--text-muted); }
+.semantic-review code, .semantic-hash { font-family: Consolas, "Cascadia Mono", monospace; font-size: 10px; }
+.semantic-diff div { display: flex; justify-content: space-between; gap: 8px; color: var(--text-muted); }
+.semantic-diff div span:last-child { color: var(--text-primary); font-family: Consolas, "Cascadia Mono", monospace; }
+.semantic-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.semantic-actions button { min-height: 29px; padding-inline: 7px; font-size: 10px; }
 
 .volume-property dd {
   display: flex;
@@ -1724,6 +1767,14 @@ input:focus-visible,
 
 .assistant-answer p {
   padding-left: 0;
+}
+
+.assistant-semantic-patch {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .assistant-archive {
