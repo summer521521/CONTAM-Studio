@@ -108,6 +108,13 @@ export const INITIAL_STUDY_STATE: StudyState = {
   activeRequestId: null,
 };
 
+export function studyResultFilter(raw: string): { parameter: string | null; value: number | null } {
+  const trimmed = raw.trim();
+  if (trimmed === "") return { parameter: null, value: null };
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? { parameter: "zone-volume", value } : { parameter: null, value: null };
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/i;
 

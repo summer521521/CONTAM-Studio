@@ -141,7 +141,10 @@
     "noResults": "当前视图没有结果。",
     "previous": "上一页",
     "next": "下一页",
-    "page": "页"
+    "page": "页",
+    "bridgeFailed": "研究桥接调用失败，请检查项目运行时后重试。",
+    "planInvalid": "研究方案响应无效。",
+    "runInvalid": "研究运行响应无效。"
   },
   "settings": {
     "destinationTitle": "工作台设置",

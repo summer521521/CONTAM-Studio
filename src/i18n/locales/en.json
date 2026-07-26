@@ -141,7 +141,10 @@
     "noResults": "No results for this view.",
     "previous": "Previous",
     "next": "Next",
-    "page": "Page"
+    "page": "Page",
+    "bridgeFailed": "The study bridge could not be invoked. Check the project runtime and retry.",
+    "planInvalid": "The study plan response was invalid.",
+    "runInvalid": "The study run response was invalid."
   },
   "settings": {
     "destinationTitle": "Workbench settings",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STUDY_STATE, studyReducer, studyStatusFromResults, type StudyPlan, type StudySampleResult } from "./study-state";
+import { INITIAL_STUDY_STATE, studyReducer, studyResultFilter, studyStatusFromResults, type StudyPlan, type StudySampleResult } from "./study-state";
 
 const plan: StudyPlan = {
   schema_version: "study_plan.v1",
@@ -35,6 +35,12 @@ function result(status: StudySampleResult["status"]): StudySampleResult {
 }
 
 describe("study state", () => {
+  it("does not send an empty value filter that would hide every result", () => {
+    expect(studyResultFilter("")).toEqual({ parameter: null, value: null });
+    expect(studyResultFilter("  ")).toEqual({ parameter: null, value: null });
+    expect(studyResultFilter("500")).toEqual({ parameter: "zone-volume", value: 500 });
+    expect(studyResultFilter("not-a-number")).toEqual({ parameter: null, value: null });
+  });
   it("keeps plan, run and partial status transitions explicit", () => {
     const planned = studyReducer(INITIAL_STUDY_STATE, { type: "plan_ready", requestId: "r", plan });
     const running = studyReducer(planned, { type: "run_started", requestId: "r" });

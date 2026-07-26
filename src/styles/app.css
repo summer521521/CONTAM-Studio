@@ -2513,8 +2513,16 @@ input:focus-visible,
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0 8px;
-  background: var(--surface);
-  color: var(--text);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* Chromium keeps native option colors unless they are explicitly themed. */
+.study-workspace select option,
+.top-bar select option,
+.codex-assistant select option {
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .study-results-toolbar {
@@ -2531,7 +2539,7 @@ input:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -2541,8 +2549,8 @@ input:focus-visible,
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0 7px;
-  background: var(--surface);
-  color: var(--text);
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .study-pagination {
@@ -2551,7 +2559,7 @@ input:focus-visible,
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -2562,7 +2570,7 @@ input:focus-visible,
 
 .study-meta code {
   margin-left: auto;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .study-analysis {
