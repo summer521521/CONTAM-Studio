@@ -28,6 +28,21 @@ def zone_volume(parameter_id: str = "volume") -> StudyParameter:
     )
 
 
+def flow_multiplier(parameter_id: str = "flow") -> StudyParameter:
+    return StudyParameter(
+        parameter_id,
+        "flow_path_multiplier",
+        "path-1",
+        "FlowPath multiplier",
+        "1",
+        0.5,
+        1.5,
+        0.5,
+        (),
+        1.0,
+    )
+
+
 def test_plan_hash_is_stable_and_samples_are_deterministic() -> None:
     first = create_study_plan(
         baseline_project_sha256=HASH, revision_id="revision-1", parameters=(zone_volume(),)
@@ -70,6 +85,64 @@ def test_cartesian_and_user_combinations() -> None:
         user_combinations=({"volume": 150},),
     )
     assert user.samples[0].values["volume"] == 150
+
+
+def test_cartesian_product_keeps_all_values_for_two_and_three_parameters() -> None:
+    first = StudyParameter("a", "zone_volume_m3", "zone-1", "A", "m3", 10, 30, 10)
+    second = flow_multiplier("b")
+    third = StudyParameter(
+        "c", "zone_name", "zone-1", "Name", None, discrete_values=("A", "B"), default_value="A"
+    )
+    two = create_study_plan(
+        baseline_project_sha256=HASH,
+        revision_id="revision-1",
+        parameters=(first, second),
+        mode="cartesian",
+    )
+    assert len(two.samples) == 9
+    assert all(set(sample.values) == {"a", "b"} for sample in two.samples)
+    assert [sample.values for sample in two.samples[:3]] == [
+        {"a": 10.0, "b": 0.5},
+        {"a": 10.0, "b": 1.0},
+        {"a": 10.0, "b": 1.5},
+    ]
+    three = create_study_plan(
+        baseline_project_sha256=HASH,
+        revision_id="revision-1",
+        parameters=(first, second, third),
+        mode="cartesian",
+    )
+    assert len(three.samples) == 18
+    assert all(set(sample.values) == {"a", "b", "c"} for sample in three.samples)
+
+
+def test_parameter_order_is_canonical_and_duplicate_targets_are_rejected() -> None:
+    first = StudyParameter("a", "zone_volume_m3", "zone-1", "A", "m3", 10, 30, 10)
+    second = flow_multiplier("b")
+    left = create_study_plan(
+        baseline_project_sha256=HASH,
+        revision_id="revision-1",
+        parameters=(first, second),
+        mode="cartesian",
+    )
+    right = create_study_plan(
+        baseline_project_sha256=HASH,
+        revision_id="revision-1",
+        parameters=(second, first),
+        mode="cartesian",
+    )
+    assert left.study_hash == right.study_hash
+    assert [item.sample_id for item in left.samples] == [item.sample_id for item in right.samples]
+    with pytest.raises(StudyError, match="同一对象"):
+        create_study_plan(
+            baseline_project_sha256=HASH,
+            revision_id="revision-1",
+            parameters=(
+                zone_volume("volume-a"),
+                zone_volume("volume-b"),
+            ),
+            mode="cartesian",
+        )
 
 
 def test_result_store_paging_filter_and_no_overwrite(tmp_path: Path) -> None:

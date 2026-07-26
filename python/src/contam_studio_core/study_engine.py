@@ -299,7 +299,13 @@ def create_study_plan(
         raise StudyError("parameter_count_invalid", "参数数量或ID重复。")
     if not 1 <= max_combinations <= MAX_STUDY_CASES:
         raise StudyError("combination_limit", "研究组合上限无效。")
-    params = tuple(parameters)
+    # Canonicalize parameter order so UI reordering cannot change the study
+    # identity or sample enumeration. The ID is deterministic and already
+    # bounded to the safe storage alphabet by the bridge contract.
+    params = tuple(sorted(parameters, key=lambda item: item.parameter_id))
+    targets = {(item.parameter_type, item.object_id) for item in params}
+    if len(targets) != len(params):
+        raise StudyError("duplicate_parameter_target", "同一对象的同一参数不能重复添加。")
     choices = [item.values() for item in params]
     combinations: list[dict[str, str | float]] = []
     if mode == "single_scan":

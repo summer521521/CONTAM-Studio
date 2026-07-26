@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STUDY_STATE, studyReducer, studyResultFilter, studyStatusFromResults, type StudyPlan, type StudySampleResult } from "./study-state";
+import { INITIAL_STUDY_STATE, estimateStudyCombinations, makeStudyParameterDraft, studyDraftToParameter, studyReducer, studyResultFilter, studyStatusFromResults, validateStudyParameterDrafts, type StudyParameterDraft, type StudyPlan, type StudySampleResult } from "./study-state";
 
 const plan: StudyPlan = {
   schema_version: "study_plan.v1",
@@ -35,6 +35,40 @@ function result(status: StudySampleResult["status"]): StudySampleResult {
 }
 
 describe("study state", () => {
+  const zoneDraft = (id = "zone-1"): StudyParameterDraft => makeStudyParameterDraft({ object_id: id, name: id, parameter_type: "zone_volume_m3", unit: "m3", default_value: 20 });
+  const flowDraft = (id = "path-1"): StudyParameterDraft => makeStudyParameterDraft({ object_id: id, name: id, parameter_type: "flow_path_multiplier", unit: "1", default_value: 1 });
+
+  it("supports deterministic two-parameter Cartesian previews and removal", () => {
+    const first = zoneDraft();
+    first.minimum = "10";
+    first.maximum = "30";
+    first.step = "10";
+    const second = flowDraft();
+    second.minimum = "0.5";
+    second.maximum = "1.5";
+    second.step = "0.5";
+    const valid = validateStudyParameterDrafts([first, second], "cartesian");
+    expect(valid.issue).toBeNull();
+    expect(valid.estimate.counts).toEqual([3, 3]);
+    expect(valid.estimate.total).toBe(9);
+    expect(estimateStudyCombinations(valid.parameters, "cartesian").total).toBe(9);
+    expect(studyDraftToParameter(first)?.parameter_id).toBe(first.parameter_id);
+  });
+
+  it("rejects duplicate targets, invalid drafts, and over-limit products", () => {
+    const first = zoneDraft();
+    const duplicate = zoneDraft();
+    expect(validateStudyParameterDrafts([first, duplicate], "cartesian").issue).toBe("duplicate_parameter_target");
+    const invalid = zoneDraft();
+    invalid.step = "0";
+    expect(validateStudyParameterDrafts([invalid], "single_scan").issue).toBe("parameter_invalid");
+    const tooMany = zoneDraft();
+    tooMany.minimum = "0";
+    tooMany.maximum = "100";
+    tooMany.step = "1";
+    expect(validateStudyParameterDrafts([tooMany], "single_scan").issue).toBe("combination_limit");
+  });
+
   it("does not send an empty value filter that would hide every result", () => {
     expect(studyResultFilter("")).toEqual({ parameter: null, value: null });
     expect(studyResultFilter("  ")).toEqual({ parameter: null, value: null });
@@ -52,6 +86,15 @@ describe("study state", () => {
   it("does not let a stale cancel response change a newer run", () => {
     const state = studyReducer(INITIAL_STUDY_STATE, { type: "run_started", requestId: "new" });
     expect(studyReducer(state, { type: "cancelled", requestId: "old" })).toBe(state);
+  });
+
+  it("allows a queued plan to be cancelled but ignores a late response after success", () => {
+    const queued = studyReducer(INITIAL_STUDY_STATE, { type: "plan_ready", requestId: "plan", plan });
+    const cancelled = studyReducer(queued, { type: "cancelled", requestId: "cancel", allowQueued: true });
+    expect(cancelled.status).toBe("cancelled");
+    const running = studyReducer(queued, { type: "run_started", requestId: "run" });
+    const succeeded = studyReducer(running, { type: "run_succeeded", requestId: "run", results: [result("succeeded")], status: "succeeded" });
+    expect(studyReducer(succeeded, { type: "cancelled", requestId: "late" })).toBe(succeeded);
   });
 
   it("ignores a late run result after cancellation", () => {

@@ -18,6 +18,117 @@ export interface StudyParameter {
   default_value: string | number | null;
 }
 
+export interface StudyParameterDraft {
+  parameter_id: string;
+  parameter_type: StudyParameterType;
+  object_id: string;
+  name: string;
+  unit: string | null;
+  minimum: string;
+  maximum: string;
+  step: string;
+  discrete_values: Array<string | number>;
+  default_value: string | number | null;
+}
+
+export interface StudyParameterTarget {
+  object_id: string;
+  name: string;
+  parameter_type: Extract<StudyParameterType, "zone_volume_m3" | "flow_path_multiplier">;
+  unit: string;
+  default_value: number;
+}
+
+export const MAX_STUDY_CASES = 32;
+
+const PARAMETER_PREFIX: Record<StudyParameterTarget["parameter_type"], string> = {
+  zone_volume_m3: "zone-volume",
+  flow_path_multiplier: "flow-path-multiplier",
+};
+
+export function stableStudyParameterId(parameterType: StudyParameterTarget["parameter_type"], objectId: string): string {
+  return `${PARAMETER_PREFIX[parameterType]}-${objectId}`;
+}
+
+export function makeStudyParameterDraft(target: StudyParameterTarget): StudyParameterDraft {
+  const value = Number.isFinite(target.default_value) ? target.default_value : 1;
+  const isVolume = target.parameter_type === "zone_volume_m3";
+  const minimum = isVolume ? Math.max(0.1, value * 0.8) : Math.max(0.01, value * 0.5);
+  const maximum = isVolume ? Math.max(minimum, value * 1.2) : Math.max(minimum, value * 1.5);
+  const step = isVolume ? Math.max(0.1, (maximum - minimum) / 2) : Math.max(0.01, (maximum - minimum) / 2);
+  return {
+    parameter_id: stableStudyParameterId(target.parameter_type, target.object_id),
+    parameter_type: target.parameter_type,
+    object_id: target.object_id,
+    name: target.name,
+    unit: target.unit,
+    minimum: String(minimum),
+    maximum: String(maximum),
+    step: String(step),
+    discrete_values: [],
+    default_value: value,
+  };
+}
+
+function finiteDraftNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function studyDraftToParameter(draft: StudyParameterDraft): StudyParameter | null {
+  const minimum = finiteDraftNumber(draft.minimum);
+  const maximum = finiteDraftNumber(draft.maximum);
+  const step = finiteDraftNumber(draft.step);
+  if (!draft.parameter_id || !draft.object_id || !draft.name || minimum === null || maximum === null || step === null) return null;
+  if (minimum > maximum || step <= 0) return null;
+  return {
+    parameter_id: draft.parameter_id,
+    parameter_type: draft.parameter_type,
+    object_id: draft.object_id,
+    name: draft.name,
+    unit: draft.unit,
+    minimum,
+    maximum,
+    step,
+    discrete_values: draft.discrete_values,
+    default_value: draft.default_value,
+  };
+}
+
+export function studyParameterValueCount(parameter: StudyParameter): number {
+  if (parameter.discrete_values.length) return parameter.discrete_values.length;
+  if (parameter.minimum === null || parameter.maximum === null || parameter.step === null || parameter.step <= 0 || parameter.minimum > parameter.maximum) return 0;
+  const tolerance = Math.max(1e-12, Math.abs(parameter.step) * 1e-9);
+  const span = parameter.maximum - parameter.minimum;
+  const wholeSteps = Math.floor((span + tolerance) / parameter.step);
+  const last = parameter.minimum + wholeSteps * parameter.step;
+  return last < parameter.maximum - tolerance ? wholeSteps + 2 : wholeSteps + 1;
+}
+
+export function estimateStudyCombinations(parameters: StudyParameter[], mode: StudyMode, maxCombinations = MAX_STUDY_CASES): { counts: number[]; total: number; overLimit: boolean } {
+  const counts = parameters.map(studyParameterValueCount);
+  if (counts.some((count) => count <= 0)) return { counts, total: 0, overLimit: false };
+  if (mode === "single_scan") return { counts, total: parameters.length === 1 ? counts[0] : 0, overLimit: parameters.length !== 1 || counts[0] > maxCombinations };
+  const total = counts.reduce((product, count) => product > maxCombinations ? maxCombinations + 1 : product * count, 1);
+  return { counts, total, overLimit: total > maxCombinations };
+}
+
+export function validateStudyParameterDrafts(drafts: StudyParameterDraft[], mode: StudyMode, maxCombinations = MAX_STUDY_CASES): { parameters: StudyParameter[]; estimate: ReturnType<typeof estimateStudyCombinations>; issue: string | null } {
+  const parameters = drafts.map(studyDraftToParameter);
+  if (!drafts.length) return { parameters: [], estimate: { counts: [], total: 0, overLimit: false }, issue: "parameter_required" };
+  if (parameters.some((parameter) => parameter === null)) return { parameters: [], estimate: { counts: [], total: 0, overLimit: false }, issue: "parameter_invalid" };
+  const safeParameters = parameters as StudyParameter[];
+  const targets = safeParameters.map((parameter) => `${parameter.parameter_type}:${parameter.object_id}`);
+  if (new Set(targets).size !== targets.length) return { parameters: [], estimate: { counts: [], total: 0, overLimit: false }, issue: "duplicate_parameter_target" };
+  const estimate = estimateStudyCombinations(safeParameters, mode, maxCombinations);
+  if (mode === "single_scan" && safeParameters.length !== 1) return { parameters: safeParameters, estimate, issue: "single_scan_requires_one_parameter" };
+  if (estimate.total <= 0) return { parameters: safeParameters, estimate, issue: "parameter_invalid" };
+  if (estimate.overLimit) return { parameters: safeParameters, estimate, issue: "combination_limit" };
+  return { parameters: safeParameters, estimate, issue: null };
+}
+
 export interface StudySample {
   sample_id: string;
   ordinal: number;
@@ -94,7 +205,7 @@ export type StudyAction =
   | { type: "run_failed"; requestId: string; issue: ReaderDiagnostic }
   | { type: "page_loaded"; results: StudySampleResult[]; stale: boolean }
   | { type: "analysis_ready"; analysis: StudyAnalysis }
-  | { type: "cancelled"; requestId: string }
+  | { type: "cancelled"; requestId: string; allowQueued?: boolean }
   | { type: "issue"; issue: ReaderDiagnostic }
   | { type: "reset" };
 
@@ -108,11 +219,11 @@ export const INITIAL_STUDY_STATE: StudyState = {
   activeRequestId: null,
 };
 
-export function studyResultFilter(raw: string): { parameter: string | null; value: number | null } {
+export function studyResultFilter(raw: string, parameterId = "zone-volume"): { parameter: string | null; value: number | null } {
   const trimmed = raw.trim();
   if (trimmed === "") return { parameter: null, value: null };
   const value = Number(trimmed);
-  return Number.isFinite(value) ? { parameter: "zone-volume", value } : { parameter: null, value: null };
+  return Number.isFinite(value) ? { parameter: parameterId || null, value } : { parameter: null, value: null };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -151,7 +262,8 @@ export function studyReducer(state: StudyState, action: StudyAction): StudyState
     case "analysis_ready":
       return { ...state, analysis: action.analysis, issue: null };
     case "cancelled":
-      return state.activeRequestId === action.requestId ? { ...state, status: "cancelled", activeRequestId: null } : state;
+      if (state.activeRequestId) return state.activeRequestId === action.requestId ? { ...state, status: "cancelled", activeRequestId: null } : state;
+      return action.allowQueued === true && state.status === "queued" ? { ...state, status: "cancelled", issue: null } : state;
     case "issue":
       return { ...state, issue: action.issue };
     case "reset":

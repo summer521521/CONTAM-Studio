@@ -6,6 +6,7 @@ import type { ProjectState } from "../../app/project-state";
 import type { ResultState } from "../../app/result-state";
 import type { ResultExportState } from "../../app/result-export-state";
 import type { AppTheme, WorkbenchDestination } from "../../app/workbench-state";
+import type { SemanticSnapshot } from "../../app/semantic-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { StudyWorkspace } from "./StudyWorkspace";
 
@@ -26,6 +27,7 @@ interface DestinationPageProps {
   onSettingsReset: () => void;
   projectSessionId?: string | null;
   revisionId?: string | null;
+  semanticSnapshot?: SemanticSnapshot | null;
   onNotice?: (message: string) => void;
 }
 
@@ -46,6 +48,7 @@ export function DestinationPage({
   onSettingsReset,
   projectSessionId = null,
   revisionId = null,
+  semanticSnapshot = null,
   onNotice,
 }: DestinationPageProps) {
   const { t } = useTranslation();
@@ -109,7 +112,7 @@ export function DestinationPage({
   }
 
   if (destination === "studies") {
-    return <StudyWorkspace project={project} projectSessionId={projectSessionId} revisionId={revisionId} onNotice={onNotice} />;
+    return <StudyWorkspace project={project} projectSessionId={projectSessionId} revisionId={revisionId} semanticSnapshot={semanticSnapshot} onNotice={onNotice} />;
   }
 
   return (

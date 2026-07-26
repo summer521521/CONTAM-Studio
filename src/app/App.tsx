@@ -1020,6 +1020,7 @@ function App() {
                   onExportResults={exportZoneResults}
                   projectSessionId={projectState.projectSessionId}
                   revisionId={projectState.draft?.revision_id ?? null}
+                  semanticSnapshot={semanticState.snapshot}
                   onNotice={setPlaceholderNotice}
                 />
               </Panel>

@@ -19,6 +19,7 @@ import type { AppTheme } from "../../app/workbench-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { DestinationPage } from "./DestinationPage";
 import type { WorkbenchDestination } from "../../app/workbench-state";
+import type { SemanticSnapshot } from "../../app/semantic-state";
 
 interface WelcomePageProps {
   destination?: WorkbenchDestination;
@@ -42,6 +43,7 @@ interface WelcomePageProps {
   onSettingsReset?: () => void;
   projectSessionId?: string | null;
   revisionId?: string | null;
+  semanticSnapshot?: SemanticSnapshot | null;
   onNotice?: (message: string) => void;
 }
 
@@ -66,6 +68,7 @@ export function WelcomePage({
   onSettingsReset = () => undefined,
   projectSessionId = null,
   revisionId = null,
+  semanticSnapshot = null,
   onNotice = () => undefined,
 }: WelcomePageProps) {
   const { t } = useTranslation();
@@ -119,6 +122,7 @@ export function WelcomePage({
             availability={availability}
             projectSessionId={projectSessionId}
             revisionId={revisionId}
+            semanticSnapshot={semanticSnapshot}
             onNotice={onNotice}
           />
         ) : project ? (
