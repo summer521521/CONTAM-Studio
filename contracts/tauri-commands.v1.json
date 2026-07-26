@@ -71,6 +71,20 @@
       "payload_keys": ["requestId", "projectSessionId"]
     },
     {
+      "command": "prepare_simulation_plan",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "prepareSimulationPlan",
+      "permission": "allow-prepare-simulation-plan",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "selectedZoneId", "goal"]
+    },
+    {
+      "command": "approve_and_run_simulation_plan",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "approveAndRunSimulationPlan",
+      "permission": "allow-approve-and-run-simulation-plan",
+      "payload_keys": ["requestId", "projectSessionId", "planId", "zoneId"]
+    },
+    {
       "command": "probe_codex_app_server",
       "rust_module": "codex_app_server",
       "ts_wrapper": "probeCodexAppServer",

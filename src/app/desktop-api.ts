@@ -9,6 +9,7 @@ import type { DesktopZoneAirStateResponse } from "./result-state";
 import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state";
 import type { DesktopRunResponse } from "./run-state";
 import type { CloseResolution } from "./close-state";
+import type { DesktopSimulationExecutionResponse, DesktopSimulationPlanResponse } from "./simulation-state";
 import type {
   AiContextScope,
   DesktopAiConversationArchiveResponse,
@@ -125,6 +126,36 @@ export async function runActiveContamProject(
   return invoke<DesktopRunResponse>("run_active_contam_project", {
     requestId,
     projectSessionId,
+  });
+}
+
+export async function prepareSimulationPlan(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  selectedZoneId: string,
+  goal: string,
+): Promise<DesktopSimulationPlanResponse> {
+  return invoke<DesktopSimulationPlanResponse>("prepare_simulation_plan", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    selectedZoneId,
+    goal,
+  });
+}
+
+export async function approveAndRunSimulationPlan(
+  requestId: string,
+  projectSessionId: string,
+  planId: string,
+  zoneId: string,
+): Promise<DesktopSimulationExecutionResponse> {
+  return invoke<DesktopSimulationExecutionResponse>("approve_and_run_simulation_plan", {
+    requestId,
+    projectSessionId,
+    planId,
+    zoneId,
   });
 }
 

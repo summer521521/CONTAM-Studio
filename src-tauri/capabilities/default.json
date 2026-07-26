@@ -15,6 +15,8 @@
     "allow-extract-active-run-zone-air-state",
     "allow-export-active-zone-air-state-csv",
     "allow-run-active-contam-project",
+    "allow-prepare-simulation-plan",
+    "allow-approve-and-run-simulation-plan",
     "allow-probe-codex-app-server",
     "allow-install-official-codex-cli",
     "allow-connect-codex-app-server",

@@ -5,6 +5,7 @@ import type { PatchState } from "../../app/patch-state";
 import type { ContextTab } from "../../app/workbench-state";
 import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
 import { INITIAL_AI_STATE, type AiContextScope, type AiState } from "../../app/ai-state";
+import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
 import { CodexAssistantPanel } from "./CodexAssistantPanel";
 
 interface ContextSidebarProps {
@@ -39,6 +40,13 @@ interface ContextSidebarProps {
   onAiArchiveDelete?: (entryId: string) => void;
   onAiArchiveClearZone?: () => void;
   onAiArchiveClearAll?: () => void;
+  simulationState?: SimulationState;
+  onAiModeChange?: (mode: AssistantMode) => void;
+  onSimulationGoalChange?: (goal: string) => void;
+  onSimulationPlan?: () => void;
+  onSimulationBack?: () => void;
+  onSimulationCancel?: () => void;
+  onSimulationApproveAndRun?: () => void;
 }
 
 export function ContextSidebar({
@@ -72,6 +80,13 @@ export function ContextSidebar({
   onAiArchiveDelete = () => undefined,
   onAiArchiveClearZone = () => undefined,
   onAiArchiveClearAll = () => undefined,
+  simulationState = INITIAL_SIMULATION_STATE,
+  onAiModeChange = () => undefined,
+  onSimulationGoalChange = () => undefined,
+  onSimulationPlan = () => undefined,
+  onSimulationBack = () => undefined,
+  onSimulationCancel = () => undefined,
+  onSimulationApproveAndRun = () => undefined,
 }: ContextSidebarProps) {
   const { t } = useTranslation();
 
@@ -216,6 +231,13 @@ export function ContextSidebar({
           onArchiveDelete={onAiArchiveDelete}
           onArchiveClearZone={onAiArchiveClearZone}
           onArchiveClearAll={onAiArchiveClearAll}
+          simulationState={simulationState}
+          onModeChange={onAiModeChange}
+          onSimulationGoalChange={onSimulationGoalChange}
+          onSimulationPlan={onSimulationPlan}
+          onSimulationBack={onSimulationBack}
+          onSimulationCancel={onSimulationCancel}
+          onSimulationApproveAndRun={onSimulationApproveAndRun}
         />
       )}
     </aside>

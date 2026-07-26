@@ -1780,6 +1780,8 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         "select_and_read_prj_zones",
         "plan_zone_volume_patch",
         "apply_zone_volume_patch_to_draft",
+        "prepare_simulation_plan",
+        "approve_and_run_simulation_plan",
         "undo_project_draft",
         "redo_project_draft",
         "export_active_project_draft_copy",
@@ -1806,7 +1808,7 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     ] {
         assert!(build_script.contains(command));
     }
-    assert_eq!(capability["permissions"].as_array().unwrap().len(), 27);
+    assert_eq!(capability["permissions"].as_array().unwrap().len(), 29);
     let forbidden = [
         "sourcePath",
         "outputPath",
@@ -1820,6 +1822,8 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     assert!(desktop_api.contains("extractActiveRunZoneAirState"));
     assert!(desktop_api.contains("exportActiveZoneAirStateCsv"));
     assert!(desktop_api.contains("applyZoneVolumePatchToDraft"));
+    assert!(desktop_api.contains("prepareSimulationPlan"));
+    assert!(desktop_api.contains("approveAndRunSimulationPlan"));
     assert!(desktop_api.contains("undoProjectDraft"));
     assert!(desktop_api.contains("redoProjectDraft"));
     assert!(desktop_api.contains("exportActiveProjectDraftCopy"));

@@ -2,6 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [AGENT-01 可审批AI自动仿真闭环](records/agent-01-approvable-ai-simulation-loop.md) | Phase 7 | automated_verified | live |
 | [RUN-ARCH-01 ContamX架构契约修复](records/run-arch-01-contamx-architecture-contract.md) | Runtime | completed | live |
 | [H-FINAL v1候选集中复核与主线交付](records/h-final-v1-candidate-review.md) | H-FINAL | completed | live |
 | [Batch B Workbench, Supported Domain and Drafts](records/batch-b-workbench-domain-draft.md) | Wave 2-4 | automated_verified | live |

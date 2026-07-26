@@ -16,7 +16,9 @@ import { AppCloseDialog } from "../components/workbench/AppCloseDialog";
 import i18n from "../i18n";
 import {
   applyZoneVolumePatchToDraft,
+  approveAndRunSimulationPlan,
   planZoneVolumePatch,
+  prepareSimulationPlan,
   clearReadonlyAiSession,
   finishAppCloseDraftExport,
   resolveAppClose,
@@ -26,6 +28,12 @@ import {
   aiReducer,
   INITIAL_AI_STATE,
 } from "./ai-state";
+import {
+  INITIAL_SIMULATION_STATE,
+  isSafeSimulationExecutionResponse,
+  isSafeSimulationPlan,
+  simulationReducer,
+} from "./simulation-state";
 import {
   applyResponseIssue,
   INITIAL_PATCH_STATE,
@@ -79,6 +87,7 @@ function App() {
   const [resultExportState, dispatchResultExport] = useReducer(resultExportReducer, INITIAL_RESULT_EXPORT_STATE);
   const [runState, dispatchRun] = useReducer(runReducer, INITIAL_RUN_STATE);
   const [aiState, dispatchAi] = useReducer(aiReducer, INITIAL_AI_STATE);
+  const [simulationState, dispatchSimulation] = useReducer(simulationReducer, INITIAL_SIMULATION_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const [draftGuardOpen, setDraftGuardOpen] = useState(false);
   const [draftGuardBusy, setDraftGuardBusy] = useState(false);
@@ -209,7 +218,7 @@ function App() {
     runStatus: runState.status,
     hasActiveRun: Boolean(activeRunId),
     aiStatus: aiState.status,
-    draftBusy,
+    draftBusy: draftBusy || simulationState.status === "executing",
   });
   const patchLocked = patchState.status === "review" || patchState.status === "applying";
 
@@ -224,10 +233,11 @@ function App() {
     dispatchResultExport,
     dispatchRun,
     dispatchAi,
+    dispatchSimulation,
     onProjectOpened: () => setActiveDestination("project"),
     onNotice: setPlaceholderNotice,
     translate: t,
-    draftBusy,
+    draftBusy: draftBusy || simulationState.status === "executing",
     setDraftBusy,
     draftGuardBusy,
     setDraftGuardBusy,
@@ -404,6 +414,7 @@ function App() {
       dispatchRun({ type: "project_changed" });
       dispatchPatch({ type: "apply_succeeded", requestId });
       dispatchAi({ type: "context_changed" });
+      dispatchSimulation({ type: "context_changed" });
       setPlaceholderNotice(t("patch.draftAppliedSuccess", { revision: response.draft.revision_number }));
     } catch {
       if (!mounted.current) return;
@@ -417,6 +428,153 @@ function App() {
       dispatchProject({ type: "issue_reported", issue });
     }
   }, [commandAvailability.patchApply, patchState.patchId, patchState.projectSessionId, t]);
+
+  const createSimulationPlan = useCallback(async () => {
+    if (
+      simulationState.status === "executing" ||
+      !projectState.projectSessionId ||
+      !projectState.draft ||
+      !currentZone ||
+      !simulationState.goal.trim()
+    ) return;
+    const requestId = crypto.randomUUID();
+    dispatchSimulation({ type: "plan_started", requestId });
+    try {
+      const response = await prepareSimulationPlan(
+        requestId,
+        projectState.projectSessionId,
+        projectState.draft.revision_id,
+        currentZone.zone_id,
+        simulationState.goal,
+      );
+      if (!mounted.current) return;
+      if (!isSafeSimulationPlan(response.plan) || response.request_id !== requestId || response.error) {
+        dispatchSimulation({
+          type: "plan_failed",
+          requestId,
+          issue: response.error ?? {
+            code: "simulation_plan_invalid",
+            message: "Simulation plan response invalid",
+            source_line_number: null,
+            context: {},
+          },
+        });
+        return;
+      }
+      const plan = response.plan;
+      if (
+        plan.project_session_id !== projectState.projectSessionId ||
+        plan.revision_id !== projectState.draft.revision_id ||
+        (plan.status === "ready" && plan.zone_id !== currentZone.zone_id)
+      ) {
+        dispatchSimulation({
+          type: "plan_failed",
+          requestId,
+          issue: {
+            code: "simulation_context_stale",
+            message: "Simulation plan context changed",
+            source_line_number: null,
+            context: {},
+          },
+        });
+        return;
+      }
+      dispatchSimulation({ type: "plan_received", requestId, plan });
+    } catch {
+      if (!mounted.current) return;
+      dispatchSimulation({
+        type: "plan_failed",
+        requestId,
+        issue: {
+          code: "desktop_bridge_invoke_failed",
+          message: "Simulation plan invocation failed",
+          source_line_number: null,
+          context: {},
+        },
+      });
+    }
+  }, [currentZone, projectState.draft, projectState.projectSessionId, simulationState.goal, simulationState.status]);
+
+  const approveAndRunSimulation = useCallback(async () => {
+    const plan = simulationState.plan;
+    if (
+      simulationState.status !== "ready" ||
+      plan?.status !== "ready" ||
+      !projectState.projectSessionId ||
+      !currentZone ||
+      plan.project_session_id !== projectState.projectSessionId ||
+      plan.revision_id !== projectState.draft?.revision_id ||
+      plan.zone_id !== currentZone.zone_id
+    ) return;
+    const requestId = crypto.randomUUID();
+    dispatchSimulation({ type: "execution_started", requestId });
+    try {
+      const response = await approveAndRunSimulationPlan(
+        requestId,
+        projectState.projectSessionId,
+        plan.plan_id,
+        currentZone.zone_id,
+      );
+      if (!mounted.current) return;
+      if (!isSafeSimulationExecutionResponse(response, requestId)) {
+        dispatchSimulation({
+          type: "execution_finished",
+          requestId,
+          response: {
+            request_id: requestId,
+            status: "failed",
+            timeline: simulationState.timeline.map((step, index) => index === 0 ? { ...step, status: "failed" } : step),
+            execution: null,
+            project_session_id: null,
+            project: null,
+            target_zone_id: null,
+            draft: null,
+            run: null,
+            result: null,
+            error: { code: "simulation_execution_invalid", message: "Simulation execution response invalid", source_line_number: null, context: {} },
+          },
+        });
+        return;
+      }
+      if (
+        response.project && response.draft && response.project_session_id === projectState.projectSessionId &&
+        response.target_zone_id && response.project.zones.some((zone) => zone.zone_id === response.target_zone_id)
+      ) {
+        dispatchProject({
+          type: "draft_replaced",
+          project: response.project,
+          projectSessionId: response.project_session_id,
+          targetZoneId: response.target_zone_id,
+          draft: response.draft,
+        });
+        dispatchPatch({ type: "project_or_zone_changed" });
+        dispatchResult({ type: "project_or_zone_changed" });
+        dispatchResultExport({ type: "result_changed" });
+        dispatchRun({ type: "project_changed" });
+        dispatchAi({ type: "context_changed" });
+      }
+      dispatchSimulation({ type: "execution_finished", requestId, response });
+    } catch {
+      if (!mounted.current) return;
+      dispatchSimulation({
+        type: "execution_finished",
+        requestId,
+        response: {
+          request_id: requestId,
+          status: "failed",
+          timeline: simulationState.timeline.map((step, index) => index === 0 ? { ...step, status: "failed" } : step),
+          execution: null,
+          project_session_id: null,
+          project: null,
+          target_zone_id: null,
+          draft: null,
+          run: null,
+          result: null,
+          error: { code: "desktop_bridge_invoke_failed", message: "Simulation execution invocation failed", source_line_number: null, context: {} },
+        },
+      });
+    }
+  }, [currentZone, projectState.draft?.revision_id, projectState.projectSessionId, simulationState.plan, simulationState.status, simulationState.timeline]);
 
   const cancelAppClose = useCallback(async () => {
     if (!closeRequest || closeBusy) return;
@@ -522,6 +680,7 @@ function App() {
     dispatchResult({ type: "project_or_zone_changed" });
     dispatchResultExport({ type: "result_changed" });
     dispatchAi({ type: "context_changed" });
+    dispatchSimulation({ type: "context_changed" });
     setActiveDestination("project");
     void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
   }, [commandAvailability.zoneSelect, projectState.project]);
@@ -574,6 +733,7 @@ function App() {
           if (!commandAvailability.language) return;
           updateWorkbench({ language });
           dispatchAi({ type: "context_changed" });
+          dispatchSimulation({ type: "context_changed" });
           void clearReadonlyAiSession(crypto.randomUUID()).catch(() => undefined);
         }}
         availability={commandAvailability}
@@ -713,6 +873,13 @@ function App() {
               onCollapse={toggleContext}
               aiState={aiState}
               aiContextAvailable={Boolean(projectState.projectSessionId && projectState.draft && currentZone)}
+              simulationState={simulationState}
+              onAiModeChange={(mode) => dispatchSimulation({ type: "mode_changed", mode })}
+              onSimulationGoalChange={(goal) => dispatchSimulation({ type: "goal_changed", goal })}
+              onSimulationPlan={() => void createSimulationPlan()}
+              onSimulationBack={() => dispatchSimulation({ type: "goal_changed", goal: simulationState.goal })}
+              onSimulationCancel={() => dispatchSimulation({ type: "plan_cancelled" })}
+              onSimulationApproveAndRun={() => void approveAndRunSimulation()}
               onAiConnect={() => void updateAiConnection(false)}
               onAiInstall={() => void installCodexCli()}
               onAiRefresh={() => void updateAiConnection(true)}

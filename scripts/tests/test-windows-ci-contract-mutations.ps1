@@ -30,7 +30,11 @@ function Invoke-Mutation {
     if ($result.ExitCode -eq 0) {
         throw "Mutation '${Name}' unexpectedly passed."
     }
-    if ($result.Output -notmatch [regex]::Escape($ExpectedDiagnostic)) {
+    # Child PowerShell can wrap Write-Error tokens at its host width; preserve the
+    # diagnostic contract while ignoring presentation-only whitespace splits.
+    $normalizedOutput = $result.Output -replace '\s+', ''
+    $normalizedExpected = $ExpectedDiagnostic -replace '\s+', ''
+    if ($normalizedOutput -notmatch [regex]::Escape($normalizedExpected)) {
         throw "Mutation '${Name}' failed without ${ExpectedDiagnostic}; output=$($result.Output)"
     }
 }

@@ -10,6 +10,8 @@ fn main() {
         "extract_active_run_zone_air_state",
         "export_active_zone_air_state_csv",
         "run_active_contam_project",
+        "prepare_simulation_plan",
+        "approve_and_run_simulation_plan",
         "probe_codex_app_server",
         "install_official_codex_cli",
         "connect_codex_app_server",

@@ -21,6 +21,13 @@
 - Phase 6A-Beta-1在同一可信绑定内仅以内存保留至多12条已完成的结构化问答。重新生成或收起同一预览不会清空记录；停止只丢弃未完成回答。项目、Revision、Zone、模型、推理强度、披露范围、语言、连接或应用生命周期变化都会同时清空Thread、预览和记录。
 - Phase 6A-Beta-2增加默认关闭、由用户明确启用的本地只读对话档案。Rust仅把已完成且通过闭合Schema验证的安全问答原子写入应用本地数据；档案按基线SHA-256和稳定Zone UUID过滤，同一项目同一Zone可查看历史Revision并明确标记。档案不包含Thread、认证、路径、PRJ正文、manifest、SIM、原始日志或完整结果序列，不会自动再发送给模型；用户可删除单条、当前Zone或全部档案，关闭只停止后续保存。
 
+## AGENT-01受限可审批仿真方案
+
+- AGENT-01在既有只读AI入口旁新增“仿真方案”模式。它只接受单个已识别Zone的有限正`volume_m3`目标，并要求同时明确运行与温度、压力分析意图；缺少任何条件时只返回澄清问题。路径、Shell、原始PRJ、结构化动作注入、未知动作和多Zone/多参数请求均关闭失败。
+- Rust生成封闭`SimulationPlan`、安全Zone体积Diff和绑定项目session、Revision、Zone、计划、批准时刻与15分钟期限的单次`ActionBundle`哈希。React只展示并调用两个受限命令；草稿Patch、官方ContamX、SimRead、可信结果和最终成功状态均由Rust按固定顺序编排，原始PRJ不在该路径中写入。
+- 成功后只生成不含路径、PRJ正文、完整SIM或完整结果序列的可信统计分析输入；它不会伪称远程模型已经回答。用户主动配置的Codex App Server仍沿用Phase 6A的只读、预览和联网披露边界，未配置时不会因AGENT-01自动联网。
+- 自动化覆盖计划分类、封闭动作Schema、注入拒绝、批准重放/过期/上下文失效、Patch失败短路、运行/结果失败、迟到响应、退出阻塞、双语及安全响应契约。真实GUI、键盘、窄窗口和主题验收仍为`pending_user`。
+
 ## Phase 3C不可变草稿与撤销工作流
 
 - 当前切片把原始PRJ固定为Revision 0基线，并由Rust在应用本地数据目录管理Revision 1及以后的不可变草稿快照。每次用户批准的`volume_m3` Patch只创建新快照，不覆盖源文件或已有快照。
@@ -210,7 +217,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。Phase 6A已实现并已合并到`main`；自动验证已通过，真实GUI和用户验证仍待用户确认。Beta-2可选本地档案只保存经验证的已完成问答，不能恢复Thread、自动继续聊天或自动重放给模型。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、AI写入、其他AI后端、网络服务或Python打包分发；Phase 3C、Phase 5C和Phase 6A不得解释为完整编辑、完整结果分析或自主Agent系统。
+桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。Phase 6A已实现并已合并到`main`；AGENT-01增加受限、批准后运行的单Zone闭环，自动验证已通过，真实GUI和用户验证仍待用户确认。Beta-2可选本地档案只保存经验证的已完成问答，不能恢复Thread、自动继续聊天或自动重放给模型。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、通用AI写入、其他AI后端、附件产品工作流、多参数研究、网络服务或Python打包分发；Phase 3C、Phase 5C、Phase 6A和AGENT-01不得解释为完整编辑、完整结果分析或自主Agent系统。
 
 ## 待验证问题
 

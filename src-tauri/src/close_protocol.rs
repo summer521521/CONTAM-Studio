@@ -5,7 +5,9 @@ use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
 use crate::{
     codex_app_server::CodexAssistantStore,
-    zone_bridge::{DesktopProjectSessionStore, ProjectCloseSnapshot},
+    zone_bridge::{
+        simulation_loop::SimulationLoopStore, DesktopProjectSessionStore, ProjectCloseSnapshot,
+    },
 };
 
 pub const CLOSE_REQUESTED_EVENT: &str = "contam-studio://app-close-requested";
@@ -16,6 +18,7 @@ struct CloseActivity {
     draft_exported: bool,
     patch_review: bool,
     project_operation_active: bool,
+    simulation_active: bool,
     ai_activity_active: bool,
 }
 
@@ -32,6 +35,9 @@ impl CloseActivity {
         if self.project_operation_active {
             work.push("project_operation");
         }
+        if self.simulation_active {
+            work.push("simulation_execution");
+        }
         if self.ai_activity_active {
             work.push("ai_turn");
         }
@@ -46,6 +52,7 @@ impl From<ProjectCloseSnapshot> for CloseActivity {
             draft_exported: value.draft_exported,
             patch_review: value.patch_review,
             project_operation_active: value.operation_active,
+            simulation_active: false,
             ai_activity_active: false,
         }
     }
@@ -54,9 +61,11 @@ impl From<ProjectCloseSnapshot> for CloseActivity {
 fn current_activity(
     project: &DesktopProjectSessionStore,
     assistant: &CodexAssistantStore,
+    simulation: &SimulationLoopStore,
 ) -> CloseActivity {
     let mut activity = CloseActivity::from(project.close_snapshot());
     activity.ai_activity_active = assistant.close_activity_active();
+    activity.simulation_active = simulation.close_activity_active();
     activity
 }
 
@@ -294,6 +303,7 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         let activity = current_activity(
             &window.state::<DesktopProjectSessionStore>(),
             &window.state::<CodexAssistantStore>(),
+            &window.state::<SimulationLoopStore>(),
         );
         match store.request(&activity) {
             CloseRequestOutcome::Allow => {}
@@ -311,10 +321,11 @@ pub fn resolve_app_close(
     store: tauri::State<'_, CloseProtocolStore>,
     project: tauri::State<'_, DesktopProjectSessionStore>,
     assistant: tauri::State<'_, CodexAssistantStore>,
+    simulation: tauri::State<'_, SimulationLoopStore>,
     request_id: String,
     decision: CloseDecision,
 ) -> CloseResolution {
-    let activity = current_activity(&project, &assistant);
+    let activity = current_activity(&project, &assistant, &simulation);
     let resolution = store.resolve(&request_id, decision, &activity);
     if resolution.close_started {
         close_window(&app);
@@ -328,10 +339,11 @@ pub fn finish_app_close_draft_export(
     store: tauri::State<'_, CloseProtocolStore>,
     project: tauri::State<'_, DesktopProjectSessionStore>,
     assistant: tauri::State<'_, CodexAssistantStore>,
+    simulation: tauri::State<'_, SimulationLoopStore>,
     request_id: String,
     succeeded: bool,
 ) -> CloseResolution {
-    let activity = current_activity(&project, &assistant);
+    let activity = current_activity(&project, &assistant, &simulation);
     let resolution = store.finish_export(&request_id, succeeded, &activity);
     if resolution.close_started {
         close_window(&app);

@@ -12,6 +12,12 @@ describe("close protocol views", () => {
     expect(isSafeCloseRequest({
       request_id: "close-1",
       draft_decision_required: false,
+      active_work: ["simulation_execution"],
+      repeated: false,
+    })).toBe(true);
+    expect(isSafeCloseRequest({
+      request_id: "close-1",
+      draft_decision_required: false,
       active_work: ["run", "run"],
       repeated: false,
     })).toBe(false);

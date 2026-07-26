@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Archive, Bot, CircleStop, Download, Eye, Link2, RefreshCw, Send, ShieldCheck, Trash2, Unplug, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AiContextScope, AiState } from "../../app/ai-state";
+import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
+import { SimulationPlanPanel } from "./SimulationPlanPanel";
 
 const SCOPES: AiContextScope[] = [
   "project_summary",
@@ -32,6 +34,13 @@ interface CodexAssistantPanelProps {
   onArchiveDelete?: (entryId: string) => void;
   onArchiveClearZone?: () => void;
   onArchiveClearAll?: () => void;
+  simulationState?: SimulationState;
+  onModeChange?: (mode: AssistantMode) => void;
+  onSimulationGoalChange?: (goal: string) => void;
+  onSimulationPlan?: () => void;
+  onSimulationBack?: () => void;
+  onSimulationCancel?: () => void;
+  onSimulationApproveAndRun?: () => void;
 }
 
 export function CodexAssistantPanel({
@@ -54,6 +63,13 @@ export function CodexAssistantPanel({
   onArchiveDelete = () => undefined,
   onArchiveClearZone = () => undefined,
   onArchiveClearAll = () => undefined,
+  simulationState = INITIAL_SIMULATION_STATE,
+  onModeChange = () => undefined,
+  onSimulationGoalChange = () => undefined,
+  onSimulationPlan = () => undefined,
+  onSimulationBack = () => undefined,
+  onSimulationCancel = () => undefined,
+  onSimulationApproveAndRun = () => undefined,
 }: CodexAssistantPanelProps) {
   const { t } = useTranslation();
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
@@ -94,6 +110,23 @@ export function CodexAssistantPanel({
           <p>{t("assistant.localClientOnlineModel")}</p>
         </div>
       </div>
+
+      <div className="assistant-mode-switch" role="tablist" aria-label={t("simulation.mode") }>
+        <button type="button" role="tab" aria-selected={simulationState.mode === "analysis"} className={simulationState.mode === "analysis" ? "is-active" : ""} onClick={() => onModeChange("analysis")}>{t("simulation.analysisMode")}</button>
+        <button type="button" role="tab" aria-selected={simulationState.mode === "simulation_plan"} className={simulationState.mode === "simulation_plan" ? "is-active" : ""} onClick={() => onModeChange("simulation_plan")}>{t("simulation.planMode")}</button>
+      </div>
+
+      {simulationState.mode === "simulation_plan" ? (
+        <SimulationPlanPanel
+          state={simulationState}
+          contextAvailable={contextAvailable}
+          onGoalChange={onSimulationGoalChange}
+          onCreatePlan={onSimulationPlan}
+          onBack={onSimulationBack}
+          onCancel={onSimulationCancel}
+          onApproveAndRun={onSimulationApproveAndRun}
+        />
+      ) : <>
 
       <div className={`assistant-status assistant-status-${state.status}`} role="status" aria-live="polite">
         <strong>{t(`assistant.status.${state.status}`)}</strong>
@@ -446,6 +479,7 @@ export function CodexAssistantPanel({
           </section>
         </div>
       ) : null}
+      </>}
     </div>
   );
 }

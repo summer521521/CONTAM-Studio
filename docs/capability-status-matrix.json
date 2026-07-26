@@ -209,8 +209,19 @@
       "evidence": ["docs/development/task-log/records/h-final-v1-candidate-review.md", "docs/development/task-log/records/batch-c-process-tools-results-distribution.md", "docs/development/task-log/records/batch-d-attachments-ai.md"]
     },
     {
+      "id": "agent-01-approvable-ai-simulation-loop",
+      "name": "AGENT-01受限可审批AI自动仿真闭环",
+      "implemented": "partial",
+      "automated_verified": "passed",
+      "manual_gui": "pending_user",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "pending_user",
+      "evidence": ["docs/architecture/agent-01-approvable-simulation-loop.md", "docs/development/task-log/records/agent-01-approvable-ai-simulation-loop.md"]
+    },
+    {
       "id": "distribution",
-      "name": "Windows分发、安装、签名与工具捆绑",
+      "name": "Windows分发、安装、签名、自动更新与工具捆绑",
       "implemented": "not_started",
       "automated_verified": "not_run",
       "manual_gui": "not_run",
@@ -232,7 +243,29 @@
     },
     {
       "id": "ai-write",
-      "name": "Phase 7 AI Patch与审批写入",
+      "name": "通用AI Patch、完整PRJ编辑与审批写入",
+      "implemented": "not_started",
+      "automated_verified": "not_run",
+      "manual_gui": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "unknown",
+      "evidence": ["docs/roadmap/phases.md", "docs/roadmap/next-development-execution-plan.md"]
+    },
+    {
+      "id": "attachments-product",
+      "name": "附件接收、解析与产品级安全工作流",
+      "implemented": "not_started",
+      "automated_verified": "not_run",
+      "manual_gui": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "unknown",
+      "evidence": ["docs/development/task-log/records/batch-d-attachments-ai.md"]
+    },
+    {
+      "id": "multi-parameter-study",
+      "name": "多参数研究、Sweep与跨运行比较",
       "implemented": "not_started",
       "automated_verified": "not_run",
       "manual_gui": "not_run",

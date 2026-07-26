@@ -16,7 +16,7 @@ export interface CloseResolution {
 }
 
 const REQUEST_ID_PATTERN = /^close-[1-9][0-9]{0,18}$/;
-const ACTIVE_WORK = new Set(["patch_review", "project_operation", "ai_turn"]);
+const ACTIVE_WORK = new Set(["patch_review", "project_operation", "simulation_execution", "ai_turn"]);
 
 export function isSafeCloseRequest(value: CloseRequestView): boolean {
   return REQUEST_ID_PATTERN.test(value.request_id)

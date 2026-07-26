@@ -6,6 +6,7 @@ mod zone_bridge;
 pub fn run() {
     tauri::Builder::default()
         .manage(zone_bridge::DesktopProjectSessionStore::default())
+        .manage(zone_bridge::simulation_loop::SimulationLoopStore::default())
         .manage(codex_app_server::CodexAssistantStore::default())
         .manage(codex_app_server::AiConversationArchiveStore::default())
         .manage(close_protocol::CloseProtocolStore::default())
@@ -21,6 +22,8 @@ pub fn run() {
             zone_bridge::extract_active_run_zone_air_state,
             zone_bridge::export_active_zone_air_state_csv,
             zone_bridge::run_active_contam_project,
+            zone_bridge::simulation_loop::prepare_simulation_plan,
+            zone_bridge::simulation_loop::approve_and_run_simulation_plan,
             codex_app_server::probe_codex_app_server,
             codex_app_server::install_official_codex_cli,
             codex_app_server::connect_codex_app_server,

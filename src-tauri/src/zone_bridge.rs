@@ -1071,6 +1071,7 @@ struct DesktopSessionState {
     planned_patch: Option<PlannedPatchContext>,
     active_run: Option<ActiveRunContext>,
     active_result: Option<ActiveResultContext>,
+    last_trusted_result: Option<ActiveResultContext>,
 }
 
 #[derive(Default)]
@@ -1162,6 +1163,7 @@ impl DesktopProjectSessionStore {
         state.planned_patch = None;
         state.active_run = None;
         state.active_result = None;
+        state.last_trusted_result = None;
         drop(state);
         if let Some(previous) = previous {
             let _ = remove_owned_draft_root(&previous);
@@ -1190,7 +1192,16 @@ impl DesktopProjectSessionStore {
             ));
         }
         state.active_result = Some(context);
+        state.last_trusted_result = state.active_result.clone();
         Ok(())
+    }
+
+    pub(crate) fn has_last_trusted_result(&self) -> bool {
+        self.state
+            .lock()
+            .expect("desktop session mutex poisoned")
+            .last_trusted_result
+            .is_some()
     }
 
     pub(crate) fn build_ai_context(
@@ -4215,6 +4226,9 @@ pub async fn apply_zone_volume_patch_to_draft(
     let draft = current.draft_summary();
     state.planned_patch = None;
     state.active_run = None;
+    if state.active_result.is_some() {
+        state.last_trusted_result = state.active_result.clone();
+    }
     state.active_result = None;
     drop(state);
     for old in truncated {
@@ -4891,6 +4905,8 @@ pub async fn export_active_project_draft_copy(
         error: None,
     }
 }
+
+pub(crate) mod simulation_loop;
 
 #[cfg(test)]
 mod tests;

@@ -22,6 +22,7 @@ import { type ResultAction } from "../result-state";
 import { type ResultExportAction } from "../result-export-state";
 import { type RunAction } from "../run-state";
 import { type AiAction } from "../ai-state";
+import { type SimulationActionState } from "../simulation-state";
 
 interface ProjectControllerOptions {
   projectState: ProjectState;
@@ -34,6 +35,7 @@ interface ProjectControllerOptions {
   dispatchResultExport: Dispatch<ResultExportAction>;
   dispatchRun: Dispatch<RunAction>;
   dispatchAi: Dispatch<AiAction>;
+  dispatchSimulation: Dispatch<SimulationActionState>;
   onProjectOpened: () => void;
   onNotice: (message: string) => void;
   translate: (key: string, options?: Record<string, unknown>) => string;
@@ -55,6 +57,7 @@ export function useProjectController({
   dispatchResultExport,
   dispatchRun,
   dispatchAi,
+  dispatchSimulation,
   onProjectOpened,
   onNotice,
   translate: t,
@@ -72,7 +75,8 @@ export function useProjectController({
     dispatchResultExport({ type: "result_changed" });
     dispatchRun({ type: "project_changed" });
     dispatchAi({ type: "context_changed" });
-  }, [dispatchAi, dispatchPatch, dispatchResult, dispatchResultExport, dispatchRun]);
+    dispatchSimulation({ type: "context_changed" });
+  }, [dispatchAi, dispatchPatch, dispatchResult, dispatchResultExport, dispatchRun, dispatchSimulation]);
 
   const openProjectNow = useCallback(async () => {
     if (!availability.openProject) return;

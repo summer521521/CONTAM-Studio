@@ -1301,6 +1301,132 @@ input:focus-visible,
   gap: 14px;
 }
 
+.assistant-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  background: var(--bg-surface-subtle);
+}
+
+.assistant-mode-switch button {
+  min-height: 32px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  font-size: 11px;
+}
+
+.assistant-mode-switch button + button {
+  border-left: 1px solid var(--border);
+}
+
+.assistant-mode-switch button.is-active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.assistant-mode-switch button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.assistant-simulation-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assistant-simulation-plan > h3,
+.assistant-plan-summary h4,
+.assistant-plan-summary h5 {
+  margin: 0;
+}
+
+.assistant-simulation-plan > h3 {
+  font-size: 14px;
+}
+
+.assistant-plan-summary {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-plan-summary dl {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.assistant-plan-summary dl > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px;
+}
+
+.assistant-plan-summary dt,
+.assistant-plan-summary h5 {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.assistant-plan-summary dd,
+.assistant-plan-summary p,
+.assistant-plan-summary li {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-plan-summary dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.assistant-plan-summary ul,
+.assistant-plan-summary ol {
+  display: grid;
+  gap: 4px;
+  margin: 7px 0 10px;
+  padding-left: 18px;
+}
+
+.simulation-diff {
+  margin: 10px 0;
+  padding: 9px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-surface-subtle);
+}
+
+.simulation-diff p {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 5px 0 0;
+}
+
+.simulation-timeline {
+  list-style-position: inside;
+  padding-left: 0;
+}
+
+.simulation-timeline li {
+  padding: 3px 0;
+  color: var(--text-muted);
+}
+
+.simulation-timeline li[data-status="completed"] {
+  color: var(--success);
+}
+
+.simulation-timeline li[data-status="failed"] {
+  color: var(--error);
+}
+
 .assistant-heading {
   display: flex;
   align-items: flex-start;
