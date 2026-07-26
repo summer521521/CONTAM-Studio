@@ -1,3 +1,4 @@
+use super::attachment_center::{AttachmentCenterStore, AttachmentEvidenceView};
 use super::*;
 use serde::de::Error as DeError;
 use std::collections::BTreeMap;
@@ -125,6 +126,7 @@ pub struct SimulationPlanView {
     risks: Vec<String>,
     context_fingerprint: String,
     volume_diff: Option<SimulationDiffView>,
+    attachment_evidence: Vec<AttachmentEvidenceView>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -191,6 +193,8 @@ struct SimulationContext {
     source_sha256: String,
     zones: Vec<ZoneRecord>,
     selected_zone_id: Option<String>,
+    attachment_fingerprint: String,
+    attachment_evidence: Vec<AttachmentEvidenceView>,
 }
 
 #[derive(Clone, Debug)]
@@ -201,6 +205,7 @@ struct SimulationPlanRecord {
     revision_id: String,
     source_sha256: String,
     zone_id: String,
+    attachment_fingerprint: String,
     expires_at_unix_ms: u128,
     consumed: bool,
 }
@@ -291,10 +296,11 @@ impl SimulationLoopStore {
             || plan.revision_id != context.revision_id
             || plan.source_sha256 != context.source_sha256
             || plan.zone_id != context.selected_zone_id.clone().unwrap_or_default()
+            || plan.attachment_fingerprint != context.attachment_fingerprint
         {
             return Err(simulation_diagnostic(
                 "simulation_context_stale",
-                "The project, revision, or Zone changed after planning.",
+                "The project, revision, Zone, or selected attachment evidence changed after planning.",
             ));
         }
         plan.consumed = true;
@@ -509,6 +515,7 @@ fn parse_volume_token(goal: &str) -> Option<String> {
 
 fn current_context(
     project_store: &DesktopProjectSessionStore,
+    attachment_store: &AttachmentCenterStore,
     project_session_id: &str,
     revision_id: &str,
     selected_zone_id: &str,
@@ -534,6 +541,10 @@ fn current_context(
     let selected_zone_id = (!selected_zone_id.is_empty()
         && active.zone_by_id(selected_zone_id).is_some())
     .then(|| selected_zone_id.to_owned());
+    let attachment_fingerprint =
+        attachment_store.simulation_fingerprint(project_session_id, revision_id)?;
+    let attachment_evidence =
+        attachment_store.selected_plan_evidence(project_session_id, revision_id)?;
     Ok(SimulationContext {
         project_session_id: active.project_session_id.clone(),
         revision_id: active.active_revision().revision_id.clone(),
@@ -541,6 +552,8 @@ fn current_context(
         source_sha256: active.source_sha256.clone(),
         zones: active.zones.clone(),
         selected_zone_id,
+        attachment_fingerprint,
+        attachment_evidence,
     })
 }
 
@@ -552,6 +565,8 @@ fn context_fingerprint(context: &SimulationContext, goal: &str) -> String {
         "revision_number": context.revision_number,
         "source_sha256": context.source_sha256,
         "selected_zone_id": context.selected_zone_id,
+        "attachment_fingerprint": context.attachment_fingerprint,
+        "attachment_evidence": context.attachment_evidence,
         "goal": goal,
     });
     sha256_text(&serde_json::to_string(&payload).expect("fixed simulation context payload"))
@@ -579,6 +594,7 @@ fn make_plan_view(context: &SimulationContext, goal: String) -> SimulationPlanVi
             ],
             context_fingerprint: fingerprint,
             volume_diff: None,
+            attachment_evidence: context.attachment_evidence.clone(),
         };
     }
     if goal_requests_unsupported_edit(&goal) {
@@ -598,6 +614,7 @@ fn make_plan_view(context: &SimulationContext, goal: String) -> SimulationPlanVi
             risks: vec!["Only one Zone volume_m3 change is supported in this version.".into()],
             context_fingerprint: fingerprint,
             volume_diff: None,
+            attachment_evidence: context.attachment_evidence.clone(),
         };
     }
     let matched_zones: Vec<&ZoneRecord> = context
@@ -645,6 +662,7 @@ fn make_plan_view(context: &SimulationContext, goal: String) -> SimulationPlanVi
             risks: vec!["No draft, solver, result extraction, or remote AI action will start until the plan is ready and approved.".into()],
             context_fingerprint: fingerprint,
             volume_diff: None,
+            attachment_evidence: context.attachment_evidence.clone(),
         };
     }
     let zone = selected.expect("ready plan has selected Zone");
@@ -682,6 +700,7 @@ fn make_plan_view(context: &SimulationContext, goal: String) -> SimulationPlanVi
         ],
         context_fingerprint: fingerprint,
         volume_diff: None,
+        attachment_evidence: context.attachment_evidence.clone(),
     }
 }
 
@@ -881,8 +900,10 @@ pub async fn prepare_simulation_plan(
         Err(error) => return simulation_plan_failure(request_id, error),
     };
     let project_store = app.state::<DesktopProjectSessionStore>();
+    let attachment_store = app.state::<AttachmentCenterStore>();
     let context = match current_context(
         project_store.inner(),
+        attachment_store.inner(),
         &project_session_id,
         &revision_id,
         &selected_zone_id,
@@ -942,6 +963,7 @@ pub async fn prepare_simulation_plan(
                 revision_id: context.revision_id,
                 source_sha256: context.source_sha256,
                 zone_id,
+                attachment_fingerprint: context.attachment_fingerprint,
                 expires_at_unix_ms: unix_time_ms() + SIMULATION_PLAN_TTL_MS,
                 consumed: false,
             });
@@ -985,7 +1007,7 @@ pub async fn approve_and_run_simulation_plan(
         };
     }
     let project_store = app.state::<DesktopProjectSessionStore>();
-    let plan_snapshot = {
+    let mut plan_snapshot = {
         let state = project_store
             .state
             .lock()
@@ -1034,8 +1056,45 @@ pub async fn approve_and_run_simulation_plan(
             source_sha256: active.source_sha256.clone(),
             zones: active.zones.clone(),
             selected_zone_id,
+            attachment_fingerprint: String::new(),
+            attachment_evidence: Vec::new(),
         }
     };
+    let attachment_store = app.state::<AttachmentCenterStore>();
+    let attachment_state = attachment_store
+        .simulation_fingerprint(
+            &plan_snapshot.project_session_id,
+            &plan_snapshot.revision_id,
+        )
+        .and_then(|fingerprint| {
+            attachment_store
+                .selected_plan_evidence(
+                    &plan_snapshot.project_session_id,
+                    &plan_snapshot.revision_id,
+                )
+                .map(|evidence| (fingerprint, evidence))
+        });
+    match attachment_state {
+        Ok((fingerprint, evidence)) => {
+            plan_snapshot.attachment_fingerprint = fingerprint;
+            plan_snapshot.attachment_evidence = evidence;
+        }
+        Err(error) => {
+            return DesktopSimulationExecutionResponse {
+                request_id,
+                status: "failed",
+                timeline,
+                execution: None,
+                project_session_id: None,
+                project: None,
+                target_zone_id: None,
+                draft: None,
+                run: None,
+                result: None,
+                error: Some(error),
+            };
+        }
+    }
     if plan_snapshot.project_session_id != project_session_id {
         return DesktopSimulationExecutionResponse {
             request_id,
@@ -1359,6 +1418,8 @@ mod tests {
                 source_line_number: 42,
             }],
             selected_zone_id: Some("00000000-0000-5000-8000-000000000002".into()),
+            attachment_fingerprint: "B".repeat(64),
+            attachment_evidence: Vec::new(),
         }
     }
 
@@ -1433,6 +1494,7 @@ mod tests {
             revision_id: context.revision_id.clone(),
             source_sha256: context.source_sha256.clone(),
             zone_id,
+            attachment_fingerprint: context.attachment_fingerprint.clone(),
             expires_at_unix_ms: 200,
             consumed: false,
             view: view.clone(),
@@ -1474,6 +1536,7 @@ mod tests {
             revision_id: claim_context.revision_id.clone(),
             source_sha256: claim_context.source_sha256.clone(),
             zone_id: claim_context.selected_zone_id.clone().unwrap(),
+            attachment_fingerprint: claim_context.attachment_fingerprint.clone(),
             expires_at_unix_ms: 200,
             consumed: false,
         });

@@ -7,6 +7,7 @@ import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
 import { INITIAL_AI_STATE, type AiContextScope, type AiState } from "../../app/ai-state";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
 import { CodexAssistantPanel } from "./CodexAssistantPanel";
+import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
 
 interface ContextSidebarProps {
   activeTab: ContextTab;
@@ -47,6 +48,11 @@ interface ContextSidebarProps {
   onSimulationBack?: () => void;
   onSimulationCancel?: () => void;
   onSimulationApproveAndRun?: () => void;
+  attachmentState?: AttachmentState;
+  onAttachmentImport?: () => void;
+  onAttachmentSelect?: (attachment: AttachmentView, selected: boolean) => void;
+  onAttachmentPreview?: () => void;
+  onAttachmentRemove?: (attachment: AttachmentView) => void;
 }
 
 export function ContextSidebar({
@@ -87,6 +93,11 @@ export function ContextSidebar({
   onSimulationBack = () => undefined,
   onSimulationCancel = () => undefined,
   onSimulationApproveAndRun = () => undefined,
+  attachmentState = INITIAL_ATTACHMENT_STATE,
+  onAttachmentImport = () => undefined,
+  onAttachmentSelect = () => undefined,
+  onAttachmentPreview = () => undefined,
+  onAttachmentRemove = () => undefined,
 }: ContextSidebarProps) {
   const { t } = useTranslation();
 
@@ -238,6 +249,11 @@ export function ContextSidebar({
           onSimulationBack={onSimulationBack}
           onSimulationCancel={onSimulationCancel}
           onSimulationApproveAndRun={onSimulationApproveAndRun}
+          attachmentState={attachmentState}
+          onAttachmentImport={onAttachmentImport}
+          onAttachmentSelect={onAttachmentSelect}
+          onAttachmentPreview={onAttachmentPreview}
+          onAttachmentRemove={onAttachmentRemove}
         />
       )}
     </aside>

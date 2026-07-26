@@ -1,4 +1,7 @@
-use crate::zone_bridge::{sha256_file, AiTrustedContext, DesktopProjectSessionStore};
+use crate::zone_bridge::{
+    attachment_center::AttachmentCenterStore, sha256_file, AiTrustedContext,
+    DesktopProjectSessionStore,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::cmp::Reverse;
@@ -45,13 +48,14 @@ const AI_CONVERSATION_ARCHIVE_NAMESPACE: Uuid =
     Uuid::from_u128(0x05d637d2_faaa_5f3e_8a40_f657c1f755e3);
 const AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION: &str = "1.0";
 static ARCHIVE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
-const ALL_CONTEXT_SCOPES: [&str; 6] = [
+const ALL_CONTEXT_SCOPES: [&str; 7] = [
     "project_summary",
     "selected_zone",
     "draft_summary",
     "run_summary",
     "result_summary",
     "diagnostics",
+    "attachment_evidence",
 ];
 const TOOL_ITEM_TYPES: [&str; 9] = [
     "commandExecution",
@@ -1735,6 +1739,37 @@ fn context_fingerprint(
     Ok(Uuid::new_v5(&CONTEXT_FINGERPRINT_NAMESPACE, &bytes).to_string())
 }
 
+fn build_trusted_context_with_attachments(
+    app: &AppHandle,
+    project_session_id: &str,
+    revision_id: &str,
+    zone_id: &str,
+    scopes: &[String],
+    language: &str,
+    model_id: &str,
+) -> Result<AiTrustedContext, AiDiagnostic> {
+    let project_scopes = scopes
+        .iter()
+        .filter(|scope| scope.as_str() != "attachment_evidence")
+        .cloned()
+        .collect::<Vec<_>>();
+    let project_store = app.state::<DesktopProjectSessionStore>();
+    let mut trusted = project_store
+        .build_ai_context(project_session_id, revision_id, zone_id, &project_scopes)
+        .map_err(|error| AiDiagnostic::new(&error.code, &error.message))?;
+    if scopes.iter().any(|scope| scope == "attachment_evidence") {
+        let evidence = app
+            .state::<AttachmentCenterStore>()
+            .evidence_payload(project_session_id, revision_id, language, model_id)
+            .map_err(|error| AiDiagnostic::new(&error.code, &error.message))?;
+        let payload = trusted.payload.as_object_mut().ok_or_else(|| {
+            AiDiagnostic::new("ai_context_unavailable", "AI context payload was invalid.")
+        })?;
+        payload.insert("attachment_evidence".to_owned(), evidence);
+    }
+    Ok(trusted)
+}
+
 fn archive_response_failure(
     request_id: String,
     error: AiDiagnostic,
@@ -3240,12 +3275,14 @@ pub async fn preview_ai_context(
                 .expect("authenticated Codex connection"),
         )
     };
-    let project_store = app.state::<DesktopProjectSessionStore>();
-    let trusted = match project_store.build_ai_context(
+    let trusted = match build_trusted_context_with_attachments(
+        &app,
         &project_session_id,
         &revision_id,
         &zone_id,
         &scopes,
+        &language,
+        &model_id,
     ) {
         Ok(context) => context,
         Err(error) => {
@@ -3452,12 +3489,14 @@ pub async fn start_readonly_ai_turn(
             AiDiagnostic::new("ai_context_stale", "The AI context preview is stale."),
         );
     }
-    let project_store = app.state::<DesktopProjectSessionStore>();
-    let current = match project_store.build_ai_context(
+    let current = match build_trusted_context_with_attachments(
+        &app,
         &project_session_id,
         &revision_id,
         &zone_id,
         &scopes,
+        &language,
+        &model_id,
     ) {
         Ok(context) => context,
         Err(error) => {

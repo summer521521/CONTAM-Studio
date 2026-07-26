@@ -250,7 +250,8 @@
       "draft_summary": "草稿摘要",
       "run_summary": "运行摘要",
       "result_summary": "结果摘要",
-      "diagnostics": "清理后的诊断"
+      "diagnostics": "清理后的诊断",
+      "attachment_evidence": "已确认的附件证据"
     }
   },
   "simulation": {

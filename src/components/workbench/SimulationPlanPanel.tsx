@@ -92,6 +92,10 @@ export function SimulationPlanPanel({
             </section>
           ) : null}
           <section>
+            <h5>{t("assistant.scopes.attachment_evidence")}</h5>
+            {plan.attachment_evidence.length ? <ul>{plan.attachment_evidence.map((attachment) => <li key={attachment.attachment_id}>{attachment.display_name} · {attachment.disclosure} · {attachment.sha256.slice(0, 12)}</li>)}</ul> : <p>{t("assistant.previewRequired")}</p>}
+          </section>
+          <section>
             <h5>{t("simulation.risks")}</h5>
             <ul>{plan.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul>
           </section>

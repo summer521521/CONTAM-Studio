@@ -6,6 +6,7 @@ mod zone_bridge;
 pub fn run() {
     tauri::Builder::default()
         .manage(zone_bridge::DesktopProjectSessionStore::default())
+        .manage(zone_bridge::attachment_center::AttachmentCenterStore::default())
         .manage(zone_bridge::simulation_loop::SimulationLoopStore::default())
         .manage(codex_app_server::CodexAssistantStore::default())
         .manage(codex_app_server::AiConversationArchiveStore::default())
@@ -22,6 +23,11 @@ pub fn run() {
             zone_bridge::extract_active_run_zone_air_state,
             zone_bridge::export_active_zone_air_state_csv,
             zone_bridge::run_active_contam_project,
+            zone_bridge::attachment_center::select_and_import_attachments,
+            zone_bridge::attachment_center::list_attachments,
+            zone_bridge::attachment_center::set_attachment_ai_selection,
+            zone_bridge::attachment_center::preview_attachment_evidence,
+            zone_bridge::attachment_center::remove_studio_attachment,
             zone_bridge::simulation_loop::prepare_simulation_plan,
             zone_bridge::simulation_loop::approve_and_run_simulation_plan,
             codex_app_server::probe_codex_app_server,

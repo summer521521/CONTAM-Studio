@@ -3,13 +3,14 @@ import type {
   DesktopApplyResponse,
   DesktopPlanResponse,
 } from "./patch-state";
-import type { DesktopOpenResponse } from "./project-state";
+import type { DesktopOpenResponse, ReaderDiagnostic } from "./project-state";
 import type { DesktopDraftExportResponse, DesktopDraftTransitionResponse } from "./project-state";
 import type { DesktopZoneAirStateResponse } from "./result-state";
 import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state";
 import type { DesktopRunResponse } from "./run-state";
 import type { CloseResolution } from "./close-state";
 import type { DesktopSimulationExecutionResponse, DesktopSimulationPlanResponse } from "./simulation-state";
+import type { AttachmentEvidenceBundleView, AttachmentView } from "./attachment-state";
 import type {
   AiContextScope,
   DesktopAiConversationArchiveResponse,
@@ -157,6 +158,27 @@ export async function approveAndRunSimulationPlan(
     planId,
     zoneId,
   });
+}
+
+export interface DesktopAttachmentListResponse { request_id: string; attachments: AttachmentView[]; busy: boolean; error: ReaderDiagnostic | null; }
+export interface DesktopAttachmentImportResponse { request_id: string; cancelled: boolean; attachments: AttachmentView[]; error: ReaderDiagnostic | null; }
+export interface DesktopAttachmentEvidenceResponse { request_id: string; bundle: AttachmentEvidenceBundleView | null; error: ReaderDiagnostic | null; }
+export interface DesktopAttachmentActionResponse { request_id: string; attachments: AttachmentView[]; error: ReaderDiagnostic | null; }
+
+export async function selectAndImportAttachments(requestId: string): Promise<DesktopAttachmentImportResponse> {
+  return invoke<DesktopAttachmentImportResponse>("select_and_import_attachments", { requestId });
+}
+export async function listAttachments(requestId: string): Promise<DesktopAttachmentListResponse> {
+  return invoke<DesktopAttachmentListResponse>("list_attachments", { requestId });
+}
+export async function setAttachmentAiSelection(requestId: string, attachmentId: string, selected: boolean): Promise<DesktopAttachmentActionResponse> {
+  return invoke<DesktopAttachmentActionResponse>("set_attachment_ai_selection", { requestId, attachmentId, selected });
+}
+export async function previewAttachmentEvidence(requestId: string, projectSessionId: string, revisionId: string, language: string, modelId: string): Promise<DesktopAttachmentEvidenceResponse> {
+  return invoke<DesktopAttachmentEvidenceResponse>("preview_attachment_evidence", { requestId, projectSessionId, revisionId, language, modelId });
+}
+export async function removeStudioAttachment(requestId: string, attachmentId: string): Promise<DesktopAttachmentActionResponse> {
+  return invoke<DesktopAttachmentActionResponse>("remove_studio_attachment", { requestId, attachmentId });
 }
 
 export async function probeCodexAppServer(requestId: string): Promise<DesktopCodexProbeResponse> {

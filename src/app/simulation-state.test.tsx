@@ -48,6 +48,7 @@ function plan(status: SimulationPlanView["status"] = "ready"): SimulationPlanVie
       old_value: 600,
       new_value: 650,
     } : null,
+    attachment_evidence: [],
   };
 }
 

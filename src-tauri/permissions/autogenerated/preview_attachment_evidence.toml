@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-attachment-evidence"
+description = "Enables the preview_attachment_evidence command without any pre-configured scope."
+commands.allow = ["preview_attachment_evidence"]
+
+[[permission]]
+identifier = "deny-preview-attachment-evidence"
+description = "Denies the preview_attachment_evidence command without any pre-configured scope."
+commands.deny = ["preview_attachment_evidence"]

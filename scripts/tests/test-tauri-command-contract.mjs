@@ -94,7 +94,7 @@ function extractRustCommands(sourceText) {
     fail("Rust generate_handler! list is missing");
     return [];
   }
-  return [...handler[1].matchAll(/\b(zone_bridge::simulation_loop|zone_bridge|codex_app_server|close_protocol)::([A-Za-z0-9_]+)\b/g)].map(
+  return [...handler[1].matchAll(/\b(zone_bridge::(?:simulation_loop|attachment_center)|zone_bridge|codex_app_server|close_protocol)::([A-Za-z0-9_]+)\b/g)].map(
     ([, sourceModule, command]) => ({
       rustModule: sourceModule.startsWith("zone_bridge") ? "zone_bridge" : sourceModule,
       command,
@@ -148,8 +148,8 @@ function check() {
   }
 
   const commands = Array.isArray(registry.commands) ? registry.commands : [];
-  if (commands.length !== 28) {
-    fail(`registry must contain exactly 28 commands, got ${commands.length}`);
+  if (commands.length !== 33) {
+    fail(`registry must contain exactly 33 commands, got ${commands.length}`);
   }
   const commandNames = commands.map((entry) => entry.command);
   if (new Set(commandNames).size !== commandNames.length) {
@@ -231,8 +231,8 @@ function check() {
   } finally {
     typeScriptApi.close();
   }
-  if (invokes.length !== 28) {
-    fail(`desktop-api.ts must contain exactly 28 invoke wrappers, got ${invokes.length}`);
+  if (invokes.length !== 33) {
+    fail(`desktop-api.ts must contain exactly 33 invoke wrappers, got ${invokes.length}`);
   }
   const expectedByCommand = new Map(commands.map((entry) => [entry.command, entry]));
   compareSets(
@@ -263,5 +263,5 @@ if (failures.length > 0) {
   }
   process.exitCode = 1;
 } else {
-    console.log("Tauri command contract passed: 28 commands, exact Rust/capability/permission/TypeScript sets.");
+    console.log("Tauri command contract passed: 33 commands, exact Rust/capability/permission/TypeScript sets.");
 }

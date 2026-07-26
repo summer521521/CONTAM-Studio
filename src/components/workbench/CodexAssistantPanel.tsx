@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import type { AiContextScope, AiState } from "../../app/ai-state";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
 import { SimulationPlanPanel } from "./SimulationPlanPanel";
+import { AttachmentCenterPanel } from "./AttachmentCenterPanel";
+import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
 
 const SCOPES: AiContextScope[] = [
   "project_summary",
@@ -12,6 +14,7 @@ const SCOPES: AiContextScope[] = [
   "run_summary",
   "result_summary",
   "diagnostics",
+  "attachment_evidence",
 ];
 
 interface CodexAssistantPanelProps {
@@ -41,6 +44,11 @@ interface CodexAssistantPanelProps {
   onSimulationBack?: () => void;
   onSimulationCancel?: () => void;
   onSimulationApproveAndRun?: () => void;
+  attachmentState?: AttachmentState;
+  onAttachmentImport?: () => void;
+  onAttachmentSelect?: (attachment: AttachmentView, selected: boolean) => void;
+  onAttachmentPreview?: () => void;
+  onAttachmentRemove?: (attachment: AttachmentView) => void;
 }
 
 export function CodexAssistantPanel({
@@ -70,6 +78,11 @@ export function CodexAssistantPanel({
   onSimulationBack = () => undefined,
   onSimulationCancel = () => undefined,
   onSimulationApproveAndRun = () => undefined,
+  attachmentState = INITIAL_ATTACHMENT_STATE,
+  onAttachmentImport = () => undefined,
+  onAttachmentSelect = () => undefined,
+  onAttachmentPreview = () => undefined,
+  onAttachmentRemove = () => undefined,
 }: CodexAssistantPanelProps) {
   const { t } = useTranslation();
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
@@ -480,6 +493,14 @@ export function CodexAssistantPanel({
         </div>
       ) : null}
       </>}
+      <AttachmentCenterPanel
+        state={attachmentState}
+        contextAvailable={contextAvailable}
+        onImport={onAttachmentImport}
+        onSelect={onAttachmentSelect}
+        onPreview={onAttachmentPreview}
+        onRemove={onAttachmentRemove}
+      />
     </div>
   );
 }

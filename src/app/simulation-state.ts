@@ -1,6 +1,7 @@
 import { isDraftSummaryValid, isSafeProjectInspection, sanitizeDiagnostic, type DraftSummary, type ProjectInspection, type ReaderDiagnostic } from "./project-state";
 import type { ZoneAirStateResult } from "./result-state";
 import type { ContamXRunSummary } from "./run-state";
+import { isSafeAttachmentEvidence, type AttachmentEvidenceView } from "./attachment-state";
 
 export type AssistantMode = "analysis" | "simulation_plan";
 export type SimulationStatus = "idle" | "planning" | "needs_input" | "ready" | "unsupported" | "executing" | "succeeded" | "failed" | "cancelled";
@@ -38,6 +39,7 @@ export interface SimulationPlanView {
   risks: string[];
   context_fingerprint: string;
   volume_diff: SimulationDiffView | null;
+  attachment_evidence: AttachmentEvidenceView[];
 }
 
 export interface SimulationTimelineStepView {
@@ -194,7 +196,7 @@ function isSimulationAction(value: unknown): value is SimulationAction {
 export function isSafeSimulationPlan(value: unknown): value is SimulationPlanView {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const plan = value as Record<string, unknown>;
-  const keys = ["schema_version", "plan_id", "status", "goal", "project_session_id", "revision_id", "revision_number", "zone_id", "zone_name", "assumptions", "questions", "actions", "risks", "context_fingerprint", "volume_diff"];
+  const keys = ["schema_version", "plan_id", "status", "goal", "project_session_id", "revision_id", "revision_number", "zone_id", "zone_name", "assumptions", "questions", "actions", "risks", "context_fingerprint", "volume_diff", "attachment_evidence"];
   if (Object.keys(plan).length !== keys.length || !keys.every((key) => key in plan) || plan.schema_version !== "simulation_plan.v1" || !UUID_PATTERN.test(String(plan.plan_id)) || !["needs_input", "ready", "unsupported"].includes(String(plan.status)) || !safeText(plan.goal, 2000) || !HASH_PATTERN.test(String(plan.context_fingerprint))) return false;
   const nullableText = (item: unknown, max: number) => item === null || safeText(item, max);
   const nullableInteger = (item: unknown) => item === null || (typeof item === "number" && Number.isInteger(item) && item >= 0);
@@ -204,6 +206,7 @@ export function isSafeSimulationPlan(value: unknown): value is SimulationPlanVie
     const diff = plan.volume_diff as Record<string, unknown>;
     if (!diff || typeof diff !== "object" || Array.isArray(diff) || Object.keys(diff).length !== 7 || !safeText(diff.zone_id, 128) || !safeText(diff.zone_name, 256) || diff.field !== "volume_m3" || !safeText(diff.old_token, 80) || !safeText(diff.new_token, 80) || !Number.isFinite(diff.old_value) || !Number.isFinite(diff.new_value)) return false;
   }
+  if (!Array.isArray(plan.attachment_evidence) || plan.attachment_evidence.length > 32 || !plan.attachment_evidence.every(isSafeAttachmentEvidence)) return false;
   if (plan.status === "ready") {
     return plan.actions.length === 3 && plan.volume_diff !== null && typeof plan.zone_id === "string" && typeof plan.revision_id === "string";
   }

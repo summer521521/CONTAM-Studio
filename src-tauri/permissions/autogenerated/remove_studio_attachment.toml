@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remove-studio-attachment"
+description = "Enables the remove_studio_attachment command without any pre-configured scope."
+commands.allow = ["remove_studio_attachment"]
+
+[[permission]]
+identifier = "deny-remove-studio-attachment"
+description = "Denies the remove_studio_attachment command without any pre-configured scope."
+commands.deny = ["remove_studio_attachment"]

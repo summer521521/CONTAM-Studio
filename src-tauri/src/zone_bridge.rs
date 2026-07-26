@@ -4906,6 +4906,7 @@ pub async fn export_active_project_draft_copy(
     }
 }
 
+pub(crate) mod attachment_center;
 pub(crate) mod simulation_loop;
 
 #[cfg(test)]

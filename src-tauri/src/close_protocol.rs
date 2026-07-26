@@ -6,7 +6,8 @@ use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use crate::{
     codex_app_server::CodexAssistantStore,
     zone_bridge::{
-        simulation_loop::SimulationLoopStore, DesktopProjectSessionStore, ProjectCloseSnapshot,
+        attachment_center::AttachmentCenterStore, simulation_loop::SimulationLoopStore,
+        DesktopProjectSessionStore, ProjectCloseSnapshot,
     },
 };
 
@@ -19,6 +20,7 @@ struct CloseActivity {
     patch_review: bool,
     project_operation_active: bool,
     simulation_active: bool,
+    attachment_import_active: bool,
     ai_activity_active: bool,
 }
 
@@ -38,6 +40,9 @@ impl CloseActivity {
         if self.simulation_active {
             work.push("simulation_execution");
         }
+        if self.attachment_import_active {
+            work.push("attachment_import");
+        }
         if self.ai_activity_active {
             work.push("ai_turn");
         }
@@ -53,6 +58,7 @@ impl From<ProjectCloseSnapshot> for CloseActivity {
             patch_review: value.patch_review,
             project_operation_active: value.operation_active,
             simulation_active: false,
+            attachment_import_active: false,
             ai_activity_active: false,
         }
     }
@@ -62,10 +68,12 @@ fn current_activity(
     project: &DesktopProjectSessionStore,
     assistant: &CodexAssistantStore,
     simulation: &SimulationLoopStore,
+    attachments: &AttachmentCenterStore,
 ) -> CloseActivity {
     let mut activity = CloseActivity::from(project.close_snapshot());
     activity.ai_activity_active = assistant.close_activity_active();
     activity.simulation_active = simulation.close_activity_active();
+    activity.attachment_import_active = attachments.close_activity_active();
     activity
 }
 
@@ -304,6 +312,7 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
             &window.state::<DesktopProjectSessionStore>(),
             &window.state::<CodexAssistantStore>(),
             &window.state::<SimulationLoopStore>(),
+            &window.state::<AttachmentCenterStore>(),
         );
         match store.request(&activity) {
             CloseRequestOutcome::Allow => {}
@@ -316,16 +325,18 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn resolve_app_close(
     app: AppHandle,
     store: tauri::State<'_, CloseProtocolStore>,
     project: tauri::State<'_, DesktopProjectSessionStore>,
     assistant: tauri::State<'_, CodexAssistantStore>,
     simulation: tauri::State<'_, SimulationLoopStore>,
+    attachments: tauri::State<'_, AttachmentCenterStore>,
     request_id: String,
     decision: CloseDecision,
 ) -> CloseResolution {
-    let activity = current_activity(&project, &assistant, &simulation);
+    let activity = current_activity(&project, &assistant, &simulation, &attachments);
     let resolution = store.resolve(&request_id, decision, &activity);
     if resolution.close_started {
         close_window(&app);
@@ -334,16 +345,18 @@ pub fn resolve_app_close(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn finish_app_close_draft_export(
     app: AppHandle,
     store: tauri::State<'_, CloseProtocolStore>,
     project: tauri::State<'_, DesktopProjectSessionStore>,
     assistant: tauri::State<'_, CodexAssistantStore>,
     simulation: tauri::State<'_, SimulationLoopStore>,
+    attachments: tauri::State<'_, AttachmentCenterStore>,
     request_id: String,
     succeeded: bool,
 ) -> CloseResolution {
-    let activity = current_activity(&project, &assistant, &simulation);
+    let activity = current_activity(&project, &assistant, &simulation, &attachments);
     let resolution = store.finish_export(&request_id, succeeded, &activity);
     if resolution.close_started {
         close_window(&app);

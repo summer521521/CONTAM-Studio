@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
+from .attachment_broker import AttachmentBroker, AttachmentError
 from .contamx_runner import ContamXRunnerError, run_contamx
 from .prj_zone_models import ReaderDiagnostic
 from .prj_zone_reader import PrjZoneReaderError, read_simple_zones
@@ -30,6 +31,7 @@ OPERATION_PLAN_ZONE_VOLUME_PATCH = "plan_zone_volume_patch"
 OPERATION_APPLY_ZONE_VOLUME_PATCH = "apply_zone_volume_patch_to_copy"
 OPERATION_EXTRACT_ZONE_AIR_STATE = "extract_zone_air_state"
 OPERATION_RUN_ACTIVE_PROJECT = "run_active_project"
+OPERATION_IMPORT_ATTACHMENT = "import_attachment"
 MAX_REQUEST_BYTES = 128 * 1024
 MAX_REQUEST_ID_LENGTH = 128
 MAX_SOURCE_PATH_LENGTH = 32_768
@@ -146,6 +148,7 @@ def _require_common(payload: object) -> tuple[dict[str, Any], str, str]:
         OPERATION_APPLY_ZONE_VOLUME_PATCH,
         OPERATION_EXTRACT_ZONE_AIR_STATE,
         OPERATION_RUN_ACTIVE_PROJECT,
+        OPERATION_IMPORT_ATTACHMENT,
     }:
         _fail_request("bridge_operation_unsupported", "桥接操作不受支持。", request_id)
     return request, request_id, operation
@@ -275,6 +278,33 @@ def handle_request(payload: object) -> dict[str, object]:
     created_output: tuple[Path, str] | None = None
     try:
         request, request_id, operation = _require_common(payload)
+        if operation == OPERATION_IMPORT_ATTACHMENT:
+            _require_object(
+                request,
+                "request",
+                {"protocol_version", "request_id", "operation", "source_path", "quarantine_root"},
+                request_id,
+            )
+            source_path = Path(_require_string(request["source_path"], "source_path", request_id))
+            quarantine_root = Path(_require_string(request["quarantine_root"], "quarantine_root", request_id))
+            broker = AttachmentBroker(quarantine_root)
+            try:
+                record = broker.ingest_desktop(source_path)
+            except AttachmentError as error:
+                return _error_envelope(request_id, _diagnostic(error.code, "附件导入被安全策略拒绝。"))
+            try:
+                evidence = broker.text_evidence(record.attachment_id).to_dict()
+            except AttachmentError:
+                evidence = None
+            return _success_envelope(
+                request_id,
+                {
+                    "result_type": "attachment_import",
+                    "attachment": {**record.safe_view(), "sha256": record.sha256},
+                    "quarantine_relative_path": record.quarantine_relative_path,
+                    "evidence": evidence,
+                },
+            )
         if operation == OPERATION_READ_SIMPLE_ZONES:
             _require_object(
                 request,

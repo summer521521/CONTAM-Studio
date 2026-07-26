@@ -4,7 +4,7 @@
 
 当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。当前桌面纵向路径包括受支持PRJ的Zone读取、单Zone体积草稿修改、官方ContamX运行、`zone_air_state`结果分析/CSV导出和Codex只读助手。
 
-候选分支新增的完整PRJ投影、进程/存储/结果、附件和AI批准Python模块是内部研究基础：它们有定向测试，但没有Tauri命令、React入口或真实工具/GUI证据。它们不能被描述为已交付的附件助手、AI写入、自动仿真Agent、完整PRJ编辑器或发行版。
+候选分支新增的完整PRJ投影、进程/存储/结果和多参数研究模块仍是内部研究基础。附件中心与AGENT-01受限仿真方案已有Tauri和React入口及自动验证，但真实GUI、多模态像素传输、完整Office视觉渲染、完整PRJ编辑器和发行版仍未完成。
 
 ## Phase 6A Codex只读AI助手
 
@@ -27,6 +27,12 @@
 - Rust生成封闭`SimulationPlan`、安全Zone体积Diff和绑定项目session、Revision、Zone、计划、批准时刻与15分钟期限的单次`ActionBundle`哈希。React只展示并调用两个受限命令；草稿Patch、官方ContamX、SimRead、可信结果和最终成功状态均由Rust按固定顺序编排，原始PRJ不在该路径中写入。
 - 成功后只生成不含路径、PRJ正文、完整SIM或完整结果序列的可信统计分析输入；它不会伪称远程模型已经回答。用户主动配置的Codex App Server仍沿用Phase 6A的只读、预览和联网披露边界，未配置时不会因AGENT-01自动联网。
 - 自动化覆盖计划分类、封闭动作Schema、注入拒绝、批准重放/过期/上下文失效、Patch失败短路、运行/结果失败、迟到响应、退出阻塞、双语及安全响应契约。真实GUI、键盘、窄窗口和主题验收仍为`pending_user`。
+
+## ATTACH-01附件中心与证据披露
+
+- 附件只能经Rust原生选择器进入Studio拥有的quarantine副本。PNG/JPEG、PDF、Office ZIP、CSV/TSV/TXT/JSON、CONTAM附件、ZIP和未知二进制均执行有界类型检查；原始PRJ、SIM和用户源文件不回写、不移动、不删除。
+- 只有用户选中并确认的有界EvidenceBundle可进入只读AI上下文。证据绑定附件哈希、项目session、Revision、语言、模型和15分钟期限；路径、凭据、原始PRJ、完整SIM和任意二进制均不披露。图片协议尚未由真实App Server验证，因此只发送图片元数据并明确显示像素未发送。
+- 附件导入、选择、移除或重新导入会使AI预览、SimulationPlan和批准哈希失效；已有可信仿真结果保持可用。ATTACH-01为`automated_verified`，真实GUI、键盘、窄窗口、主题和真实多模态协议仍为`pending_user`。
 
 ## Phase 3C不可变草稿与撤销工作流
 

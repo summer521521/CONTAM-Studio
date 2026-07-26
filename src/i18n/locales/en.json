@@ -250,7 +250,8 @@
       "draft_summary": "Draft summary",
       "run_summary": "Run summary",
       "result_summary": "Result summary",
-      "diagnostics": "Sanitized diagnostics"
+      "diagnostics": "Sanitized diagnostics",
+      "attachment_evidence": "Confirmed attachment evidence"
     }
   },
   "simulation": {

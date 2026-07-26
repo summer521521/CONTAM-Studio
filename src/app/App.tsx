@@ -21,7 +21,11 @@ import {
   prepareSimulationPlan,
   clearReadonlyAiSession,
   finishAppCloseDraftExport,
+  previewAttachmentEvidence,
+  removeStudioAttachment,
   resolveAppClose,
+  selectAndImportAttachments,
+  setAttachmentAiSelection,
 } from "./desktop-api";
 import { APP_CLOSE_REQUESTED_EVENT, isSafeCloseRequest, isSafeCloseResolution, type CloseRequestView } from "./close-state";
 import {
@@ -34,6 +38,7 @@ import {
   isSafeSimulationPlan,
   simulationReducer,
 } from "./simulation-state";
+import { attachmentReducer, INITIAL_ATTACHMENT_STATE, isSafeAttachmentView, isSafeEvidenceBundle, type AttachmentView } from "./attachment-state";
 import {
   applyResponseIssue,
   INITIAL_PATCH_STATE,
@@ -88,6 +93,7 @@ function App() {
   const [runState, dispatchRun] = useReducer(runReducer, INITIAL_RUN_STATE);
   const [aiState, dispatchAi] = useReducer(aiReducer, INITIAL_AI_STATE);
   const [simulationState, dispatchSimulation] = useReducer(simulationReducer, INITIAL_SIMULATION_STATE);
+  const [attachmentState, dispatchAttachment] = useReducer(attachmentReducer, INITIAL_ATTACHMENT_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const [draftGuardOpen, setDraftGuardOpen] = useState(false);
   const [draftGuardBusy, setDraftGuardBusy] = useState(false);
@@ -428,6 +434,78 @@ function App() {
       dispatchProject({ type: "issue_reported", issue });
     }
   }, [commandAvailability.patchApply, patchState.patchId, patchState.projectSessionId, t]);
+
+  const updateAttachments = useCallback((attachments: AttachmentView[]) => {
+    if (!attachments.every(isSafeAttachmentView)) {
+      dispatchAttachment({ type: "operation_failed", issue: { code: "attachment_response_invalid", message: "Attachment response invalid", source_line_number: null, context: {} } });
+      return;
+    }
+    dispatchAttachment({ type: "attachments_received", attachments });
+    dispatchAi({ type: "context_changed" });
+    dispatchSimulation({ type: "context_changed" });
+  }, []);
+
+  const importAttachments = useCallback(async () => {
+    if (attachmentState.busy) return;
+    dispatchAttachment({ type: "operation_started" });
+    try {
+      const requestId = crypto.randomUUID();
+      const response = await selectAndImportAttachments(requestId);
+      if (!mounted.current) return;
+      if (response.request_id !== requestId || response.error) throw response.error ?? new Error("attachment response invalid");
+      updateAttachments(response.attachments);
+    } catch {
+      if (mounted.current) dispatchAttachment({ type: "operation_failed", issue: { code: "attachment_import_failed", message: "Attachment import failed", source_line_number: null, context: {} } });
+    }
+  }, [attachmentState.busy, updateAttachments]);
+
+  const selectAttachmentEvidence = useCallback(async (attachment: AttachmentView, selected: boolean) => {
+    if (attachmentState.busy) return;
+    dispatchAttachment({ type: "operation_started" });
+    try {
+      const requestId = crypto.randomUUID();
+      const response = await setAttachmentAiSelection(requestId, attachment.attachment_id, selected);
+      if (!mounted.current) return;
+      if (response.request_id !== requestId || response.error) throw response.error ?? new Error("attachment response invalid");
+      updateAttachments(response.attachments);
+    } catch {
+      if (mounted.current) dispatchAttachment({ type: "operation_failed", issue: { code: "attachment_selection_failed", message: "Attachment selection failed", source_line_number: null, context: {} } });
+    }
+  }, [attachmentState.busy, updateAttachments]);
+
+  const previewAttachmentDisclosure = useCallback(async () => {
+    if (attachmentState.busy || !projectState.projectSessionId || !projectState.draft || !aiState.modelId) return;
+    dispatchAttachment({ type: "operation_started" });
+    try {
+      const requestId = crypto.randomUUID();
+      const response = await previewAttachmentEvidence(requestId, projectState.projectSessionId, projectState.draft.revision_id, workbench.language === "zh-CN" ? "zh-CN" : "en", aiState.modelId);
+      if (!mounted.current) return;
+      if (response.request_id !== requestId || response.error || !isSafeEvidenceBundle(response.bundle)) throw response.error ?? new Error("attachment evidence invalid");
+      dispatchAttachment({ type: "bundle_received", bundle: response.bundle });
+      dispatchAi({ type: "context_changed" });
+      dispatchSimulation({ type: "context_changed" });
+    } catch {
+      if (mounted.current) dispatchAttachment({ type: "operation_failed", issue: { code: "attachment_evidence_invalid", message: "Attachment evidence preview failed", source_line_number: null, context: {} } });
+    }
+  }, [aiState.modelId, attachmentState.busy, projectState.draft, projectState.projectSessionId, workbench.language]);
+
+  const removeAttachment = useCallback(async (attachment: AttachmentView) => {
+    if (attachmentState.busy) return;
+    dispatchAttachment({ type: "operation_started" });
+    try {
+      const requestId = crypto.randomUUID();
+      const response = await removeStudioAttachment(requestId, attachment.attachment_id);
+      if (!mounted.current) return;
+      if (response.request_id !== requestId || response.error) throw response.error ?? new Error("attachment response invalid");
+      updateAttachments(response.attachments);
+    } catch {
+      if (mounted.current) dispatchAttachment({ type: "operation_failed", issue: { code: "attachment_remove_failed", message: "Attachment removal failed", source_line_number: null, context: {} } });
+    }
+  }, [attachmentState.busy, updateAttachments]);
+
+  useEffect(() => {
+    dispatchAttachment({ type: "context_changed" });
+  }, [aiState.modelId, projectState.draft?.revision_id, projectState.projectSessionId, workbench.language]);
 
   const createSimulationPlan = useCallback(async () => {
     if (
@@ -880,6 +958,11 @@ function App() {
               onSimulationBack={() => dispatchSimulation({ type: "goal_changed", goal: simulationState.goal })}
               onSimulationCancel={() => dispatchSimulation({ type: "plan_cancelled" })}
               onSimulationApproveAndRun={() => void approveAndRunSimulation()}
+              attachmentState={attachmentState}
+              onAttachmentImport={() => void importAttachments()}
+              onAttachmentSelect={(attachment, selected) => void selectAttachmentEvidence(attachment, selected)}
+              onAttachmentPreview={() => void previewAttachmentDisclosure()}
+              onAttachmentRemove={(attachment) => void removeAttachment(attachment)}
               onAiConnect={() => void updateAiConnection(false)}
               onAiInstall={() => void installCodexCli()}
               onAiRefresh={() => void updateAiConnection(true)}

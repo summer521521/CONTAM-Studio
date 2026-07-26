@@ -85,6 +85,41 @@
       "payload_keys": ["requestId", "projectSessionId", "planId", "zoneId"]
     },
     {
+      "command": "select_and_import_attachments",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "selectAndImportAttachments",
+      "permission": "allow-select-and-import-attachments",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "list_attachments",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "listAttachments",
+      "permission": "allow-list-attachments",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "set_attachment_ai_selection",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "setAttachmentAiSelection",
+      "permission": "allow-set-attachment-ai-selection",
+      "payload_keys": ["requestId", "attachmentId", "selected"]
+    },
+    {
+      "command": "preview_attachment_evidence",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "previewAttachmentEvidence",
+      "permission": "allow-preview-attachment-evidence",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "language", "modelId"]
+    },
+    {
+      "command": "remove_studio_attachment",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "removeStudioAttachment",
+      "permission": "allow-remove-studio-attachment",
+      "payload_keys": ["requestId", "attachmentId"]
+    },
+    {
       "command": "probe_codex_app_server",
       "rust_module": "codex_app_server",
       "ts_wrapper": "probeCodexAppServer",
