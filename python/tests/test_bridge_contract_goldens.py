@@ -100,7 +100,7 @@ def _run_dataclass(source: Path, run_root: Path) -> ContamXRunResult:
         version="3.4.0.3",
         sha256="b" * 64,
         size_bytes=100,
-        architecture="x86",
+        architecture="windows-x64",
         provenance="deterministic contract mock",
     )
     snapshot = RunInputSnapshot(

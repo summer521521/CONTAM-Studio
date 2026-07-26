@@ -2605,7 +2605,7 @@ fn validate_contamx_run_result(
         && source.size_bytes == active.source_size_bytes
         && source.directory_entries_before.len() <= 4096
         && source.directory_entries_after.len() <= 4096;
-    let solver_evidence_valid = solver.architecture == "x86"
+    let solver_evidence_valid = solver.architecture == "windows-x64"
         && !solver.path.is_empty()
         && !solver.provenance.is_empty()
         && safe_sha256(&solver.sha256)

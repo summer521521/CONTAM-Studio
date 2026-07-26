@@ -913,7 +913,7 @@ fn raw_contamx_run(root: &Path, active: &ActiveProjectContext) -> RawContamXRunR
                 },
                 input_snapshots: vec![snapshot],
                 solver: RawRunSolver {
-                    architecture: "x86".into(),
+                    architecture: "windows-x64".into(),
                     name: "contamx3.exe".into(),
                     path: "C:/tools/contamx3.exe".into(),
                     provenance: "NIST official package".into(),
@@ -980,6 +980,15 @@ fn contamx_run_contract_validates_paths_identity_and_safe_webview_view() {
     solver.run.manifest.solver.version = "3.4.0.2".into();
     assert_eq!(
         validate_contamx_run_result(solver, &active, &root)
+            .unwrap_err()
+            .code,
+        "run_response_contract_invalid"
+    );
+
+    let mut wrong_architecture = raw.clone();
+    wrong_architecture.run.manifest.solver.architecture = "x86".into();
+    assert_eq!(
+        validate_contamx_run_result(wrong_architecture, &active, &root)
             .unwrap_err()
             .code,
         "run_response_contract_invalid"

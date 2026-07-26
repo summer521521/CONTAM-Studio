@@ -35,7 +35,7 @@
         "run_id": "run-1",
         "schema_version": "1.0",
         "solver": {
-          "architecture": "x86",
+          "architecture": "windows-x64",
           "name": "contamx3.exe",
           "path": "C:/tools/contamx3.exe",
           "provenance": "deterministic contract mock",
