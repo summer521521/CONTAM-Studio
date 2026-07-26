@@ -159,7 +159,7 @@ export interface StudySampleResult {
   parameters: Record<string, string | number>;
   project_sha256: string;
   solver_manifest: Record<string, string>;
-  statistics: Record<string, string | number | null>;
+  statistics: Record<string, string | number | null | Array<Record<string, string | number | null>>>;
   result_hash: string | null;
   error: { code: string; message: string } | null;
   generated_at: string;
@@ -240,9 +240,12 @@ export function isSafeStudyPlan(value: unknown): value is StudyPlan {
 export function isSafeStudySampleResult(value: unknown): value is StudySampleResult {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<StudySampleResult>;
+  const statistics = item.statistics;
+  const series = statistics && typeof statistics === "object" && !Array.isArray(statistics) ? (statistics as Record<string, unknown>).series : undefined;
+  const safeSeries = series === undefined || (Array.isArray(series) && series.length <= 512 && series.every((point) => point !== null && typeof point === "object" && !Array.isArray(point)));
   return item.schema_version === "study_sample_result.v1" && typeof item.sample_id === "string" && UUID.test(item.sample_id) &&
     typeof item.study_hash === "string" && SHA256.test(item.study_hash) && typeof item.status === "string" &&
-    ["queued", "running", "succeeded", "failed", "cancelled"].includes(item.status) && typeof item.parameters === "object";
+    ["queued", "running", "succeeded", "failed", "cancelled"].includes(item.status) && typeof item.parameters === "object" && statistics !== null && typeof statistics === "object" && safeSeries;
 }
 
 export function studyReducer(state: StudyState, action: StudyAction): StudyState {

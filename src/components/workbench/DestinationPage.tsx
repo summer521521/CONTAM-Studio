@@ -112,7 +112,7 @@ export function DestinationPage({
   }
 
   if (destination === "studies") {
-    return <StudyWorkspace project={project} projectSessionId={projectSessionId} revisionId={revisionId} semanticSnapshot={semanticSnapshot} onNotice={onNotice} />;
+    return <StudyWorkspace project={project} projectSessionId={projectSessionId} revisionId={revisionId} semanticSnapshot={semanticSnapshot} theme={theme} onNotice={onNotice} />;
   }
 
   return (

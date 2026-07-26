@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -618,6 +619,26 @@ def _run_official_study(
             first = samples[0] if samples else {}
             value = first.get("temperature_k") if isinstance(first, dict) else None
             result_hash = _sha256_json(extraction)
+            # Keep a bounded, read-only projection for charts. The full
+            # SimRead extraction remains represented by result_hash and is
+            # never copied into the AI request.
+            bounded_series = []
+            if isinstance(samples, list):
+                for raw_sample in samples[:512]:
+                    if not isinstance(raw_sample, dict):
+                        continue
+                    timestamp = raw_sample.get("sim_time_seconds")
+                    if not isinstance(timestamp, (int, float)) or not math.isfinite(float(timestamp)):
+                        continue
+                    bounded_series.append(
+                        {
+                            "time_seconds": float(timestamp),
+                            "zone_id": plan.parameters[0].object_id if plan.parameters else None,
+                            "temperature_k": raw_sample.get("temperature_k"),
+                            "reference_pressure_pa": raw_sample.get("reference_pressure_pa"),
+                            "air_density_kg_m3": raw_sample.get("air_density_kg_m3"),
+                        }
+                    )
             evidence = (
                 {
                     "sample_id": sample.sample_id,
@@ -642,6 +663,7 @@ def _run_official_study(
                     "zone_id": evidence[0]["zone_id"],
                     "time_seconds": evidence[0]["time_seconds"],
                     "sample_count": len(samples),
+                    "series": bounded_series,
                 },
                 result_hash,
                 None,

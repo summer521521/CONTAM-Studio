@@ -17,6 +17,7 @@ from contam_studio_core.study_engine import (
     make_study_report,
     write_study_report,
 )
+from contam_studio_core.study_visualization import build_relation_points, build_time_series
 
 
 HASH = "a" * 64
@@ -85,6 +86,18 @@ def test_cartesian_and_user_combinations() -> None:
         user_combinations=({"volume": 150},),
     )
     assert user.samples[0].values["volume"] == 150
+
+
+def test_schedule_and_species_parameters_fail_closed_before_official_run() -> None:
+    schedule = StudyParameter("schedule", "schedule_value", "schedule-1", "Schedule", "1", 0, 1, 1)
+    species = StudyParameter("species", "species_initial", "species-1", "Species", "kg/m3", 0, 1, 1)
+    for parameter in (schedule, species):
+        with pytest.raises(StudyError, match="只读"):
+            create_study_plan(
+                baseline_project_sha256=HASH,
+                revision_id="revision-1",
+                parameters=(parameter,),
+            )
 
 
 def test_cartesian_product_keeps_all_values_for_two_and_three_parameters() -> None:
@@ -257,6 +270,43 @@ def test_analysis_requires_evidence_and_cites_hashes() -> None:
     assert all(item["evidence"] for item in analysis["conclusions"])
 
 
+def test_visualization_preserves_series_missing_values_and_evidence() -> None:
+    result = StudySampleResult(
+        "study",
+        HASH,
+        "s1",
+        "succeeded",
+        {"v": 10},
+        HASH,
+        {},
+        {
+            "value": 2.0,
+            "zone_id": "zone-1",
+            "time_seconds": 0.0,
+            "series": [
+                {"time_seconds": 0.0, "zone_id": "zone-1", "temperature_k": 293.1},
+                {"time_seconds": 60.0, "zone_id": "zone-1", "temperature_k": None},
+            ],
+        },
+        "b" * 64,
+        generated_at="now",
+        evidence=({"sample_id": "s1", "result_hash": "b" * 64},),
+    )
+    raw = result.to_dict()
+    relation = build_relation_points([raw], "v")
+    assert relation[0]["x"] == 10 and relation[0]["y"] == 2
+    temperature_relation = build_relation_points(
+        [raw], "v", metric="temperature_k", zone_id="zone-1", time_seconds=0.0
+    )
+    assert temperature_relation[0]["y"] == 293.1
+    assert not build_relation_points([raw], "v", metric="temperature_k", time_seconds=60.0)
+    series = build_time_series([raw], metric="temperature_k")
+    assert len(series) == 2 and series[1]["value"] is None
+
+    analysis = analyze_study_results([result])
+    assert all("parameter_values" in ref and "metric" in ref and "timestamp" in ref for item in analysis["conclusions"] for ref in item["evidence"])
+
+
 def test_executor_isolates_failure_and_supports_cancel(tmp_path: Path) -> None:
     plan = create_study_plan(
         baseline_project_sha256=HASH, revision_id="revision-1", parameters=(zone_volume(),)
@@ -312,6 +362,12 @@ def test_reports_are_consistent_and_non_overwriting(tmp_path: Path) -> None:
         for suffix in (".html", ".pdf", ".csv", ".json")
     ]
     assert (tmp_path / "report.pdf").read_bytes().startswith(b"%PDF-")
+    pdf = (tmp_path / "report.pdf").read_bytes()
+    assert pdf.count(b"/Type /Page") >= 2
+    assert b"STSong-Light" in pdf
+    assert b"/Contents" in pdf
+    html_report = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "<svg" in html_report and "参数关系图" in html_report
     assert (
         json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))["study_hash"]
         == plan.study_hash

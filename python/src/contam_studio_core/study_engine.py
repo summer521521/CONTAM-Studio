@@ -21,6 +21,8 @@ import threading
 from typing import Callable, Iterable, Mapping, Sequence
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from .study_visualization import build_relation_points, build_time_series
+
 
 MAX_STUDY_CASES = 32
 MAX_PARAMETER_COUNT = 16
@@ -32,6 +34,10 @@ SUPPORTED_PARAMETER_TYPES = {
     "schedule_value",
     "species_initial",
 }
+# These are the only parameter kinds for which the official runner currently
+# has a verified byte-local semantic Patch. Schedule/Species remain visible in
+# the domain model but fail closed before a runnable study is created.
+EXECUTABLE_PARAMETER_TYPES = frozenset({"zone_volume_m3", "zone_name", "flow_path_multiplier"})
 STUDY_MODES = {"single_scan", "cartesian", "user_combinations"}
 SAMPLE_STATUSES = {"queued", "running", "succeeded", "failed", "cancelled"}
 AGGREGATE_STATUSES = {"queued", "running", "succeeded", "failed", "cancelled", "partial"}
@@ -303,6 +309,12 @@ def create_study_plan(
     # identity or sample enumeration. The ID is deterministic and already
     # bounded to the safe storage alphabet by the bridge contract.
     params = tuple(sorted(parameters, key=lambda item: item.parameter_id))
+    unsupported = tuple(item.parameter_type for item in params if item.parameter_type not in EXECUTABLE_PARAMETER_TYPES)
+    if unsupported:
+        raise StudyError(
+            "unsupported_parameter",
+            "Schedule和Species参数尚未通过官方PRJ字节Patch验证，当前仅支持只读查看。",
+        )
     targets = {(item.parameter_type, item.object_id) for item in params}
     if len(targets) != len(params):
         raise StudyError("duplicate_parameter_target", "同一对象的同一参数不能重复添加。")
@@ -399,6 +411,21 @@ class StudySampleResult:
             raise StudyError("provenance_invalid", "结果来源标识无效。")
         if self.attempt_id is not None:
             _safe_storage_component(self.attempt_id, "运行尝试")
+        raw_series = self.statistics.get("series") if isinstance(self.statistics, Mapping) else None
+        if raw_series is not None:
+            if not isinstance(raw_series, Sequence) or isinstance(raw_series, (str, bytes)) or len(raw_series) > 512:
+                raise StudyError("series_limit", "时间序列超过单样本资源上限。")
+            for point in raw_series:
+                if not isinstance(point, Mapping):
+                    raise StudyError("series_invalid", "时间序列点必须是结构化对象。")
+                timestamp = point.get("time_seconds")
+                if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)) or not math.isfinite(float(timestamp)):
+                    raise StudyError("series_invalid", "时间序列时间必须是有限数字。")
+                for key, value in point.items():
+                    if key in {"zone_id", "metric"}:
+                        continue
+                    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value))):
+                        raise StudyError("series_invalid", "时间序列值必须是有限数字或明确缺失。")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -643,12 +670,14 @@ def analyze_study_results(
     baseline = next((item for item in trusted if item.sample_id == baseline_sample_id), trusted[0])
     baseline_value = next(value for item, value in values if item.sample_id == baseline.sample_id)
 
-    def evidence(item: StudySampleResult) -> dict[str, object]:
+    def evidence(item: StudySampleResult, *, timestamp: object | None = None, metric: str = "value") -> dict[str, object]:
         return {
             "sample_id": item.sample_id,
+            "parameter_values": dict(item.parameters),
             "result_hash": item.result_hash,
             "zone_id": item.statistics.get("zone_id"),
-            "time_seconds": item.statistics.get("time_seconds"),
+            "metric": metric,
+            "timestamp": item.statistics.get("time_seconds") if timestamp is None else timestamp,
         }
 
     conclusions = [
@@ -668,6 +697,56 @@ def analyze_study_results(
             "evidence": [evidence(baseline), evidence(minimum_item), evidence(maximum_item)],
         },
     ]
+    # A bounded, descriptive influence signal is useful for research review,
+    # but is deliberately labelled correlation rather than causal impact.
+    influence: list[tuple[str, float, list[StudySampleResult]]] = []
+    def numeric(value: object) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        number = float(value)
+        return number if math.isfinite(number) else None
+
+    for parameter in sorted({key for item in trusted for key in item.parameters}):
+        pairs = [
+            (numeric(item.parameters.get(parameter)), value, item)
+            for item, value in values
+            if numeric(item.parameters.get(parameter)) is not None
+        ]
+        if len(pairs) < 2 or len({pair[0] for pair in pairs}) < 2:
+            continue
+        x_mean = statistics.fmean(float(pair[0]) for pair in pairs)
+        y_mean = statistics.fmean(pair[1] for pair in pairs)
+        numerator = sum((float(x) - x_mean) * (y - y_mean) for x, y, _ in pairs)
+        x_denominator = math.sqrt(sum((float(x) - x_mean) ** 2 for x, _, _ in pairs))
+        y_denominator = math.sqrt(sum((y - y_mean) ** 2 for _, y, _ in pairs))
+        if x_denominator == 0 or y_denominator == 0:
+            continue
+        correlation = numerator / (x_denominator * y_denominator)
+        influence.append((parameter, correlation, [pair[2] for pair in pairs]))
+    if influence:
+        parameter, correlation, witnesses = max(influence, key=lambda item: (abs(item[1]), item[0]))
+        witness_evidence = [evidence(item) for item in sorted(witnesses, key=lambda item: item.sample_id)[:8]]
+        conclusions.append(
+            {
+                "kind": "parameter_influence",
+                "text": f"参数{parameter}与value呈现相关性（r={correlation:.3f}）；这不是因果关系。",
+                "evidence": witness_evidence,
+            }
+        )
+    series_points = build_time_series([item.to_dict() for item in trusted], limit=MAX_RESULT_PAGE)
+    if series_points:
+        finite_points = [item for item in series_points if isinstance(item.get("value"), (int, float))]
+        if finite_points:
+            peak = max(finite_points, key=lambda item: float(item["value"]))
+            peak_result = next((item for item in trusted if item.sample_id == peak.get("sample_id")), None)
+            if peak_result is not None:
+                conclusions.append(
+                    {
+                        "kind": "time_peak",
+                        "text": f"时间序列峰值为{float(peak['value']):g}，位于{float(peak['time_seconds']):g}s；缺失值未被当作零。",
+                        "evidence": [evidence(peak_result, timestamp=peak.get("time_seconds"), metric="temperature_k")],
+                    }
+                )
     return {
         "schema_version": "study_analysis.v1",
         "sample_count": len(values),
@@ -750,7 +829,24 @@ def render_study_report_html(model: StudyReportModel) -> str:
         f"<tr><td>{html.escape(item.sample_id)}</td><td>{html.escape(item.status)}</td><td>{html.escape(json.dumps(dict(item.parameters), ensure_ascii=False))}</td><td>{html.escape(str(item.statistics.get('value', '')))}</td><td>{html.escape(item.result_hash or '')}</td></tr>"
         for item in model.results
     )
-    return f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(model.report_title)}</title></head><body><h1>{html.escape(model.report_title)}</h1><p>provenance: {html.escape(model.provenance)}</p><p>project: <code>{html.escape(model.project_sha256)}</code> study: <code>{html.escape(model.study_hash)}</code></p><table><thead><tr><th>sample</th><th>status</th><th>parameters</th><th>value</th><th>result hash</th></tr></thead><tbody>{rows}</tbody></table><h2>Structured data</h2><pre>{html.escape(payload)}</pre></body></html>"
+    parameter_id = str(model.parameters[0].get("parameter_id", "")) if model.parameters else ""
+    relation = build_relation_points([item.to_dict() for item in model.results], parameter_id)
+    series = build_time_series([item.to_dict() for item in model.results])
+
+    def svg(points: Sequence[Mapping[str, object]], x_key: str, y_key: str, title: str) -> str:
+        finite = [item for item in points if isinstance(item.get(x_key), (int, float)) and isinstance(item.get(y_key), (int, float))]
+        if not finite:
+            return f"<section><h3>{html.escape(title)}</h3><svg viewBox='0 0 560 120' role='img' aria-label='{html.escape(title)}'><text x='30' y='62'>证据不足：没有可绘制的可信结果。</text></svg></section>"
+        xs = [float(item[x_key]) for item in finite]
+        ys = [float(item[y_key]) for item in finite]
+        xmin, xmax = min(xs), max(xs)
+        ymin, ymax = min(ys), max(ys)
+        dx = xmax - xmin or 1.0
+        dy = ymax - ymin or 1.0
+        coords = " ".join(f"{30 + (float(item[x_key]) - xmin) / dx * 500:.1f},{170 - (float(item[y_key]) - ymin) / dy * 130:.1f}" for item in finite)
+        return f"<section><h3>{html.escape(title)}</h3><svg viewBox='0 0 560 200' role='img' aria-label='{html.escape(title)}'><rect x='30' y='20' width='500' height='150' fill='none' stroke='#778899'/><polyline points='{coords}' fill='none' stroke='#1769c2' stroke-width='2'/></svg><p>数据点：{len(finite)}；结果哈希由每个样本单独绑定。</p></section>"
+
+    return f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(model.report_title)}</title><style>body{{font-family:system-ui,sans-serif;margin:32px;color:#18212b}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #cfd6de;padding:6px;text-align:left}}svg{{max-width:100%;height:auto;background:#f7f9fb}}.meta{{font-family:monospace}}</style></head><body><h1>{html.escape(model.report_title)}</h1><p>来源：{html.escape(model.provenance)}</p><p class='meta'>项目哈希：{html.escape(model.project_sha256)}<br/>研究哈希：{html.escape(model.study_hash)}</p>{svg(relation, 'x', 'y', '参数关系图')}{svg(series, 'time_seconds', 'value', '时间序列图')}<table><thead><tr><th>样本</th><th>状态</th><th>参数</th><th>value</th><th>结果哈希</th></tr></thead><tbody>{rows}</tbody></table><h2>结构化数据</h2><pre>{html.escape(payload)}</pre></body></html>"
 
 
 def render_study_report_csv(model: StudyReportModel) -> str:
@@ -787,29 +883,156 @@ def render_study_report_csv(model: StudyReportModel) -> str:
 
 
 def render_study_report_pdf(model: StudyReportModel) -> bytes:
-    lines = [
-        model.report_title,
-        f"provenance: {model.provenance}",
-        f"project: {model.project_sha256}",
-        f"study: {model.study_hash}",
+    records = [item.to_dict() for item in model.results]
+    parameter_id = str(model.parameters[0].get("parameter_id", "")) if model.parameters else ""
+    relation = build_relation_points(records, parameter_id)
+    series = build_time_series(records)
+
+    def text(value: object, x: float, y: float, size: float = 9) -> str:
+        value_text = str(value).replace("\n", " ")[:240]
+        chunks: list[tuple[str, bool]] = []
+        for character in value_text:
+            is_cjk = ord(character) > 127
+            if chunks and chunks[-1][1] == is_cjk:
+                chunks[-1] = (chunks[-1][0] + character, is_cjk)
+            else:
+                chunks.append((character, is_cjk))
+        commands: list[str] = []
+        cursor = x
+        for chunk, is_cjk in chunks:
+            if is_cjk:
+                encoded = chunk.encode("utf-16-be").hex().upper()
+                commands.append(f"BT /F1 {size:g} Tf 1 0 0 1 {cursor:g} {y:g} Tm <FEFF{encoded}> Tj ET\n")
+                cursor += len(chunk) * size
+            else:
+                escaped = chunk.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+                commands.append(f"BT /F2 {size:g} Tf 1 0 0 1 {cursor:g} {y:g} Tm ({escaped}) Tj ET\n")
+                cursor += len(chunk) * size * 0.52
+        return "".join(commands)
+
+    def wrap_text(value: object, max_width: float, size: float, max_lines: int = 2) -> list[str]:
+        """Wrap mixed CJK/ASCII text before placing it in the fixed PDF page."""
+        value_text = str(value).replace("\n", " ")[:480]
+        lines: list[str] = []
+        current: list[str] = []
+        width = 0.0
+        for character in value_text:
+            character_width = size if ord(character) > 127 else size * 0.52
+            if current and width + character_width > max_width:
+                lines.append("".join(current))
+                if len(lines) >= max_lines:
+                    break
+                current = []
+                width = 0.0
+            current.append(character)
+            width += character_width
+        if len(lines) < max_lines and current:
+            lines.append("".join(current))
+        if not lines:
+            lines = [""]
+        if len(lines) == max_lines and sum(len(item) for item in lines) < len(value_text):
+            lines[-1] = lines[-1].rstrip() + "..."
+        return lines
+
+    def chart(points: Sequence[Mapping[str, object]], x_key: str, y_key: str, x: float, y: float, width: float, height: float, title: str) -> str:
+        commands = [f"0.35 0.42 0.50 RG 0.8 w {x:g} {y:g} {width:g} {height:g} re S\n", text(title, x, y + height + 14, 10)]
+        finite = [item for item in points if isinstance(item.get(x_key), (int, float)) and isinstance(item.get(y_key), (int, float))]
+        if not finite:
+            commands.append(text("证据不足：没有可绘制的可信结果。", x + 8, y + height / 2, 8))
+            return "".join(commands)
+        xs = [float(item[x_key]) for item in finite]
+        ys = [float(item[y_key]) for item in finite]
+        xmin, xmax = min(xs), max(xs)
+        ymin, ymax = min(ys), max(ys)
+        dx = xmax - xmin or 1.0
+        dy = ymax - ymin or 1.0
+        commands.append("0.09 0.41 0.76 RG 1.4 w\n")
+        for index, item in enumerate(finite):
+            px = x + (float(item[x_key]) - xmin) / dx * width
+            py = y + (float(item[y_key]) - ymin) / dy * height
+            commands.append(f"{px - 1:.2f} {py - 1:.2f} 2 2 re f\n")
+            if index > 0:
+                previous = finite[index - 1]
+                ppx = x + (float(previous[x_key]) - xmin) / dx * width
+                ppy = y + (float(previous[y_key]) - ymin) / dy * height
+                commands.append(f"{ppx:.2f} {ppy:.2f} m {px:.2f} {py:.2f} l S\n")
+        commands.extend([text(f"x: {xmin:g} .. {xmax:g}", x, y - 14, 7), text(f"y: {ymin:g} .. {ymax:g}", x + width - 120, y - 14, 7)])
+        return "".join(commands)
+
+    pages: list[str] = []
+    status_counts = {status: sum(1 for item in model.results if item.status == status) for status in sorted(SAMPLE_STATUSES)}
+    first_page = [
+        text(model.report_title, 36, 756, 16),
+        text(f"来源：{model.provenance}", 36, 736),
+        text(f"项目哈希：{model.project_sha256}", 36, 716, 8),
+        text(f"研究哈希：{model.study_hash}", 36, 700, 8),
+        text(f"生成时间：{model.generated_at}", 36, 684, 8),
+        text("样本状态：" + "；".join(f"{key}={value}" for key, value in status_counts.items()), 36, 662),
     ]
-    lines.extend(
-        f"{item.sample_id} | {item.status} | {item.statistics.get('value', '')} | {item.result_hash or ''}"
-        for item in model.results
-    )
-    safe = [
-        line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")[:180] for line in lines
+    parameter_pages: list[str] = []
+    parameter_page = first_page + [text("参数定义", 36, 640, 11)]
+    y_cursor = 618
+    for parameter in model.parameters[:64]:
+        summary = json.dumps(dict(parameter), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        wrapped = wrap_text(summary, 520, 7, max_lines=2)
+        if y_cursor - len(wrapped) * 10 < 62:
+            parameter_pages.append("".join(parameter_page))
+            parameter_page = [text(model.report_title + " · 参数定义（续）", 36, 756, 14)]
+            y_cursor = 720
+        for line in wrapped:
+            parameter_page.append(text(line, 42, y_cursor, 7))
+            y_cursor -= 10
+        y_cursor -= 3
+    parameter_pages.append("".join(parameter_page))
+    pages.extend(parameter_pages)
+
+    relation_page = [
+        text(model.report_title + " · 参数关系", 36, 756, 14),
+        text(f"项目哈希：{model.project_sha256}", 36, 736, 8),
+        text(f"研究哈希：{model.study_hash}", 36, 722, 8),
     ]
-    stream = "BT /F1 9 Tf 36 780 Td " + " T* ".join(f"({line})" for line in safe) + " ET"
-    objects = [
+    relation_page.append(chart(relation, "x", "y", 36, 275, 540, 390, "参数关系图（真实结果）"))
+    pages.append("".join(relation_page))
+
+    second_page = [
+        text(model.report_title + " · 时间序列", 36, 756, 14),
+        text(f"项目哈希：{model.project_sha256}", 36, 736, 8),
+        text(f"研究哈希：{model.study_hash}", 36, 722, 8),
+        text("缺失值保持为空，不替换为零。时间单位：秒。", 36, 704, 9),
+    ]
+    second_page.append(chart(series, "time_seconds", "value", 36, 300, 540, 360, "时间序列图（SimRead结果）"))
+    second_page.append(text(f"可信时间序列点数：{len(series)}", 36, 275, 9))
+    if model.analysis:
+        second_page.append(text("AI分析仅引用带结果哈希的证据；相关性不等于因果关系。", 36, 258, 8))
+    pages.append("".join(second_page))
+    for start in range(0, len(model.results), 20):
+        chunk = model.results[start : start + 20]
+        content = [text(model.report_title + " · 样本表", 36, 756, 14), text("sample_id | status | parameters | value | result_hash", 36, 732, 8)]
+        y = 712
+        for item in chunk:
+            row = f"{item.sample_id[:12]} | {item.status} | {json.dumps(dict(item.parameters), ensure_ascii=False, separators=(',', ':'))} | {item.statistics.get('value', '')} | {(item.result_hash or '')[:16]}"
+            for line in wrap_text(row, 540, 7, max_lines=2):
+                content.append(text(line, 36, y, 7))
+                y -= 9
+            y -= 17
+        pages.append("".join(content))
+
+    objects: list[bytes] = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Pages /Kids [] /Count 0 >>",
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [4 0 R] >>",
+        b"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /DW 1000 >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        f"<< /Length {len(stream.encode('latin-1', 'replace'))} >>\nstream\n{stream}\nendstream".encode(
-            "latin-1", "replace"
-        ),
     ]
+    page_ids: list[int] = []
+    for content in pages:
+        page_id = len(objects) + 1
+        content_id = page_id + 1
+        page_ids.append(page_id)
+        stream = content.encode("ascii")
+        objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 5 0 R >> >> /Contents {content_id} 0 R >>".encode("ascii"))
+        objects.append(f"<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream")
+    objects[1] = f"<< /Type /Pages /Kids [{' '.join(f'{page_id} 0 R' for page_id in page_ids)}] /Count {len(page_ids)} >>".encode("ascii")
     output = bytearray(b"%PDF-1.4\n")
     offsets = [0]
     for index, obj in enumerate(objects, 1):
@@ -820,11 +1043,7 @@ def render_study_report_pdf(model: StudyReportModel) -> bytes:
     xref = len(output)
     output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii"))
     output.extend("".join(f"{offset:010d} 00000 n \n" for offset in offsets[1:]).encode("ascii"))
-    output.extend(
-        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode(
-            "ascii"
-        )
-    )
+    output.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
     return bytes(output)
 
 

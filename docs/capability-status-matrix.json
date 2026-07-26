@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-26T10:04:14Z",
+  "last_updated_utc": "2026-07-26T10:59:40Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -240,6 +240,17 @@
       "packaged": "not_run",
       "user_validated": "passed",
       "evidence": ["docs/architecture/agent-04-study-results-report.md", "docs/development/task-log/records/agent-04-study-results-report.md"]
+    },
+    {
+      "id": "agent-05-advanced-study-visualization",
+      "name": "AGENT-05高级研究参数与可视化分析",
+      "implemented": "partial",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": ["docs/architecture/agent-05-advanced-study-visualization.md", "docs/development/task-log/records/agent-05-advanced-study-visualization.md"]
     },
     {
       "id": "distribution",
