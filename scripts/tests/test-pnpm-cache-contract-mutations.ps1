@@ -3,7 +3,8 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $checker = Join-Path $PSScriptRoot "test-pnpm-cache-contract.ps1"
 $workflow = Get-Content -LiteralPath (Join-Path $root ".github\workflows\windows-ci.yml") -Raw -Encoding UTF8
-$tempRoot = Join-Path "F:\Codex_File\temp\contam-studio" ("fnd-04-pnpm-cache-" + [Guid]::NewGuid().ToString("N"))
+$tempBase = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP "contam-studio" } else { "F:\Codex_File\temp\contam-studio" }
+$tempRoot = Join-Path $tempBase ("fnd-04-pnpm-cache-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 
 function Invoke-ExpectedFailure {

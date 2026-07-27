@@ -212,7 +212,7 @@ function New-ExpectedStepContracts {
     $rust = "dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c"
     $cache = "actions/cache@caa296126883cff596d87d8935842f9db880ef25"
     return @(
-        [ordered]@{ name = "Checkout"; properties = [ordered]@{ uses = $checkout; with = [ordered]@{ "persist-credentials" = "false" } } },
+        [ordered]@{ name = "Checkout"; properties = [ordered]@{ uses = $checkout; with = [ordered]@{ "fetch-depth" = "0"; "persist-credentials" = "false" } } },
         [ordered]@{ name = "Set up Python"; properties = [ordered]@{ uses = $python; with = [ordered]@{ "python-version" = "3.12.10"; architecture = "x64" } } },
         [ordered]@{ name = "Set up pnpm"; properties = [ordered]@{ uses = $pnpm; with = [ordered]@{ version = "11.14.0" } } },
         [ordered]@{ name = "Set up Node.js"; properties = [ordered]@{ uses = $node; with = [ordered]@{ "node-version" = "24.13.0" } } },

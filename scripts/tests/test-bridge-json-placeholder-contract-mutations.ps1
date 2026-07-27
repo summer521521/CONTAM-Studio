@@ -3,7 +3,8 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $sourceRoot = Join-Path $root "contracts\python-rust-bridge\v1.2"
 $checker = Join-Path $PSScriptRoot "test-bridge-json-placeholder-contract.ps1"
-$tempRoot = Join-Path "F:\Codex_File\temp\contam-studio" ("fnd-04-placeholders-" + [Guid]::NewGuid().ToString("N"))
+$tempBase = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP "contam-studio" } else { "F:\Codex_File\temp\contam-studio" }
+$tempRoot = Join-Path $tempBase ("fnd-04-placeholders-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 
 function New-CaseRoot {

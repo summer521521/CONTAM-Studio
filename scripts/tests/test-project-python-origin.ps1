@@ -5,7 +5,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $Root = (Resolve-Path (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "../..")).Path
-$TempRoot = Join-Path "F:\Codex_File\temp" ("qa-01a-python-origin-test-" + [guid]::NewGuid().ToString("N"))
+$TempBase = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP "contam-studio" } else { "F:\Codex_File\temp" }
+$TempRoot = Join-Path $TempBase ("qa-01a-python-origin-test-" + [guid]::NewGuid().ToString("N"))
 $FakePackageRoot = Join-Path $TempRoot "fake-python-src"
 $FakePackage = Join-Path $FakePackageRoot "contam_studio_core"
 $VerifyScript = Join-Path $Root "scripts\verify.ps1"

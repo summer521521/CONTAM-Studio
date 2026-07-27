@@ -5,7 +5,9 @@ import {spawnSync} from "node:child_process";
 
 const sourceRoot = path.resolve(process.argv[2] || path.join(import.meta.dirname, "../.."));
 const checker = path.join(sourceRoot, "scripts", "tests", "test-rust-authority-contract.mjs");
-const tempBase = path.join("F:\\Codex_File", "temp", "contam-studio");
+const tempBase = process.env.RUNNER_TEMP
+  ? path.join(process.env.RUNNER_TEMP, "contam-studio")
+  : path.join("F:\\Codex_File", "temp", "contam-studio");
 fs.mkdirSync(tempBase, {recursive: true});
 const tempRoot = fs.mkdtempSync(path.join(tempBase, "fnd-05-authority-"));
 
