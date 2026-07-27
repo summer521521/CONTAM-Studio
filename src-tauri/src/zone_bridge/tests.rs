@@ -14,8 +14,10 @@ fn test_draft_root(label: &str) -> PathBuf {
 }
 
 fn fnd06_root(label: &str) -> PathBuf {
-    PathBuf::from(r"F:\Codex_File\temp\contam-studio")
-        .join(format!("fnd-06-{label}-{}", std::process::id()))
+    let base = std::env::var_os("RUNNER_TEMP")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"F:\Codex_File\temp\contam-studio"));
+    base.join(format!("fnd-06-{label}-{}", std::process::id()))
 }
 
 fn test_run_summary(run_id: &str) -> ContamXRunSummaryView {
