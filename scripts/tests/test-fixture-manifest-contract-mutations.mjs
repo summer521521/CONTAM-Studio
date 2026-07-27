@@ -4,7 +4,9 @@ import {spawnSync} from "node:child_process";
 
 const sourceRoot = path.resolve(process.argv[2] || path.join(import.meta.dirname, "../.."));
 const checker = path.join(sourceRoot, "scripts", "tests", "test-fixture-manifest-contract.mjs");
-const tempRoot = fs.mkdtempSync(path.join("F:\\Codex_File\\temp\\contam-studio\\", "fixture-contract-"));
+const tempBase = "F:\\Codex_File\\temp\\contam-studio";
+fs.mkdirSync(tempBase, {recursive: true});
+const tempRoot = fs.mkdtempSync(path.join(tempBase, "fixture-contract-"));
 const source = JSON.parse(fs.readFileSync(path.join(sourceRoot, "contracts", "fixture-manifest.v1.json"), "utf8"));
 function expectFailure(name, mutate, code) {
   const root = path.join(tempRoot, name);

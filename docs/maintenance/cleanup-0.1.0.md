@@ -6,6 +6,7 @@
 - 最终发布产物：`F:\Codex_File\artifacts\contam-studio\release\0.1.0`。
 - 本地打包工具链：`F:\Codex_File\toolchains\contam-studio-packaging`。
 - 可恢复源码归档：`F:\Codex_File\archives\contam-studio\0.1.0`。
+- 空测试父目录：`F:\Codex_File\temp\contam-studio`；变异测试会在其中创建并自动删除独立子目录。
 - 历史总任务书：`docs/archive/`，只作设计追溯。
 
 ## 清理

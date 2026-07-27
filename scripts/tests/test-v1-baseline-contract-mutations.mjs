@@ -4,7 +4,9 @@ import {spawnSync} from "node:child_process";
 
 const sourceRoot = path.resolve(process.argv[2] || path.join(import.meta.dirname, "../.."));
 const checker = path.join(sourceRoot, "scripts", "tests", "test-v1-baseline-contract.mjs");
-const tempRoot = fs.mkdtempSync(path.join("F:\\Codex_File\\temp\\contam-studio\\", "batch-a-contract-"));
+const tempBase = "F:\\Codex_File\\temp\\contam-studio";
+fs.mkdirSync(tempBase, {recursive: true});
+const tempRoot = fs.mkdtempSync(path.join(tempBase, "batch-a-contract-"));
 
 function copyCase(name) {
   const root = path.join(tempRoot, name);
