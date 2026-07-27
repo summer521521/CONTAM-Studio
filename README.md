@@ -19,15 +19,17 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前能力
 
-当前桌面主线可以打开受支持的PRJ、查看Zone、审阅并另存一个Zone体积修改、撤销/重做草稿、使用官方ContamX运行当前Revision、提取并分析`zone_air_state`结果，以及导出CSV。Codex助手已接入严格只读模式：用户主动连接后，可以预览由Rust生成的结构化上下文并获得区分事实、解释和限制的回答；它不能读取项目目录、运行命令、修改项目或启动仿真。
+0.1.0桌面主线已经形成可用纵向闭环：打开受支持PRJ，浏览Project/Level/Zone/FlowPath/Species语义树，在不可变草稿中审阅和应用受支持的Zone名称、体积及FlowPath multiplier事务，运行官方ContamX/SimRead，执行单参数或多参数研究，分页和筛选可信结果，查看参数关系图与时间序列，并导出HTML、PDF、CSV和JSON报告。未知或不能可靠回写的内容保持只读，原始PRJ不由GUI或AI直接覆盖。
 
-仓库还包含完整PRJ领域投影、进程生命周期、结果/报告、附件和AI批准协议的内部研究模块及测试。这些模块尚未接入Tauri命令或React工作流，不属于当前可用功能，也不代表“完整v1”已经完成。产品事实以[能力状态矩阵](docs/capability-status-matrix.json)为准。
+AI助手支持用户主动连接、附件证据披露、结构化仿真方案、哈希绑定批准和研究结果解释。所有写入均通过GUI共用的领域Patch、Diff、确定性验证和用户确认；未连接AI时，项目、草稿、运行、研究和报告仍可离线使用。图片当前只进入本地预览和受控元数据证据，不宣称已向远程模型发送像素。
+
+Windows x64提供便携版、NSIS安装器和MSI安装器。0.1.0冻结范围及限制见[发布说明](docs/release/CONTAM-Studio-0.1.0-release-notes.md)和[已知限制](docs/release/known-limitations-0.1.0.md)，产品事实以[能力状态矩阵](docs/capability-status-matrix.json)为准。
 
 桌面入口在React代码加载前先显示轻量双语启动表面，不再用无说明的黑色窗口承接开发冷启动；较大的ECharts结果图表只在真实结果图表需要时加载。该启动表面不探测账号、不连接Codex，也不发送项目上下文。
 
 ## 架构方向
 
-当前已批准的首选方向是React+TypeScript前端、Tauri 2桌面宿主、Python CONTAM领域核心和官方ContamX求解器，Windows 10/11 64位为首要平台。Phase 2C已在开发环境验证Tauri与Python之间的一次性进程JSON桥；Python运行时冻结、安装包集成及长期进程策略仍需后续Spike验证。
+0.1.0采用React+TypeScript前端、Tauri 2桌面宿主、Python CONTAM领域核心和官方ContamX/SimRead，Windows 10/11 x64为正式目标平台。Rust拥有桌面权限、活动项目、草稿、运行、结果、附件、AI批准与发布配置边界；Python承担严格文档解析、语义Patch、官方工具编排和结果/报告领域逻辑；React只使用路径受控的语义桌面API。
 
 ```text
 React GUI
@@ -42,9 +44,7 @@ Python CONTAM领域核心
 官方ContamX
 ```
 
-Phase 1实现React前端与最小Tauri桌面宿主；Phase 2建立严格Zone纯文档读取器和桌面只读闭环；Phase 3A-0建立哈希绑定、仅写副本的Python Patch，Phase 3B接入Diff审阅。Phase 3C复用同一Patch领域函数，把批准修改提交为不可变内部Revision，并由Rust管理稳定Zone UUID、线性Undo/Redo、安全另存和当前Revision的运行/结果绑定。React只取得路径无关的安全视图；contamxpy隔离检查没有接入GUI。
-
-Phase 6A的AI侧栏只接受Rust生成的结构化披露快照。默认发送当前Zone和草稿摘要，不发送绝对路径、PRJ正文、内部快照、manifest、SIM、原始日志或完整577条结果；上下文变化后必须重新预览。Codex Thread固定为只读沙箱和禁止审批，工具或权限事件会被中断并丢弃回答。连接、上下文失效和关闭均由Rust代际化管理：迟到连接、旧Turn和未完成关闭不能覆盖当前状态或复用为可信会话。Beta-1只在同一可信绑定内以内存方式保留至多12条已完成问答；Beta-2增加默认关闭、用户明确启用的本地已完成问答档案。档案由Rust原子写入受控应用数据目录，按同一基线项目和稳定Zone UUID筛选，用户可查看历史Revision并删除单条、当前Zone或全部本地档案；它不保存Thread、认证、路径、PRJ正文或完整结果，也绝不自动再次发送给模型。CLI安装命令同样只接受`request_id`，下载地址、PowerShell路径、参数和目标目录均由Rust固定持有，且没有向WebView开放通用Shell或文件系统权限。详见[Codex只读助手架构](docs/architecture/codex-readonly-assistant.md)。
+历史阶段证据仍保留在`docs/development/`，但阶段名不再代表当前产品范围。0.1.0的唯一发布事实来源是能力矩阵、发布说明、已知限制和最终交接文档。
 
 ## 开发启动
 

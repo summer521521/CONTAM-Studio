@@ -40,10 +40,11 @@ if (!/^status:\s+automated_verified/m.test(log)) failures.push("AGENT-08 log mus
 if (!/F:\\{1,2}Codex_File/m.test(log) || !/不读取或修改真实PRJ、CSV、SIM/.test(log)) failures.push("AGENT-08 log boundary is missing");
 const matrix = JSON.parse(read("docs/capability-status-matrix.json"));
 const row = matrix.capabilities.find((item) => item.id === "agent-08-installer-clean-machine");
-if (!row || row.merged_to_main !== "no" || row.manual_gui !== "pending_user") failures.push("capability matrix AGENT-08 row is not conservatively pending");
+if (!row || row.merged_to_main !== "yes" || row.manual_gui !== "passed" || row.user_validated !== "passed") failures.push("capability matrix AGENT-08 row does not record the accepted mainline state");
+if (!row?.evidence?.includes("docs/uat/manual-acceptance-matrix-v1.md")) failures.push("capability matrix AGENT-08 row is missing the user acceptance evidence");
 if (failures.length) {
   for (const failure of failures) console.error(`[FAIL] ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log("AGENT-08 installer/clean-machine contract passed: local toolchain, unsigned boundary, artifact scope and pending acceptance are explicit.");
+  console.log("AGENT-08 installer/clean-machine contract passed: local toolchain, unsigned boundary, artifact scope and accepted mainline state are explicit.");
 }

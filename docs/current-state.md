@@ -1,10 +1,12 @@
 # 当前状态
 
-记录日期：2026-07-24。
+记录日期：2026-07-27。
 
-当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。当前桌面纵向路径包括受支持PRJ的Zone读取、单Zone体积草稿修改、官方ContamX运行、`zone_air_state`结果分析/CSV导出和Codex只读助手。
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.1.0桌面纵向路径包括受支持PRJ语义树、多对象草稿Patch、官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心及受审批AI仿真和结果解释。
 
-候选分支新增的完整PRJ投影、进程/存储/结果和多参数研究模块仍是内部研究基础。附件中心与AGENT-01受限仿真方案已有Tauri和React入口及自动验证，但真实GUI、多模态像素传输、完整Office视觉渲染、完整PRJ编辑器和发行版仍未完成。
+Windows x64便携版、NSIS和MSI安装器已生成并通过自动内容审计。用户已接受0.1.0 GUI和发布范围，并明确豁免独立干净Windows执行；这项豁免不是另一台机器的实测证据。代码签名与公开发布状态以[0.1.0发布说明](release/CONTAM-Studio-0.1.0-release-notes.md)为准。
+
+Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.1.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.1.0结论。
 
 ## Phase 6A Codex只读AI助手
 

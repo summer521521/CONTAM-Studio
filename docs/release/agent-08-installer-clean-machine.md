@@ -7,7 +7,7 @@
 | portable build | passed | 0.1.0便携版已生成并通过内容审计 |
 | installer build | passed | 使用F盘本地NSIS 3.12与WiX 3.14.1重新打包；未写入系统 |
 | installer install/upgrade/uninstall | blocked_environment | 本机无Windows Sandbox/VM；为遵守不修改注册表边界未在宿主机执行安装器 |
-| clean Windows acceptance | blocked_environment | 仅在可用Windows Sandbox/VM/另一台干净Windows上验收；不为此启用系统功能 |
+| clean Windows acceptance | waived_by_user | 2026-07-27用户明确接受该门禁；没有另一台干净Windows的独立执行证据 |
 | signature | unsigned | 未读取证书或私钥，不伪造签名 |
 | official ContamX/SimRead | not_tested | 本批不使用用户工具路径；只做fixture和配置边界检查 |
 | upload/release | not_performed | 不创建tag、不上传、不发布 |
@@ -41,4 +41,4 @@
 
 ## 待验收
 
-若没有隔离的干净Windows环境，必须保持`clean Windows acceptance: blocked_environment`，不能把当前本机构建或用户GUI验收写成干净机通过。签名和正式发布需要单独的用户决定。可在具备Sandbox/VM后执行`scripts/tests/test-installer-isolated.ps1`，不要在宿主机绕过注册表边界。
+用户于2026-07-27明确接受没有独立外部执行证据的干净机门禁，因此发布收口记录为`waived_by_user`，不转述成真实干净机安装通过。后续仍可在具备Sandbox/VM后执行`scripts/tests/test-installer-isolated.ps1`补充证据，不要在宿主机绕过注册表边界。

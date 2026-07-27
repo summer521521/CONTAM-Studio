@@ -1,25 +1,44 @@
-# CONTAM Studio主线候选复核说明
+# CONTAM Studio 0.1.0最终交接
 
-## 当前范围
+## 发布范围
 
-隔离分支`codex/contam-studio-v1-complete`包含两类内容：一类是已接入桌面的工作台导航、控制器拆分、草稿切换和Rust权威退出协议；另一类是完整PRJ投影、进程/存储/结果、附件和AI批准的内部研究模块。后一类只有内部定向测试，没有Tauri命令、React入口或真实工具/GUI证据，不能当作已交付产品功能。
+CONTAM Studio 0.1.0是Windows x64、离线优先、中英文双语的CONTAM教学与科研桌面工作台。它保留官方ContamX/SimRead作为求解和结果读取工具，通过Rust拥有的桌面权限边界、Python语义领域核心和React工作台提供以下闭环：
 
-## 自动化证据
+1. 打开并识别受支持PRJ。
+2. 浏览Project、Level、Zone、FlowPath和Species语义对象。
+3. 在不可变草稿中审阅并应用受支持的结构化Patch。
+4. 运行官方ContamX并通过SimRead取得可信结果。
+5. 执行单参数或多参数研究。
+6. 分页、筛选、排序和可视化研究结果。
+7. 导出HTML、PDF、CSV和JSON报告。
+8. 使用附件证据、哈希绑定批准和AI解释；无AI时核心流程仍可用。
 
-- 原Batch E曾连续两次通过54项Full；该结果只说明当时的代码和契约自洽。
-- H-FINAL新增Rust权威退出状态与伪造另存完成负例后，将重新运行最终Full并把准确数量记录在任务日志。
-- 内部研究模块已从`contam_studio_core`包顶层公开API撤下，防止被误认为受支持接口。
+## 数据与AI边界
 
-## 明确未宣称
+- 原始PRJ不由前端或AI直接覆盖。
+- 未知或无法可靠回写的语义保持只读。
+- 写入必须经过结构化Patch、Diff、确定性验证和用户批准。
+- AI联网由用户主动启用；路径、原始PRJ、完整SIM和未批准附件不进入披露上下文。
+- AI结果解释必须携带sample、Zone、指标、时间和结果哈希证据。
 
-完整PRJ编辑、通用进程控制器、Windows Job Object、运行历史/比较/研究/报告产品流、附件接收、PDF/Office提取、多模态AI、AI写入/审批执行、安装包、签名和发布均未完成。当前AI产品能力仍是既有的结构化只读助手，当前仿真能力仍使用既有官方ContamX/SimRead纵向路径。
+## 分发状态
 
-## 下一次人工动作
+- 便携版：已构建并通过自动内容审计。
+- NSIS：已构建并通过自动内容审计。
+- MSI：已构建并通过自动内容审计。
+- 干净Windows：用户接受门禁，但没有独立外部执行证据，记录为`waived_by_user`。
+- 签名：必须由真实可信代码签名证书完成；不得用自签名证书冒充。
+- 发布：以Git标签、GitHub Release和发布资产签名/哈希为最终事实。
 
-1. 对合入主线的导航、草稿切换和退出确认执行一次真实桌面GUI验收。
-2. 后续按独立纵向切片接入完整领域、附件和可执行AI能力，每个切片必须经过Rust权限边界和真实工具证据。
-3. 只有安装包、干净Windows、许可和用户验收完成后，才创建真正的release candidate；发布仍需单独明确指令。
+## 已知限制
 
-## 保护声明
+完整列表见[known-limitations-0.1.0.md](known-limitations-0.1.0.md)。关键限制包括Schedule/Species参数化只读降级、非任意PRJ完整编辑、图片像素未进入远程AI协议、没有自动更新，以及只支持Windows x64。
 
-H-FINAL不读取或修改用户PRJ/CSV/SIM、真实AppData、凭据或全局环境。签名、tag和发布不属于本次主线合并。
+## 验证入口
+
+```powershell
+powershell -NoProfile -File scripts\verify.ps1 -Mode Full
+git diff --check
+```
+
+发布产物、哈希、签名和归档清单必须与0.1.0标签指向同一提交。
