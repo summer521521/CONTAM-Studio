@@ -2,7 +2,7 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
-| [RELEASE-01 冻结、发布与归档CONTAM Studio 0.1.0](records/release-01-v0-1-0-finalization.md) | Release 0.1.0 | in_progress | live |
+| [RELEASE-01 冻结、发布与归档CONTAM Studio 0.1.0](records/release-01-v0-1-0-finalization.md) | Release 0.1.0 | completed | live |
 | [AGENT-03 完整PRJ语义模型与多字段草稿编辑](records/agent-03-full-prj-domain.md) | Phase 7 | automated_verified | live |
 | [AGENT-04 多参数研究、结果分析与报告工作流](records/agent-04-study-results-report.md) | Phase 8 | automated_verified | live |
 | [AGENT-05 高级研究参数与可视化分析](records/agent-05-advanced-study-visualization.md) | Phase 9 | automated_verified | live |

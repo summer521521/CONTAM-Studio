@@ -9,8 +9,9 @@
 | 文件 | 用途 |
 | --- | --- |
 | `CONTAM-Studio.exe` | 无需安装的便携版 |
-| `CONTAM Studio_<version>_x64-setup.exe` | 推荐的NSIS安装器 |
-| `CONTAM Studio_<version>_x64_en-US.msi` | 适合Windows Installer管理的MSI |
+| `CONTAM-Studio_<version>_portable.zip` | 含许可证声明的完整便携包 |
+| `CONTAM.Studio_<version>_x64-setup.exe` | 推荐的NSIS安装器 |
+| `CONTAM.Studio_<version>_x64_en-US.msi` | 适合Windows Installer管理的MSI |
 | `SHA256SUMS.txt` | 文件完整性校验 |
 
 源码页中的“Source code”压缩包不是桌面安装包。
@@ -28,7 +29,9 @@ Get-FileHash -Algorithm SHA256 -LiteralPath ".\下载的文件.exe"
 0.1.0没有Authenticode签名，Windows可能显示未知发布者。其GitHub Sigstore记录可用GitHub CLI验证：
 
 ```powershell
-gh attestation verify ".\CONTAM-Studio.exe" --repo summer521521/CONTAM-Studio
+gh attestation verify ".\CONTAM-Studio.exe" `
+  --repo summer521521/CONTAM-Studio `
+  --predicate-type "https://github.com/summer521521/CONTAM-Studio/attestations/release-verification/v1"
 ```
 
 该验证确认下载文件与本仓库发布核验记录匹配，不代表Windows发布者身份，也不替代SHA-256核对。
