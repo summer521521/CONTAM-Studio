@@ -31,6 +31,11 @@
     "active": true,
     "targets": ["nsis", "msi"],
     "icon": ["icons/32x32.png", "icons/64x64.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.ico"],
+    "resources": {
+      "../LICENSE": "LICENSE",
+      "../NOTICE": "NOTICE",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
     "category": "Education",
     "shortDescription": "离线优先的CONTAM教学与研究工作台",
     "longDescription": "CONTAM Studio提供受控的PRJ语义编辑、官方ContamX运行、研究结果分析和本地报告导出。",
