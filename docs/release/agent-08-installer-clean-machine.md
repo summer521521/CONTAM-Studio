@@ -31,7 +31,7 @@
 - NSIS 3.12：SourceForge官方NSIS文件页解析出的下载资产，SHA-256在清单中固定；许可证随压缩包`COPYING`保留。
 - WiX 3.14.1：官方WiX v3发布资产，`LICENSE.TXT`声明Microsoft Reciprocal License（MS-RL）。
 
-缓存位于`F:\Codex_File`，构建脚本只在当前PowerShell进程内临时扩展PATH；不会持久化系统环境变量。
+最终NSIS/WiX重打包使用`F:\Codex_File`缓存，构建脚本只在当前PowerShell进程内临时扩展PATH；不会持久化系统环境变量。Tauri CLI可能维护自身helper缓存，但最终产物不依赖该缓存中的打包器。
 
 ## 安全边界
 
