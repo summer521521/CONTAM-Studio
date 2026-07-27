@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-studio-setup"
+description = "Enables the save_studio_setup command without any pre-configured scope."
+commands.allow = ["save_studio_setup"]
+
+[[permission]]
+identifier = "deny-save-studio-setup"
+description = "Denies the save_studio_setup command without any pre-configured scope."
+commands.deny = ["save_studio_setup"]

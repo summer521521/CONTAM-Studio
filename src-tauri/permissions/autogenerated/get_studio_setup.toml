@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-studio-setup"
+description = "Enables the get_studio_setup command without any pre-configured scope."
+commands.allow = ["get_studio_setup"]
+
+[[permission]]
+identifier = "deny-get-studio-setup"
+description = "Denies the get_studio_setup command without any pre-configured scope."
+commands.deny = ["get_studio_setup"]

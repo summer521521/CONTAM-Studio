@@ -15,11 +15,12 @@ import type { ProjectState } from "../../app/project-state";
 import { projectFileName } from "../../app/project-state";
 import type { ResultState } from "../../app/result-state";
 import type { ResultExportState } from "../../app/result-export-state";
-import type { AppTheme } from "../../app/workbench-state";
+import type { AppLanguage, AppTheme } from "../../app/workbench-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { DestinationPage } from "./DestinationPage";
 import type { WorkbenchDestination } from "../../app/workbench-state";
 import type { SemanticSnapshot } from "../../app/semantic-state";
+import type { StudioSetup, ToolKind } from "../../app/release-state";
 
 interface WelcomePageProps {
   destination?: WorkbenchDestination;
@@ -35,6 +36,7 @@ interface WelcomePageProps {
   resultExportState: ResultExportState;
   activeRunId: string | null;
   theme: AppTheme;
+  language?: AppLanguage;
   onLoadLatestResults: () => void;
   onSelectManifestResults: () => void;
   onExportResults: () => void;
@@ -45,6 +47,15 @@ interface WelcomePageProps {
   revisionId?: string | null;
   semanticSnapshot?: SemanticSnapshot | null;
   onNotice?: (message: string) => void;
+  setup?: StudioSetup | null;
+  setupBusy?: boolean;
+  onChooseDataDirectory?: () => Promise<string | null>;
+  onProbeTool?: (kind: ToolKind) => Promise<import("../../app/release-state").ToolState | null>;
+  onSaveSetup?: (dataDirectory: string, contamxPath: string | null, simreadPath: string | null) => Promise<void>;
+  onOpenStudioDirectory?: (kind: "data" | "logs" | "cache") => Promise<void>;
+  onClearStudioCache?: () => Promise<void>;
+  onCopyDiagnostics?: () => Promise<void>;
+  onExportDiagnostics?: () => Promise<void>;
 }
 
 export function WelcomePage({
@@ -60,6 +71,7 @@ export function WelcomePage({
   resultExportState,
   activeRunId,
   theme,
+  language = "zh-CN",
   onLoadLatestResults,
   onSelectManifestResults,
   onExportResults,
@@ -70,6 +82,15 @@ export function WelcomePage({
   revisionId = null,
   semanticSnapshot = null,
   onNotice = () => undefined,
+  setup = null,
+  setupBusy = false,
+  onChooseDataDirectory = async () => null,
+  onProbeTool = async () => null,
+  onSaveSetup = async () => undefined,
+  onOpenStudioDirectory = async () => undefined,
+  onClearStudioCache = async () => undefined,
+  onCopyDiagnostics = async () => undefined,
+  onExportDiagnostics = async () => undefined,
 }: WelcomePageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -112,6 +133,7 @@ export function WelcomePage({
             resultExportState={resultExportState}
             activeRunId={activeRunId}
             theme={theme}
+            language={language}
             onOpenProject={onOpenProject}
             onRunProject={onRunProject}
             onSelectZone={onSelectZone}
@@ -124,6 +146,15 @@ export function WelcomePage({
             revisionId={revisionId}
             semanticSnapshot={semanticSnapshot}
             onNotice={onNotice}
+            setup={setup}
+            setupBusy={setupBusy}
+            onChooseDataDirectory={onChooseDataDirectory}
+            onProbeTool={onProbeTool}
+            onSaveSetup={onSaveSetup}
+            onOpenStudioDirectory={onOpenStudioDirectory}
+            onClearStudioCache={onClearStudioCache}
+            onCopyDiagnostics={onCopyDiagnostics}
+            onExportDiagnostics={onExportDiagnostics}
           />
         ) : project ? (
           <div className="project-summary">

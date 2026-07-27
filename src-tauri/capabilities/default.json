@@ -47,6 +47,14 @@
     "allow-interrupt-readonly-ai-turn",
     "allow-clear-readonly-ai-session",
     "allow-disconnect-codex-app-server",
+    "allow-get-studio-setup",
+    "allow-save-studio-setup",
+    "allow-select-data-directory",
+    "allow-select-and-probe-official-tool",
+    "allow-open-studio-directory",
+    "allow-clear-studio-cache",
+    "allow-get-diagnostics-summary",
+    "allow-export-sanitized-diagnostics",
     "allow-resolve-app-close",
     "allow-finish-app-close-draft-export"
   ]

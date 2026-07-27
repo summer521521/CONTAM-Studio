@@ -295,6 +295,62 @@
       "payload_keys": ["requestId"]
     },
     {
+      "command": "get_studio_setup",
+      "rust_module": "release",
+      "ts_wrapper": "getStudioSetup",
+      "permission": "allow-get-studio-setup",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "save_studio_setup",
+      "rust_module": "release",
+      "ts_wrapper": "saveStudioSetup",
+      "permission": "allow-save-studio-setup",
+      "payload_keys": ["requestId", "language", "theme", "dataDirectory", "contamxPath", "simreadPath"]
+    },
+    {
+      "command": "select_data_directory",
+      "rust_module": "release",
+      "ts_wrapper": "selectDataDirectory",
+      "permission": "allow-select-data-directory",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "select_and_probe_official_tool",
+      "rust_module": "release",
+      "ts_wrapper": "selectAndProbeOfficialTool",
+      "permission": "allow-select-and-probe-official-tool",
+      "payload_keys": ["requestId", "toolKind"]
+    },
+    {
+      "command": "open_studio_directory",
+      "rust_module": "release",
+      "ts_wrapper": "openStudioDirectory",
+      "permission": "allow-open-studio-directory",
+      "payload_keys": ["requestId", "directoryKind"]
+    },
+    {
+      "command": "clear_studio_cache",
+      "rust_module": "release",
+      "ts_wrapper": "clearStudioCache",
+      "permission": "allow-clear-studio-cache",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "get_diagnostics_summary",
+      "rust_module": "release",
+      "ts_wrapper": "getDiagnosticsSummary",
+      "permission": "allow-get-diagnostics-summary",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "export_sanitized_diagnostics",
+      "rust_module": "release",
+      "ts_wrapper": "exportSanitizedDiagnostics",
+      "permission": "allow-export-sanitized-diagnostics",
+      "payload_keys": ["requestId"]
+    },
+    {
       "command": "resolve_app_close",
       "rust_module": "close_protocol",
       "ts_wrapper": "resolveAppClose",

@@ -23,6 +23,13 @@ import type {
   DesktopCodexInstallResponse,
   DesktopCodexProbeResponse,
 } from "./ai-state";
+import type {
+  DesktopActionResponse,
+  DesktopDiagnosticsResponse,
+  DesktopDirectoryResponse,
+  DesktopSetupResponse,
+  DesktopToolProbeResponse,
+} from "./release-state";
 
 export async function selectAndReadPrjZones(
   requestId: string,
@@ -453,6 +460,45 @@ export async function clearAllAiConversationArchive(
 
 export async function disconnectCodexAppServer(requestId: string): Promise<DesktopAiActionResponse> {
   return invoke<DesktopAiActionResponse>("disconnect_codex_app_server", { requestId });
+}
+
+export async function getStudioSetup(requestId: string): Promise<DesktopSetupResponse> {
+  return invoke<DesktopSetupResponse>("get_studio_setup", { requestId });
+}
+
+export async function saveStudioSetup(
+  requestId: string,
+  language: string,
+  theme: string,
+  dataDirectory: string,
+  contamxPath: string | null,
+  simreadPath: string | null,
+): Promise<DesktopSetupResponse> {
+  return invoke<DesktopSetupResponse>("save_studio_setup", { requestId, language, theme, dataDirectory, contamxPath, simreadPath });
+}
+
+export async function selectDataDirectory(requestId: string): Promise<DesktopDirectoryResponse> {
+  return invoke<DesktopDirectoryResponse>("select_data_directory", { requestId });
+}
+
+export async function selectAndProbeOfficialTool(requestId: string, toolKind: "contamx" | "simread"): Promise<DesktopToolProbeResponse> {
+  return invoke<DesktopToolProbeResponse>("select_and_probe_official_tool", { requestId, toolKind });
+}
+
+export async function openStudioDirectory(requestId: string, directoryKind: "data" | "logs" | "cache"): Promise<DesktopActionResponse> {
+  return invoke<DesktopActionResponse>("open_studio_directory", { requestId, directoryKind });
+}
+
+export async function clearStudioCache(requestId: string): Promise<DesktopActionResponse> {
+  return invoke<DesktopActionResponse>("clear_studio_cache", { requestId });
+}
+
+export async function getDiagnosticsSummary(requestId: string): Promise<DesktopDiagnosticsResponse> {
+  return invoke<DesktopDiagnosticsResponse>("get_diagnostics_summary", { requestId });
+}
+
+export async function exportSanitizedDiagnostics(requestId: string): Promise<DesktopDiagnosticsResponse> {
+  return invoke<DesktopDiagnosticsResponse>("export_sanitized_diagnostics", { requestId });
 }
 
 export async function resolveAppClose(

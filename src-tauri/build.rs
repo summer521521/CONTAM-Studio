@@ -1,4 +1,25 @@
 fn main() {
+    let commit_sha = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "unknown".to_owned());
+    let dirty = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()
+        .ok()
+        .map(|output| !output.stdout.is_empty())
+        .unwrap_or(true);
+    println!("cargo:rustc-env=CONTAM_STUDIO_BUILD_SHA={commit_sha}");
+    println!(
+        "cargo:rustc-env=CONTAM_STUDIO_BUILD_DIRTY={}",
+        if dirty { "1" } else { "0" }
+    );
+    println!("cargo:rerun-if-changed=../package.json");
+    println!("cargo:rerun-if-changed=../.git/HEAD");
     let manifest = tauri_build::AppManifest::new().commands(&[
         "select_and_read_prj_zones",
         "plan_zone_volume_patch",
@@ -42,6 +63,14 @@ fn main() {
         "interrupt_readonly_ai_turn",
         "clear_readonly_ai_session",
         "disconnect_codex_app_server",
+        "get_studio_setup",
+        "save_studio_setup",
+        "select_data_directory",
+        "select_and_probe_official_tool",
+        "open_studio_directory",
+        "clear_studio_cache",
+        "get_diagnostics_summary",
+        "export_sanitized_diagnostics",
         "resolve_app_close",
         "finish_app_close_draft_export",
     ]);

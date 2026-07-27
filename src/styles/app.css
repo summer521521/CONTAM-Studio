@@ -650,6 +650,138 @@ input:focus-visible,
   color: var(--text-primary);
 }
 
+.release-settings {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.release-callout,
+.release-card {
+  border: 1px solid var(--border);
+  background: var(--bg-surface-subtle);
+}
+
+.release-callout {
+  display: flex;
+  gap: 11px;
+  padding: 13px;
+}
+
+.release-callout > svg,
+.release-card-heading > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.release-callout strong,
+.release-card-heading strong {
+  color: var(--text-primary);
+}
+
+.release-callout p,
+.release-muted {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.release-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.release-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+}
+
+.release-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.release-path-row,
+.release-tool-row,
+.release-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.release-path-row code {
+  min-width: 0;
+  flex: 1 1 240px;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.release-tool-row {
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.release-tool-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.release-tool-row span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.release-tool-row code {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.release-about {
+  grid-column: 1 / -1;
+}
+
+.release-runtime-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  gap: 7px 14px;
+  font-size: 12px;
+}
+
+.release-runtime-grid span {
+  color: var(--text-muted);
+}
+
+.release-runtime-grid code {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.release-notice {
+  margin: 0;
+  color: var(--success);
+  font-size: 12px;
+}
+
+@media (max-width: 850px) {
+  .release-grid {
+    grid-template-columns: 1fr;
+  }
+  .release-about {
+    grid-column: auto;
+  }
+}
+
 .project-summary {
   width: min(900px, calc(100% - 48px));
   margin: 0 auto;

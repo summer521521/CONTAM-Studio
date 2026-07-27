@@ -28,6 +28,16 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "category": "科学",
+    "shortDescription": "离线优先的CONTAM教学与研究工作台",
+    "longDescription": "CONTAM Studio提供受控的PRJ语义编辑、官方ContamX运行、研究结果分析和本地报告导出。",
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

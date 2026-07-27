@@ -5,10 +5,12 @@ import type { CommandAvailability } from "../../app/command-availability";
 import type { ProjectState } from "../../app/project-state";
 import type { ResultState } from "../../app/result-state";
 import type { ResultExportState } from "../../app/result-export-state";
-import type { AppTheme, WorkbenchDestination } from "../../app/workbench-state";
+import type { AppLanguage, AppTheme, WorkbenchDestination } from "../../app/workbench-state";
 import type { SemanticSnapshot } from "../../app/semantic-state";
+import type { StudioSetup, ToolKind } from "../../app/release-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { StudyWorkspace } from "./StudyWorkspace";
+import { ReleaseSettings } from "./ReleaseSettings";
 
 interface DestinationPageProps {
   destination: Exclude<WorkbenchDestination, "project">;
@@ -17,6 +19,7 @@ interface DestinationPageProps {
   resultExportState: ResultExportState;
   activeRunId: string | null;
   theme: AppTheme;
+  language?: AppLanguage;
   availability: Pick<CommandAvailability, "openProject" | "loadActiveResult" | "selectManifest" | "exportResult"> & { runProject?: boolean };
   onOpenProject: () => void;
   onRunProject: () => void;
@@ -29,6 +32,15 @@ interface DestinationPageProps {
   revisionId?: string | null;
   semanticSnapshot?: SemanticSnapshot | null;
   onNotice?: (message: string) => void;
+  setup?: StudioSetup | null;
+  setupBusy?: boolean;
+  onChooseDataDirectory?: () => Promise<string | null>;
+  onProbeTool?: (kind: ToolKind) => Promise<import("../../app/release-state").ToolState | null>;
+  onSaveSetup?: (dataDirectory: string, contamxPath: string | null, simreadPath: string | null) => Promise<void>;
+  onOpenStudioDirectory?: (kind: "data" | "logs" | "cache") => Promise<void>;
+  onClearStudioCache?: () => Promise<void>;
+  onCopyDiagnostics?: () => Promise<void>;
+  onExportDiagnostics?: () => Promise<void>;
 }
 
 export function DestinationPage({
@@ -38,6 +50,7 @@ export function DestinationPage({
   resultExportState,
   activeRunId,
   theme,
+  language = "zh-CN",
   availability,
   onOpenProject,
   onRunProject,
@@ -50,6 +63,15 @@ export function DestinationPage({
   revisionId = null,
   semanticSnapshot = null,
   onNotice,
+  setup = null,
+  setupBusy = false,
+  onChooseDataDirectory = async () => null,
+  onProbeTool = async () => null,
+  onSaveSetup = async () => undefined,
+  onOpenStudioDirectory = async () => undefined,
+  onClearStudioCache = async () => undefined,
+  onCopyDiagnostics = async () => undefined,
+  onExportDiagnostics = async () => undefined,
 }: DestinationPageProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -125,6 +147,19 @@ export function DestinationPage({
         <div><strong>{t("settings.storageTitle")}</strong><p>{t("settings.storageBody")}</p></div>
         <div><strong>{t("settings.helpTitle")}</strong><p>{t("settings.helpBody")}</p></div>
         <div><strong>{t("settings.recoveryTitle")}</strong><p>{t("settings.recoveryBody")}</p></div>
+        <ReleaseSettings
+          setup={setup}
+          language={language}
+          theme={theme}
+          busy={setupBusy}
+          onChooseDataDirectory={onChooseDataDirectory}
+          onProbeTool={onProbeTool}
+          onSave={onSaveSetup}
+          onOpenDirectory={onOpenStudioDirectory}
+          onClearCache={onClearStudioCache}
+          onCopyDiagnostics={onCopyDiagnostics}
+          onExportDiagnostics={onExportDiagnostics}
+        />
         <button className="secondary-action" type="button" onClick={onSettingsReset}><RotateCcw size={16} />{t("settings.resetLayout")}</button>
       </section>
     </section>

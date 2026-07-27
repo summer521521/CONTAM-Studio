@@ -30,7 +30,16 @@ import {
   planSemanticPatch,
   applySemanticPatchToDraft,
   discardSemanticPatch,
+  getStudioSetup,
+  saveStudioSetup,
+  selectDataDirectory,
+  selectAndProbeOfficialTool,
+  openStudioDirectory,
+  clearStudioCache,
+  getDiagnosticsSummary,
+  exportSanitizedDiagnostics,
 } from "./desktop-api";
+import { isSafeStudioSetup, sanitizeDiagnosticsForDisplay, type StudioSetup, type ToolKind, type ToolState } from "./release-state";
 import { APP_CLOSE_REQUESTED_EVENT, isSafeCloseRequest, isSafeCloseResolution, type CloseRequestView } from "./close-state";
 import {
   aiReducer,
@@ -102,6 +111,8 @@ function App() {
   const [attachmentState, dispatchAttachment] = useReducer(attachmentReducer, INITIAL_ATTACHMENT_STATE);
   const [semanticState, dispatchSemantic] = useReducer(semanticReducer, INITIAL_SEMANTIC_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
+  const [studioSetup, setStudioSetup] = useState<StudioSetup | null>(null);
+  const [studioSetupBusy, setStudioSetupBusy] = useState(false);
   const [draftGuardOpen, setDraftGuardOpen] = useState(false);
   const [draftGuardBusy, setDraftGuardBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
@@ -124,6 +135,20 @@ function App() {
       mounted.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    void getStudioSetup(crypto.randomUUID()).then((response) => {
+      if (disposed || response.error || !isSafeStudioSetup(response.setup)) return;
+      setStudioSetup(response.setup);
+      if (!response.setup.first_run_complete) setActiveDestination("settings");
+      updateWorkbench({
+        language: response.setup.language === "en" ? "en" : "zh-CN",
+        theme: response.setup.theme === "dark" ? "dark" : "light",
+      });
+    }).catch(() => undefined);
+    return () => { disposed = true; };
+  }, [updateWorkbench]);
 
   useEffect(() => {
     let disposed = false;
@@ -922,6 +947,103 @@ function App() {
     });
   };
 
+  const chooseStudioDataDirectory = useCallback(async (): Promise<string | null> => {
+    setStudioSetupBusy(true);
+    try {
+      const response = await selectDataDirectory(crypto.randomUUID());
+      if (response.error) setPlaceholderNotice(response.error.message);
+      return response.selected_directory;
+    } catch {
+      setPlaceholderNotice(t("settings.storageBody"));
+      return null;
+    } finally {
+      setStudioSetupBusy(false);
+    }
+  }, [t]);
+
+  const probeStudioTool = useCallback(async (kind: ToolKind): Promise<ToolState | null> => {
+    setStudioSetupBusy(true);
+    try {
+      const response = await selectAndProbeOfficialTool(crypto.randomUUID(), kind);
+      if (response.error) setPlaceholderNotice(response.error.message);
+      if (response.tool) {
+        setStudioSetup((current) => {
+          if (!current) return current;
+          return kind === "contamx" ? { ...current, contamx: response.tool! } : { ...current, simread: response.tool! };
+        });
+      }
+      return response.tool;
+    } catch {
+      setPlaceholderNotice(t("settings.toolBody"));
+      return null;
+    } finally {
+      setStudioSetupBusy(false);
+    }
+  }, [t]);
+
+  const saveStudioConfiguration = useCallback(async (dataDirectory: string, contamxPath: string | null, simreadPath: string | null) => {
+    setStudioSetupBusy(true);
+    try {
+      const response = await saveStudioSetup(crypto.randomUUID(), workbench.language, workbench.theme, dataDirectory, contamxPath, simreadPath);
+      if (response.error) setPlaceholderNotice(response.error.message);
+      if (isSafeStudioSetup(response.setup)) {
+        setStudioSetup(response.setup);
+        setPlaceholderNotice(t("settings.storageBody"));
+      }
+    } catch {
+      setPlaceholderNotice(t("settings.storageBody"));
+    } finally {
+      setStudioSetupBusy(false);
+    }
+  }, [t, workbench.language, workbench.theme]);
+
+  const openStudioDirectoryAction = useCallback(async (kind: "data" | "logs" | "cache") => {
+    setStudioSetupBusy(true);
+    try {
+      const response = await openStudioDirectory(crypto.randomUUID(), kind);
+      if (response.error) setPlaceholderNotice(response.error.message);
+    } catch {
+      setPlaceholderNotice(t("settings.storageBody"));
+    } finally {
+      setStudioSetupBusy(false);
+    }
+  }, [t]);
+
+  const clearStudioCacheAction = useCallback(async () => {
+    setStudioSetupBusy(true);
+    try {
+      const response = await clearStudioCache(crypto.randomUUID());
+      setPlaceholderNotice(response.error?.message ?? t("settings.storageBody"));
+    } catch {
+      setPlaceholderNotice(t("settings.storageBody"));
+    } finally {
+      setStudioSetupBusy(false);
+    }
+  }, [t]);
+
+  const copyDiagnostics = useCallback(async () => {
+    try {
+      const response = await getDiagnosticsSummary(crypto.randomUUID());
+      const summary = sanitizeDiagnosticsForDisplay(response.summary);
+      if (summary) {
+        await navigator.clipboard?.writeText(JSON.stringify(summary, null, 2));
+        setPlaceholderNotice(t("settings.toolBody"));
+      } else if (response.error) setPlaceholderNotice(response.error.message);
+    } catch {
+      setPlaceholderNotice(t("settings.toolBody"));
+    }
+  }, [t]);
+
+  const exportDiagnostics = useCallback(async () => {
+    try {
+      const response = await exportSanitizedDiagnostics(crypto.randomUUID());
+      if (response.error) setPlaceholderNotice(response.error.message);
+      else if (response.summary) setPlaceholderNotice(t("settings.storageBody"));
+    } catch {
+      setPlaceholderNotice(t("settings.storageBody"));
+    }
+  }, [t]);
+
   return (
     <div className="app-shell">
       <TopBar
@@ -1015,6 +1137,7 @@ function App() {
                   resultExportState={resultExportState}
                   activeRunId={activeRunId}
                   theme={workbench.theme}
+                  language={workbench.language}
                   onLoadLatestResults={loadLatestRunResults}
                   onSelectManifestResults={selectRunManifestResults}
                   onExportResults={exportZoneResults}
@@ -1022,6 +1145,15 @@ function App() {
                   revisionId={projectState.draft?.revision_id ?? null}
                   semanticSnapshot={semanticState.snapshot}
                   onNotice={setPlaceholderNotice}
+                  setup={studioSetup}
+                  setupBusy={studioSetupBusy}
+                  onChooseDataDirectory={chooseStudioDataDirectory}
+                  onProbeTool={probeStudioTool}
+                  onSaveSetup={saveStudioConfiguration}
+                  onOpenStudioDirectory={openStudioDirectoryAction}
+                  onClearStudioCache={clearStudioCacheAction}
+                  onCopyDiagnostics={copyDiagnostics}
+                  onExportDiagnostics={exportDiagnostics}
                 />
               </Panel>
               <Separator className="resize-handle resize-handle-vertical" />

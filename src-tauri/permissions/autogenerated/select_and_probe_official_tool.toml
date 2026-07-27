@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-select-and-probe-official-tool"
+description = "Enables the select_and_probe_official_tool command without any pre-configured scope."
+commands.allow = ["select_and_probe_official_tool"]
+
+[[permission]]
+identifier = "deny-select-and-probe-official-tool"
+description = "Denies the select_and_probe_official_tool command without any pre-configured scope."
+commands.deny = ["select_and_probe_official_tool"]

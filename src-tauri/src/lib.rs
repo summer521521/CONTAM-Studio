@@ -1,5 +1,6 @@
 mod close_protocol;
 mod codex_app_server;
+mod release;
 mod zone_bridge;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -55,6 +56,14 @@ pub fn run() {
             codex_app_server::interrupt_readonly_ai_turn,
             codex_app_server::clear_readonly_ai_session,
             codex_app_server::disconnect_codex_app_server,
+            release::get_studio_setup,
+            release::save_studio_setup,
+            release::select_data_directory,
+            release::select_and_probe_official_tool,
+            release::open_studio_directory,
+            release::clear_studio_cache,
+            release::get_diagnostics_summary,
+            release::export_sanitized_diagnostics,
             close_protocol::resolve_app_close,
             close_protocol::finish_app_close_draft_export
         ])

@@ -1814,12 +1814,20 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         "interrupt_readonly_ai_turn",
         "clear_readonly_ai_session",
         "disconnect_codex_app_server",
+        "get_studio_setup",
+        "save_studio_setup",
+        "select_data_directory",
+        "select_and_probe_official_tool",
+        "open_studio_directory",
+        "clear_studio_cache",
+        "get_diagnostics_summary",
+        "export_sanitized_diagnostics",
         "resolve_app_close",
         "finish_app_close_draft_export",
     ] {
         assert!(build_script.contains(command));
     }
-    assert_eq!(capability["permissions"].as_array().unwrap().len(), 45);
+    assert_eq!(capability["permissions"].as_array().unwrap().len(), 53);
     let forbidden = [
         "sourcePath",
         "outputPath",
@@ -1851,6 +1859,10 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     assert!(desktop_api.contains("installOfficialCodexCli"));
     assert!(desktop_api.contains("previewAiContext"));
     assert!(desktop_api.contains("startReadonlyAiTurn"));
+    assert!(desktop_api.contains("getStudioSetup"));
+    assert!(desktop_api.contains("saveStudioSetup"));
+    assert!(desktop_api.contains("selectAndProbeOfficialTool"));
+    assert!(desktop_api.contains("exportSanitizedDiagnostics"));
     assert!(desktop_api.contains("requestId"));
     assert!(desktop_api.contains("projectSessionId"));
     assert!(!package_json.contains("@tauri-apps/plugin-dialog"));
