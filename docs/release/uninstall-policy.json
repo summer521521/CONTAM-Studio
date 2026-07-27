@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "application_files": "remove",
+  "user_projects": "preserve",
+  "study_results": "preserve",
+  "user_configuration": "preserve",
+  "external_contamx_simread": "preserve",
+  "external_directories": "preserve",
+  "studio_cache": "remove_only_on_explicit_user_action",
+  "studio_temp": "remove_after_run_or_explicit_cleanup",
+  "requires_admin": false,
+  "installer_options": "conservative_default_when_installer_cannot_offer_safe_data_choices"
+}

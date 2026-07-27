@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-27T03:29:13Z",
+  "last_updated_utc": "2026-07-27T05:07:15Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -262,6 +262,17 @@
       "packaged": "not_run",
       "user_validated": "passed",
       "evidence": ["docs/architecture/agent-06-packaging-release.md", "docs/release/agent-06-packaging.md", "docs/development/task-log/records/agent-06-packaging-release.md"]
+    },
+  {
+      "id": "agent-07-release-closure",
+      "name": "AGENT-07 发布闭环",
+      "implemented": "partial",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "no",
+      "packaged": "yes",
+      "user_validated": "passed",
+      "evidence": ["docs/release/agent-07-release-closure.md", "docs/development/agent-07-release-closure-handoff.md", "docs/development/task-log/records/agent-07-release-closure.md"]
     },
     {
       "id": "distribution",

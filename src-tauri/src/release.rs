@@ -1089,4 +1089,64 @@ mod tests {
             "config_version_unsupported"
         );
     }
+
+    #[test]
+    fn atomic_config_migration_preserves_previous_snapshot() {
+        let root = std::env::temp_dir().join(format!(
+            "contam-studio-agent-07-config-{}",
+            TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).expect("temp config directory");
+        let path = root.join(CONFIG_FILE_NAME);
+        let old = br#"{"schema_version":0,"language":"zh-CN"}"#;
+        let new = br#"{"schema_version":1,"language":"en"}"#;
+        atomic_write(&path, old).expect("write initial config");
+        atomic_write(&path, new).expect("migrate config");
+        assert_eq!(fs::read(&path).expect("new config"), new);
+        assert_eq!(
+            fs::read(root.join(format!(".{CONFIG_FILE_NAME}.previous"))).expect("previous config"),
+            old
+        );
+        fs::remove_dir_all(root).expect("cleanup temp config directory");
+    }
+
+    #[test]
+    fn sanitized_diagnostics_never_expose_paths_or_project_content() {
+        let setup = StudioSetup {
+            schema_version: CONFIG_SCHEMA_VERSION,
+            first_run_complete: true,
+            language: "zh-CN".to_owned(),
+            theme: "dark".to_owned(),
+            data_directory: r#"F:\Users\example\CONTAM\projects"#.to_owned(),
+            contamx: ToolState {
+                kind: "contamx".to_owned(),
+                status: ToolStatus::Available,
+                path: Some(r#"F:\Tools\contamx3.exe"#.to_owned()),
+                version: Some("3.4.0.3".to_owned()),
+                detail: None,
+            },
+            simread: ToolState::unconfigured(ToolKind::Simread),
+            runtime: RuntimeInfo {
+                app_version: "0.1.0".to_owned(),
+                commit_sha: "abc123".to_owned(),
+                build_kind: "release".to_owned(),
+                dirty: false,
+                architecture: "x86_64".to_owned(),
+                operating_system: "Windows_NT".to_owned(),
+            },
+            storage: StorageLayout {
+                data_directory: r#"F:\Users\example\CONTAM\projects"#.to_owned(),
+                config_directory: r#"C:\Users\example\AppData\config"#.to_owned(),
+                cache_directory: r#"C:\Users\example\AppData\cache"#.to_owned(),
+                log_directory: r#"C:\Users\example\AppData\logs"#.to_owned(),
+                temporary_directory: r#"C:\Users\example\AppData\temp"#.to_owned(),
+            },
+        };
+        let text = serde_json::to_string(&sanitized_setup(&setup)).expect("diagnostics JSON");
+        assert!(text.contains("configured_local_data"));
+        assert!(text.contains("recent_run_status"));
+        assert!(!text.contains("F:\\\\Users"));
+        assert!(!text.contains("C:\\\\Users"));
+        assert!(!text.contains("contamx3.exe"));
+    }
 }

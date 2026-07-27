@@ -28,7 +28,7 @@ for (const file of files) {
 if (!files.some((file) => /manifest\.json$/i.test(file))) failures.push("artifact manifest is missing");
 const manifest = {
   schema_version: 1,
-  artifact_root: "F:/Codex_File/artifacts/contam-studio/agent-06",
+  artifact_root: "external_artifact_root",
   unsigned_build: true,
   files: files.map((file) => ({ path: path.relative(root, file).replaceAll("\\", "/"), sha256: crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex") })).sort((a, b) => a.path.localeCompare(b.path)),
 };
