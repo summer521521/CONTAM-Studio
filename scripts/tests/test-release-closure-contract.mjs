@@ -27,7 +27,7 @@ for (const key of ["user_projects", "study_results", "user_configuration", "exte
   if (uninstall[key] !== "preserve") failures.push(`uninstall policy does not preserve ${key}`);
 }
 const closure = read("scripts/release-closure.ps1");
-for (const marker of ["blocked_environment", "unsigned", "Get-Command makensis", "Get-Command wix", "generate-release-diagnostics", "audit-release"]) {
+for (const marker of ["blocked_environment", "unsigned", "ToolchainRoot", "build-installers", "generate-release-diagnostics", "audit-release"]) {
   if (!closure.includes(marker)) failures.push(`release closure missing ${marker}`);
 }
 const policy = read("docs/release/uninstall-policy.json");

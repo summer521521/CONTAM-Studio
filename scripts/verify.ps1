@@ -462,6 +462,7 @@ function Check-Fast {
     Invoke-Tool "Tauri command contract" "node" @("scripts\tests\test-tauri-command-contract.mjs", "--strict-generated-permissions") | Out-Null
     Invoke-Tool "AGENT-06 release contract" "node" @("scripts\tests\test-agent-06-release-contract.mjs", $Root) | Out-Null
     Invoke-Tool "AGENT-07 release closure contract" "node" @("scripts\tests\test-release-closure-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "AGENT-08 installer contract" "node" @("scripts\tests\test-agent-08-installer-clean-machine-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Release metadata" "node" @("scripts\check-release-metadata.mjs", $Root) | Out-Null
     Invoke-Tool "pnpm cache contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-pnpm-cache-contract.ps1")) $Root | Out-Null
     Invoke-Tool "pnpm cache contract mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-pnpm-cache-contract-mutations.ps1")) $Root | Out-Null

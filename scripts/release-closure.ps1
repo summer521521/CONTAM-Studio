@@ -1,5 +1,6 @@
 param(
-  [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-07",
+  [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-08",
+  [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging",
   [switch]$SkipBuild,
   [switch]$ResetArtifacts
 )
@@ -26,45 +27,46 @@ if (-not (Test-Path -LiteralPath $target -PathType Container)) { throw "portable
 $portable = Join-Path $target "portable\CONTAM-Studio.exe"
 if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "portable executable is missing" }
 
-$tools = @{
-  makensis = [bool](Get-Command makensis -ErrorAction SilentlyContinue)
-  wix = [bool](Get-Command wix -ErrorAction SilentlyContinue)
-  candle = [bool](Get-Command candle -ErrorAction SilentlyContinue)
-  light = [bool](Get-Command light -ErrorAction SilentlyContinue)
-}
-$allPackagers = $tools.Values -notcontains $false
 $installers = Join-Path $target "installers"
 New-Item -ItemType Directory -Path $installers -Force | Out-Null
-if ($allPackagers) {
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-installers.ps1") -ArtifactRoot $ArtifactRoot
-  if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
-  $bundleRoot = Join-Path $repo "src-tauri\target\release\bundle"
-  if (Test-Path -LiteralPath $bundleRoot) {
-    Get-ChildItem -LiteralPath $bundleRoot -File -Recurse | ForEach-Object {
-      Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $installers $_.Name) -Force
-    }
-  }
-  $installerStatus = "built_unsigned"
-} else {
-  $installerStatus = "blocked_environment"
-}
+$installerArgs = @(
+  "-ArtifactRoot", $ArtifactRoot,
+  "-ToolchainRoot", $ToolchainRoot
+)
+if ($SkipBuild) { $installerArgs += "-SkipTauriBuild" }
+$buildOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-installers.ps1") @installerArgs
+if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
+$buildOutput | ForEach-Object { Write-Host $_ }
+$installerInfoPath = Join-Path $installers "installer-status.json"
+$installerInfo = Get-Content -LiteralPath $installerInfoPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$installerStatus = if ($installerInfo.status -eq "available") { "built_unsigned" } else { "blocked_environment" }
+$tools = $installerInfo.tools
 
 $manifestPath = Join-Path $target "manifest.json"
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
   $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
   $manifest.installer_status = $installerStatus
   $manifest.clean_machine_acceptance = "blocked"
+  if ($installerInfo.local_repackage -and $installerInfo.local_repackage.outputs) {
+    $manifestFiles = @($manifest.files)
+    foreach ($output in @($installerInfo.local_repackage.outputs)) {
+      $manifestFiles += [ordered]@{ path = ("installers/" + [string]$output.path); sha256 = [string]$output.sha256 }
+    }
+    $manifest.files = $manifestFiles
+  }
   $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 }
 
 $installerInfo = [ordered]@{
-  schema_version = 1
+  schema_version = 2
   version = $version
   commit_sha = $commit
   status = $installerStatus
   unsigned_build = $true
   uploaded = $false
   packager_tools = $tools
+  local_repackage = $installerInfo.local_repackage
+  toolchain_root = "external_toolchain_root"
 }
 $installerInfo | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $installers "installer-status.json") -Encoding UTF8
 
@@ -78,6 +80,8 @@ $status = [ordered]@{
   signature = "unsigned"
   official_contamx_simread = "not_tested"
   packager_tools = $tools
+  local_repackage = $installerInfo.local_repackage
+  toolchain_root = "external_toolchain_root"
 }
 $status | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $target "release-closure-status.json") -Encoding UTF8
 $diagnostics = Join-Path $target "diagnostics\release-diagnostics.json"

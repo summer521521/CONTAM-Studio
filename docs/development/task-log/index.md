@@ -7,6 +7,7 @@
 | [AGENT-05 高级研究参数与可视化分析](records/agent-05-advanced-study-visualization.md) | Phase 9 | automated_verified | live |
 | [AGENT-06 安装、配置、升级、卸载与发布准备](records/agent-06-packaging-release.md) | Phase 10 | automated_verified | live |
 | [AGENT-07 发布闭环](records/agent-07-release-closure.md) | Phase 11 | automated_verified | live |
+| [AGENT-08 安装器与干净机验收](records/agent-08-installer-clean-machine.md) | Phase 12 | automated_verified | live |
 | [AGENT-02 附件中心与证据披露](records/agent-02-attachment-center.md) | Phase 7 | automated_verified | live |
 | [AGENT-01 可审批AI自动仿真闭环](records/agent-01-approvable-ai-simulation-loop.md) | Phase 7 | automated_verified | live |
 | [RUN-ARCH-01 ContamX架构契约修复](records/run-arch-01-contamx-architecture-contract.md) | Runtime | completed | live |

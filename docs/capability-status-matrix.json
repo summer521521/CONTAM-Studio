@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-27T05:07:15Z",
+  "last_updated_utc": "2026-07-27T06:10:16Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -269,10 +269,21 @@
       "implemented": "partial",
       "automated_verified": "passed",
       "manual_gui": "passed",
-      "merged_to_main": "no",
+      "merged_to_main": "yes",
       "packaged": "yes",
       "user_validated": "passed",
       "evidence": ["docs/release/agent-07-release-closure.md", "docs/development/agent-07-release-closure-handoff.md", "docs/development/task-log/records/agent-07-release-closure.md"]
+    },
+    {
+      "id": "agent-08-installer-clean-machine",
+      "name": "AGENT-08 安装器、升级卸载与干净机验收",
+      "implemented": "partial",
+      "automated_verified": "passed",
+      "manual_gui": "pending_user",
+      "merged_to_main": "no",
+      "packaged": "yes",
+      "user_validated": "pending_user",
+      "evidence": ["docs/release/agent-08-installer-clean-machine.md", "docs/development/agent-08-installer-clean-machine-handoff.md", "docs/development/task-log/records/agent-08-installer-clean-machine.md"]
     },
     {
       "id": "distribution",

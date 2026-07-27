@@ -15,7 +15,7 @@ function walk(directory) {
 }
 walk(root);
 const forbiddenNames = [/\.prj$/i, /\.sim$/i, /\.csv$/i, /\.nfr$/i, /fixture/i, /node_modules/i, /\.venv/i, /secret/i, /token/i, /cookie/i, /debug\.log$/i];
-const forbiddenContent = [/F:\\\\CONTAM Studio/i, /C:\\\\Users\\[^\\]+\\/i, /BEGIN (RSA|OPENSSH) PRIVATE KEY/i, /password\s*=/i];
+const forbiddenContent = [/F:\\CONTAM Studio/i, /F:\\Codex_File/i, /C:\\Users\\[^\\]+\\/i, /agent-08-installer-clean-machine/i, /BEGIN (RSA|OPENSSH) PRIVATE KEY/i, /password\s*=/i];
 for (const file of files) {
   const relative = path.relative(root, file);
   if (forbiddenNames.some((pattern) => pattern.test(relative))) failures.push(`forbidden artifact name: ${relative}`);

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "purpose": "Local-only Windows packaging toolchain for CONTAM Studio AGENT-08",
+  "cache_root": "F:/Codex_File/toolchains/contam-studio-packaging",
+  "system_install": false,
+  "admin_required": false,
+  "system_path_modified": false,
+  "registry_modified": false,
+  "tools": {
+    "nsis": {
+      "name": "Nullsoft Scriptable Install System",
+      "version": "3.12",
+      "source_url": "https://sourceforge.net/projects/nsis/files/NSIS%203/3.12/nsis-3.12.zip/download",
+      "archive_relative_path": "downloads/nsis-3.12-signed.zip",
+      "archive_sha256": "56581F90DB321581C5381193D796FFFCF2D24B2F8FED2160A6C6A3BAA67F2C4F",
+      "executable_relative_path": "nsis-3.12/nsis-3.12/Bin/makensis.exe",
+      "executable_sha256": "25D1AA7081DB1A9DE9690B59983F9652B7409A189C3444328CC1841EFF693E8D",
+      "license": "zlib/libpng; BZip2; Common Public License 1.0 for LZMA module (see extracted COPYING)",
+      "official_source_note": "The signed SourceForge download URL is resolved from the official NSIS file page; the cache stores the resulting archive and its SHA-256."
+    },
+    "wix": {
+      "name": "WiX Toolset",
+      "version": "3.14.1",
+      "source_url": "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip",
+      "archive_relative_path": "downloads/wix314-binaries.zip",
+      "archive_sha256": "6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31",
+      "candle_relative_path": "wix-3.14.1/candle.exe",
+      "candle_sha256": "A464676E2A2191D58E6CA643E89505BFB9628D3E721873A14994D3F4667987E5",
+      "light_relative_path": "wix-3.14.1/light.exe",
+      "light_sha256": "8EE3D7FA5592511152A4D1FC605780EAE1B27AC7B41D75D518C958515DE39529",
+      "license": "Microsoft Reciprocal License (MS-RL), as shipped in LICENSE.TXT",
+      "official_source_note": "The v3.14.1 binary archive is an official WiX Toolset release asset."
+    },
+    "tauri_nsis_utils": {
+      "name": "Tauri NSIS helper plugin",
+      "version": "0.5.3",
+      "source_url": "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll",
+      "relative_path": "nsis-tauri-plugins/nsis_tauri_utils.dll",
+      "sha256": "5BA143B5DB4A87D32D6E7802E033330AAE56CBCEABE0D1E3BA41948385AD4709",
+      "license": "Apache-2.0 OR MIT (Tauri nsis-tauri-utils package)",
+      "official_source_note": "The helper is the official Tauri NSIS utility release asset used by the generated installer script."
+    }
+  }
+}
