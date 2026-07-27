@@ -2,6 +2,8 @@
   "name": "contam-studio",
   "private": true,
   "version": "0.1.0",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/summer521521/CONTAM-Studio",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",

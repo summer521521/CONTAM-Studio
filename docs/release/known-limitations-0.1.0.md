@@ -10,3 +10,4 @@
 - AI只能通过结构化Patch、Diff、确定性验证和用户批准影响草稿。
 - 不提供自动更新、云同步、账户、多用户协作、插件SDK、macOS或Linux发行。
 - 干净Windows安装门禁由用户在没有独立外部执行证据的情况下接受，记录为`waived_by_user`。
+- 0.1.0安装包没有Authenticode发布者签名。GitHub Sigstore发布核验和SHA-256可证明资产身份与完整性，但不能消除Windows“未知发布者”或SmartScreen提示。

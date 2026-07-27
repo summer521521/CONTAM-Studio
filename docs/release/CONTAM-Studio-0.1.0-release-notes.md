@@ -27,6 +27,8 @@ CONTAM Studio 0.1.0是面向CONTAM教学与科研的首个Windows x64桌面版�
 
 可选择便携版、NSIS安装器或MSI安装器。首次启动后配置官方ContamX与SimRead路径。未配置工具时，项目浏览、草稿编辑和历史结果仍可使用，运行命令会显示明确错误。
 
+0.1.0采用透明的未签名发布，Windows可能显示“未知发布者”或SmartScreen提示。请只从本仓库GitHub Releases下载，并使用随附的`SHA256SUMS.txt`校验。仓库公开源码采用Apache-2.0；Release资产还通过本仓库GitHub工作流生成Sigstore发布核验记录，但该记录不等同于Windows Authenticode签名。
+
 ## 验证与限制
 
 发布提交通过项目Full验证、Rust Clippy/fmt、前端测试/构建、安装器契约、内容扫描和诊断脱敏检查。完整限制见[known-limitations-0.1.0.md](known-limitations-0.1.0.md)。

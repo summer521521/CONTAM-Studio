@@ -2,6 +2,8 @@
 name = "contam-studio"
 version = "0.1.0"
 description = "Offline-first desktop workbench for CONTAM teaching and research"
+license = "Apache-2.0"
+repository = "https://github.com/summer521521/CONTAM-Studio"
 authors = ["CONTAM Studio contributors"]
 edition = "2021"
 

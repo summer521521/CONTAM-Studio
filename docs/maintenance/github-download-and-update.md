@@ -25,6 +25,14 @@ Get-FileHash -Algorithm SHA256 -LiteralPath ".\下载的文件.exe"
 
 结果应与同一Release中的`SHA256SUMS.txt`一致。签名版本还应在文件属性的“数字签名”页显示发布者和有效签名。
 
+0.1.0没有Authenticode签名，Windows可能显示未知发布者。其GitHub Sigstore记录可用GitHub CLI验证：
+
+```powershell
+gh attestation verify ".\CONTAM-Studio.exe" --repo summer521521/CONTAM-Studio
+```
+
+该验证确认下载文件与本仓库发布核验记录匹配，不代表Windows发布者身份，也不替代SHA-256核对。
+
 ## 更新
 
 0.1.0不在后台检查或自动下载更新：

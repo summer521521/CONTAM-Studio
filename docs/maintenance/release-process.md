@@ -13,8 +13,8 @@
 - 构建目录位于`F:\Codex_File\artifacts\contam-studio\release\<version>`。
 - 安装包不提交Git。
 - 二进制必须绑定发布标签指向的提交。
-- 对EXE和MSI使用可信代码签名证书进行Authenticode签名。
-- 对签名后的最终文件生成`SHA256SUMS.txt`。
+- 有可信代码签名证书时，对EXE和MSI使用Authenticode签名；没有证书时必须明确标记为`unsigned`，不得伪造签名。
+- 对最终文件生成`SHA256SUMS.txt`。
 - 重新运行内容与敏感信息扫描。
 
 ## GitHub发布
@@ -25,12 +25,13 @@
 4. 上传便携版、NSIS、MSI和`SHA256SUMS.txt`。
 5. 发布说明必须列出平台、安装方式、已知限制、签名主体和干净机证据状态。
 6. 下载GitHub上的资产并复核哈希。
+7. 对已发布资产运行`Release asset attestation`工作流，生成GitHub Sigstore发布核验。
 
 ## 签名边界
 
 - 不在仓库、任务日志或Release中保存PFX、私钥或密码。
 - 不使用自签名证书冒充公开可信签名。
-- 没有可信证书时保持Release为草稿，不把资产描述为已签名。
+- 没有可信证书时可以发布明确标记为`unsigned`的开源版本，但必须同时提供公开源码、SHA-256、固定标签、已知限制和发布核验。
 - 证书到期或吊销后重新发布必须使用新版本和新哈希，不静默替换既有正式资产。
 
 ## 后续开发

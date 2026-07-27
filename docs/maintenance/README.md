@@ -21,6 +21,7 @@ git diff --check
 
 - [版本升级与发布](release-process.md)
 - [GitHub下载与用户更新](github-download-and-update.md)
+- [代码签名策略](code-signing-policy.md)
 - [0.1.0发布包](../release/release-kit-v1.md)
 - [最终交接](../release/final-handoff-v1.md)
 - [已知限制](../release/known-limitations-0.1.0.md)

@@ -1,5 +1,8 @@
 # CONTAM Studio
 
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Windows CI](https://github.com/summer521521/CONTAM-Studio/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/summer521521/CONTAM-Studio/actions/workflows/windows-ci.yml)
+
 CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英文双语CONTAM桌面工作台，使人和AI能够通过同一套安全、结构化、可审查的接口使用官方ContamX。
 
 ## 目标用户
@@ -24,6 +27,8 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 AI助手支持用户主动连接、附件证据披露、结构化仿真方案、哈希绑定批准和研究结果解释。所有写入均通过GUI共用的领域Patch、Diff、确定性验证和用户确认；未连接AI时，项目、草稿、运行、研究和报告仍可离线使用。图片当前只进入本地预览和受控元数据证据，不宣称已向远程模型发送像素。
 
 Windows x64提供便携版、NSIS安装器和MSI安装器。0.1.0冻结范围及限制见[发布说明](docs/release/CONTAM-Studio-0.1.0-release-notes.md)和[已知限制](docs/release/known-limitations-0.1.0.md)，产品事实以[能力状态矩阵](docs/capability-status-matrix.json)为准。
+
+CONTAM Studio自身源码采用[Apache License 2.0](LICENSE)。官方CONTAM、ContamX、SimRead、Codex及其他第三方组件不因本仓库许可证而改变其各自许可；本项目不是NIST或OpenAI官方产品，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
 
 桌面入口在React代码加载前先显示轻量双语启动表面，不再用无说明的黑色窗口承接开发冷启动；较大的ECharts结果图表只在真实结果图表需要时加载。该启动表面不探测账号、不连接Codex，也不发送项目上下文。
 
