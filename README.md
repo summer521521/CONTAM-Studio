@@ -27,6 +27,12 @@ Windows x64提供便携版、NSIS安装器和MSI安装器。0.1.0冻结范围及
 
 桌面入口在React代码加载前先显示轻量双语启动表面，不再用无说明的黑色窗口承接开发冷启动；较大的ECharts结果图表只在真实结果图表需要时加载。该启动表面不探测账号、不连接Codex，也不发送项目上下文。
 
+## 下载与更新
+
+普通用户应从[GitHub Releases](https://github.com/summer521521/CONTAM-Studio/releases/latest)下载，不要从仓库源码页寻找EXE。每个版本提供便携版、NSIS安装器、MSI安装器和SHA-256清单。
+
+0.1.0没有后台自动更新。更新时退出Studio，从GitHub Releases下载更高版本并覆盖安装；用户项目、已保存研究、报告和外部ContamX/SimRead不属于卸载或升级清理对象。详细说明见[下载与更新](docs/maintenance/github-download-and-update.md)。
+
 ## 架构方向
 
 0.1.0采用React+TypeScript前端、Tauri 2桌面宿主、Python CONTAM领域核心和官方ContamX/SimRead，Windows 10/11 x64为正式目标平台。Rust拥有桌面权限、活动项目、草稿、运行、结果、附件、AI批准与发布配置边界；Python承担严格文档解析、语义Patch、官方工具编排和结果/报告领域逻辑；React只使用路径受控的语义桌面API。
@@ -120,6 +126,9 @@ python\.venv\Scripts\python.exe -m contam_studio_core.inspect_prj `
 - [下一阶段执行任务书](docs/roadmap/next-development-execution-plan.md)
 - [能力状态矩阵](docs/capability-status-matrix.json)
 - [当前状态](docs/current-state.md)
+- [下载与更新](docs/maintenance/github-download-and-update.md)
+- [维护与发布](docs/maintenance/README.md)
+- [学习入口](docs/learning/README.md)
 - [产品愿景](docs/product/vision.md)
 - [v0.1产品契约](docs/product/v0.1-product-contract.md)
 - [范围与非目标](docs/product/scope.md)

@@ -20,5 +20,5 @@ forbidden_scope: 用户PRJ/CSV/SIM正文、真实AppData内容、凭据导出、
 validation: scripts\\verify.ps1 -Mode Full、git diff --check、发布扫描、产物SHA-256、签名验证、GitHub Release与归档清单核验。
 delivery_status: in_progress
 token_usage: not provided by client
-notes: 正式工作区发现两个未跟踪安装测试产物，已保留并移至F:\\Codex_File\\artifacts\\contam-studio\\agent-08\\0.1.0\\host-install-observed；未删除。当前证书存储无可用代码签名证书，且signtool不可用；不得用自签名证书冒充正式可信签名。
+notes: 正式工作区发现两个未跟踪安装测试产物，先移至AGENT-08产物目录并核验哈希；它们随后因被最终release产物取代而随中间产物清理。已将旧batch-03x独立提交保存为Git bundle，将AGENT-03早期未提交内容保存为补丁和文件副本；随后删除36个已合并克隆、缓存、测试和重打包临时目录，并删除被最终release目录取代的AGENT-06/07/08中间产物。正式源码、最终发布产物、本地打包工具链和恢复归档保留。Windows SDK内存在signtool，但证书存储无可用代码签名证书；不得用自签名证书冒充正式可信签名。
 ```
