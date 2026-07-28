@@ -5,7 +5,7 @@ use crate::zone_bridge::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::cmp::Reverse;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
@@ -17,7 +17,9 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
+use url::Url;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 const CODEX_ENVIRONMENT_VARIABLE: &str = "CONTAM_STUDIO_CODEX";
 const OFFICIAL_CODEX_INSTALLER_URL: &str = "https://chatgpt.com/codex/install.ps1";
@@ -47,7 +49,7 @@ const MAX_ARCHIVE_ENTRIES: usize = 200;
 const CONTEXT_FINGERPRINT_NAMESPACE: Uuid = Uuid::from_u128(0x4bf2190f_8f82_56aa_9720_19aa44ab2a6d);
 const AI_CONVERSATION_ARCHIVE_NAMESPACE: Uuid =
     Uuid::from_u128(0x05d637d2_faaa_5f3e_8a40_f657c1f755e3);
-const AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION: &str = "1.0";
+const AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION: &str = "2.0";
 static ARCHIVE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 const ALL_CONTEXT_SCOPES: [&str; 10] = [
     "project_summary",
@@ -75,12 +77,12 @@ const TOOL_ITEM_TYPES: [&str; 9] = [
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AiDiagnostic {
-    code: String,
-    message: String,
+    pub(crate) code: String,
+    pub(crate) message: String,
 }
 
 impl AiDiagnostic {
-    fn new(code: &str, message: &str) -> Self {
+    pub(crate) fn new(code: &str, message: &str) -> Self {
         Self {
             code: code.to_string(),
             message: message.to_string(),
@@ -150,33 +152,56 @@ pub struct DesktopCodexInstallResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AiProviderLoginView {
+    login_id: String,
+    verification_url: Option<String>,
+    user_code: Option<String>,
+    status: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopAiProviderLoginResponse {
+    request_id: String,
+    status: String,
+    login: Option<AiProviderLoginView>,
+    connection: Option<CodexConnectionView>,
+    error: Option<AiDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AiContextDisclosureView {
-    preview_id: String,
-    project_session_id: String,
-    revision_id: String,
-    revision_number: u64,
-    zone_id: String,
-    zone_name: String,
-    included_scopes: Vec<String>,
-    excluded_scopes: Vec<String>,
-    context_fingerprint: String,
-    payload: Value,
-    disclosure: AiDisclosureBoundary,
+    pub(crate) preview_id: String,
+    pub(crate) project_session_id: String,
+    pub(crate) revision_id: String,
+    pub(crate) revision_number: u64,
+    pub(crate) zone_id: String,
+    pub(crate) zone_name: String,
+    pub(crate) included_scopes: Vec<String>,
+    pub(crate) excluded_scopes: Vec<String>,
+    pub(crate) context_fingerprint: String,
+    pub(crate) payload: Value,
+    pub(crate) disclosure: AiDisclosureBoundary,
+    pub(crate) provider_profile_id: String,
+    pub(crate) provider_display_name: String,
+    pub(crate) provider_protocol: String,
+    pub(crate) destination_origin: Option<String>,
+    pub(crate) network_scope: String,
+    pub(crate) model_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AiDisclosureBoundary {
-    contains_local_paths: bool,
-    contains_prj_text: bool,
-    contains_complete_result_series: bool,
-    model_request_uses_network: bool,
+    pub(crate) contains_local_paths: bool,
+    pub(crate) contains_prj_text: bool,
+    pub(crate) contains_complete_result_series: bool,
+    pub(crate) model_request_uses_network: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DesktopAiContextPreviewResponse {
-    request_id: String,
-    preview: Option<AiContextDisclosureView>,
-    error: Option<AiDiagnostic>,
+    pub(crate) request_id: String,
+    pub(crate) preview: Option<AiContextDisclosureView>,
+    pub(crate) error: Option<AiDiagnostic>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -202,37 +227,37 @@ pub struct AiSemanticPatchSuggestion {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StructuredAiAnswer {
-    deterministic_facts: Vec<String>,
-    interpretation: String,
-    limitations: Vec<String>,
-    suggested_questions: Vec<String>,
+    pub(crate) deterministic_facts: Vec<String>,
+    pub(crate) interpretation: String,
+    pub(crate) limitations: Vec<String>,
+    pub(crate) suggested_questions: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    semantic_patch: Option<AiSemanticPatchSuggestion>,
+    pub(crate) semantic_patch: Option<AiSemanticPatchSuggestion>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AiTokenUsageView {
-    input_tokens: Option<u64>,
-    cached_input_tokens: Option<u64>,
-    output_tokens: Option<u64>,
-    total_tokens: Option<u64>,
+    pub(crate) input_tokens: Option<u64>,
+    pub(crate) cached_input_tokens: Option<u64>,
+    pub(crate) output_tokens: Option<u64>,
+    pub(crate) total_tokens: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DesktopAiTurnResponse {
-    request_id: String,
-    status: String,
-    answer: Option<StructuredAiAnswer>,
-    token_usage: Option<AiTokenUsageView>,
-    archive: AiArchiveSaveView,
-    error: Option<AiDiagnostic>,
+    pub(crate) request_id: String,
+    pub(crate) status: String,
+    pub(crate) answer: Option<StructuredAiAnswer>,
+    pub(crate) token_usage: Option<AiTokenUsageView>,
+    pub(crate) archive: AiArchiveSaveView,
+    pub(crate) error: Option<AiDiagnostic>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct AiArchiveSaveView {
-    saved: bool,
-    entry_id: Option<String>,
-    warning: Option<AiDiagnostic>,
+    pub(crate) saved: bool,
+    pub(crate) entry_id: Option<String>,
+    pub(crate) warning: Option<AiDiagnostic>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -245,6 +270,10 @@ pub struct AiArchivedConversationEntryView {
     language: String,
     model_id: String,
     reasoning_effort: String,
+    provider_profile_id: String,
+    provider_display_name: String,
+    provider_protocol: String,
+    destination_origin: Option<String>,
     included_scopes: Vec<String>,
     completed_at_unix_ms: u64,
     is_current_revision: bool,
@@ -286,6 +315,37 @@ impl Default for AiConversationArchiveFile {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct StoredAiConversationArchiveEntry {
+    entry_id: String,
+    baseline_source_sha256: String,
+    revision_id: String,
+    revision_number: u64,
+    zone_id: String,
+    zone_name: String,
+    context_fingerprint: String,
+    language: String,
+    model_id: String,
+    reasoning_effort: String,
+    provider_profile_id: String,
+    provider_display_name: String,
+    provider_protocol: String,
+    destination_origin: Option<String>,
+    included_scopes: Vec<String>,
+    completed_at_unix_ms: u64,
+    question: String,
+    answer: StructuredAiAnswer,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AiConversationArchiveFileV1 {
+    schema_version: String,
+    persistence_enabled: bool,
+    entries: Vec<StoredAiConversationArchiveEntryV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredAiConversationArchiveEntryV1 {
     entry_id: String,
     baseline_source_sha256: String,
     revision_id: String,
@@ -362,6 +422,8 @@ struct AssistantState {
     active_turn_epoch: Option<u64>,
     active_turn_cancel: Option<Arc<AtomicBool>>,
     active_turn_interrupt_requested: Option<Arc<AtomicBool>>,
+    pending_login_id: Option<String>,
+    pending_login_started: Option<Instant>,
     cancel_requested: bool,
     token_usage: Option<AiTokenUsageView>,
     installing: bool,
@@ -381,6 +443,11 @@ impl AssistantState {
         self.cancel_requested = false;
     }
 
+    fn clear_pending_login(&mut self) {
+        self.pending_login_id = None;
+        self.pending_login_started = None;
+    }
+
     fn clear_connection_catalog(&mut self) {
         self.cli = None;
         self.account = None;
@@ -388,6 +455,7 @@ impl AssistantState {
         self.preview = None;
         self.thread_id = None;
         self.thread_binding = None;
+        self.clear_pending_login();
         self.clear_active_turn();
         self.token_usage = None;
     }
@@ -463,7 +531,10 @@ pub struct AiConversationArchiveStore {
 impl CodexAssistantStore {
     pub(crate) fn close_activity_active(&self) -> bool {
         let state = self.state.lock().expect("Codex assistant mutex poisoned");
-        state.installing || state.connecting.is_some() || state.active_turn_request_id.is_some()
+        state.installing
+            || state.connecting.is_some()
+            || state.active_turn_request_id.is_some()
+            || state.pending_login_id.is_some()
     }
 
     fn retain_connection(&self, connection: Arc<AppServerConnection>) {
@@ -623,6 +694,7 @@ struct AppServerConnection {
     stdin: Mutex<Option<ChildStdin>>,
     pending: Mutex<HashMap<u64, mpsc::SyncSender<Result<Value, RpcFailure>>>>,
     notifications: Mutex<mpsc::Receiver<Value>>,
+    deferred_notifications: Mutex<VecDeque<Value>>,
     next_id: AtomicU64,
     disconnected: AtomicBool,
     stdout_thread: Mutex<Option<thread::JoinHandle<()>>>,
@@ -702,6 +774,7 @@ impl AppServerConnection {
             stdin: Mutex::new(Some(stdin)),
             pending: Mutex::new(HashMap::new()),
             notifications: Mutex::new(notification_rx),
+            deferred_notifications: Mutex::new(VecDeque::new()),
             next_id: AtomicU64::new(1),
             disconnected: AtomicBool::new(false),
             stdout_thread: Mutex::new(None),
@@ -888,6 +961,14 @@ impl AppServerConnection {
     }
 
     fn next_notification(&self, timeout: Duration) -> Result<Option<Value>, RpcFailure> {
+        if let Some(value) = self
+            .deferred_notifications
+            .lock()
+            .expect("deferred notification mutex poisoned")
+            .pop_front()
+        {
+            return Ok(Some(value));
+        }
         match self
             .notifications
             .lock()
@@ -899,6 +980,38 @@ impl AppServerConnection {
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 Err(RpcFailure::new("codex_app_server_disconnected"))
             }
+        }
+    }
+
+    fn drain_idle_account_notifications(&self) -> Result<(), RpcFailure> {
+        loop {
+            let value = match self
+                .notifications
+                .lock()
+                .expect("notification mutex poisoned")
+                .try_recv()
+            {
+                Ok(value) => value,
+                Err(mpsc::TryRecvError::Empty) => return Ok(()),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    return Err(RpcFailure::new("codex_app_server_disconnected"))
+                }
+            };
+            let method = value
+                .get("method")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if matches!(
+                method,
+                "account/login/completed" | "account/updated" | "account/rateLimits/updated"
+            ) {
+                continue;
+            }
+            self.deferred_notifications
+                .lock()
+                .expect("deferred notification mutex poisoned")
+                .push_back(value);
+            return Ok(());
         }
     }
 
@@ -1583,13 +1696,19 @@ fn parse_account_response(value: &Value) -> Result<CodexAccountView, RpcFailure>
         .and_then(|value| value.get("type"))
         .and_then(Value::as_str)
         .filter(|value| value.len() <= 40)
-        .map(str::to_string);
+        .map(|value| {
+            if value == "apiKey" {
+                "apikey".to_string()
+            } else {
+                value.to_string()
+            }
+        });
     let plan_type = account
         .and_then(|value| value.get("planType"))
         .and_then(Value::as_str)
         .filter(|value| value.len() <= 40)
         .map(str::to_string);
-    let authenticated = auth_mode.as_deref() == Some("chatgpt");
+    let authenticated = matches!(auth_mode.as_deref(), Some("chatgpt" | "apikey"));
     if auth_mode.as_deref().is_some_and(|value| {
         !value
             .bytes()
@@ -1717,7 +1836,7 @@ fn diagnostic_from_rpc(error: RpcFailure, fallback: &'static str) -> AiDiagnosti
     AiDiagnostic::new(code, "Codex App Server operation failed.")
 }
 
-fn canonical_scopes(scopes: Vec<String>) -> Result<Vec<String>, AiDiagnostic> {
+pub(crate) fn canonical_scopes(scopes: Vec<String>) -> Result<Vec<String>, AiDiagnostic> {
     if scopes.is_empty() || scopes.len() > ALL_CONTEXT_SCOPES.len() {
         return Err(AiDiagnostic::new(
             "ai_context_scope_invalid",
@@ -1739,9 +1858,16 @@ fn canonical_scopes(scopes: Vec<String>) -> Result<Vec<String>, AiDiagnostic> {
     Ok(unique)
 }
 
-fn context_fingerprint(
+pub(crate) fn all_context_scopes() -> &'static [&'static str] {
+    &ALL_CONTEXT_SCOPES
+}
+
+pub(crate) fn context_fingerprint_for_provider(
     trusted: &AiTrustedContext,
     scopes: &[String],
+    profile: &crate::ai_provider::AiProviderProfile,
+    model_id: &str,
+    reasoning_effort: &str,
 ) -> Result<String, AiDiagnostic> {
     let bytes = serde_json::to_vec(&json!({
         "session": trusted.project_session_id,
@@ -1749,6 +1875,12 @@ fn context_fingerprint(
         "zone": trusted.zone_id,
         "scopes": scopes,
         "payload": trusted.payload,
+        "provider_profile_id": profile.profile_id,
+        "provider_protocol": profile.protocol,
+        "provider_config_revision": profile.config_revision,
+        "provider_base_url": profile.base_url,
+        "model_id": model_id,
+        "reasoning_effort": reasoning_effort,
     }))
     .map_err(|_| {
         AiDiagnostic::new(
@@ -1765,7 +1897,7 @@ fn context_fingerprint(
     Ok(Uuid::new_v5(&CONTEXT_FINGERPRINT_NAMESPACE, &bytes).to_string())
 }
 
-fn build_trusted_context_with_attachments(
+pub(crate) fn build_trusted_context_with_attachments(
     app: &AppHandle,
     project_session_id: &str,
     revision_id: &str,
@@ -1859,6 +1991,37 @@ fn safe_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+fn safe_archive_provider_protocol(value: &str) -> bool {
+    matches!(
+        value,
+        "codex_app_server" | "openai_responses" | "openai_chat_completions" | "anthropic_messages"
+    )
+}
+
+fn safe_archive_destination_origin(value: Option<&String>) -> bool {
+    let Some(value) = value else {
+        return true;
+    };
+    if !safe_archive_text(value, 512) {
+        return false;
+    }
+    let Ok(url) = Url::parse(value) else {
+        return false;
+    };
+    if url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.username() != ""
+    {
+        return false;
+    }
+    match url.scheme() {
+        "https" => url.host_str().is_some(),
+        "http" => matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1")),
+        _ => false,
+    }
+}
+
 fn archive_file_path(app: &AppHandle) -> Result<PathBuf, AiDiagnostic> {
     app.path()
         .app_local_data_dir()
@@ -1885,6 +2048,10 @@ fn validate_archive_entry(entry: &StoredAiConversationArchiveEntry) -> Result<()
         || !safe_archive_text(&entry.zone_name, 256)
         || !safe_archive_text(&entry.model_id, 160)
         || !safe_archive_text(&entry.reasoning_effort, 80)
+        || Uuid::parse_str(&entry.provider_profile_id).is_err()
+        || !safe_archive_text(&entry.provider_display_name, 80)
+        || !safe_archive_provider_protocol(&entry.provider_protocol)
+        || !safe_archive_destination_origin(entry.destination_origin.as_ref())
         || !safe_archive_text(&entry.question, MAX_QUESTION_CHARS)
         || entry.included_scopes.is_empty()
     {
@@ -1967,13 +2134,91 @@ fn read_archive_file(path: &Path) -> Result<AiConversationArchiveFile, AiDiagnos
             "The local conversation archive could not be read.",
         )
     })?;
-    let archive: AiConversationArchiveFile = serde_json::from_slice(&bytes).map_err(|_| {
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| {
         archive_error(
             "ai_archive_unavailable",
             "The local conversation archive is invalid.",
         )
     })?;
+    let version = value
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            archive_error(
+                "ai_archive_unavailable",
+                "The local conversation archive format is unsupported.",
+            )
+        })?;
+    match version {
+        AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION => {
+            let archive: AiConversationArchiveFile =
+                serde_json::from_value(value).map_err(|_| {
+                    archive_error(
+                        "ai_archive_unavailable",
+                        "The local conversation archive is invalid.",
+                    )
+                })?;
+            validate_archive_file(&archive)?;
+            Ok(archive)
+        }
+        "1.0" => {
+            let legacy: AiConversationArchiveFileV1 =
+                serde_json::from_value(value).map_err(|_| {
+                    archive_error(
+                        "ai_archive_unavailable",
+                        "The local conversation archive is invalid.",
+                    )
+                })?;
+            migrate_archive_v1(path, legacy)
+        }
+        _ => Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive format is unsupported.",
+        )),
+    }
+}
+
+fn migrate_archive_v1(
+    path: &Path,
+    legacy: AiConversationArchiveFileV1,
+) -> Result<AiConversationArchiveFile, AiDiagnostic> {
+    if legacy.schema_version != "1.0" || legacy.entries.len() > MAX_ARCHIVE_ENTRIES {
+        return Err(archive_error(
+            "ai_archive_unavailable",
+            "The local conversation archive format is unsupported.",
+        ));
+    }
+    let codex_profile_id = crate::ai_provider::codex_profile_id().to_string();
+    let archive = AiConversationArchiveFile {
+        schema_version: AI_CONVERSATION_ARCHIVE_SCHEMA_VERSION.to_string(),
+        persistence_enabled: legacy.persistence_enabled,
+        entries: legacy
+            .entries
+            .into_iter()
+            .map(|entry| StoredAiConversationArchiveEntry {
+                entry_id: entry.entry_id,
+                baseline_source_sha256: entry.baseline_source_sha256,
+                revision_id: entry.revision_id,
+                revision_number: entry.revision_number,
+                zone_id: entry.zone_id,
+                zone_name: entry.zone_name,
+                context_fingerprint: entry.context_fingerprint,
+                language: entry.language,
+                model_id: entry.model_id,
+                reasoning_effort: entry.reasoning_effort,
+                provider_profile_id: codex_profile_id.clone(),
+                provider_display_name: "Codex".to_string(),
+                provider_protocol: "codex_app_server".to_string(),
+                destination_origin: None,
+                included_scopes: entry.included_scopes,
+                completed_at_unix_ms: entry.completed_at_unix_ms,
+                question: entry.question,
+                answer: entry.answer,
+            })
+            .collect(),
+    };
     validate_archive_file(&archive)?;
+    write_archive_file(path, &archive)?;
     Ok(archive)
 }
 
@@ -2005,6 +2250,31 @@ fn write_archive_file(
             "ai_archive_write_failed",
             "The local conversation archive exceeded its safe size limit.",
         ));
+    }
+    if path.exists() {
+        let backup = path.with_extension("json.bak");
+        fs::copy(path, &backup).map_err(|_| {
+            archive_error(
+                "ai_archive_write_failed",
+                "The previous local conversation archive could not be protected.",
+            )
+        })?;
+        let backup_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&backup)
+            .map_err(|_| {
+                archive_error(
+                    "ai_archive_write_failed",
+                    "The previous local conversation archive could not be verified.",
+                )
+            })?;
+        backup_file.sync_all().map_err(|_| {
+            archive_error(
+                "ai_archive_write_failed",
+                "The previous local conversation archive could not be synchronized.",
+            )
+        })?;
     }
     let temporary_sequence = ARCHIVE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let temporary_timestamp = SystemTime::now()
@@ -2076,6 +2346,10 @@ fn archive_view_for_context(
             language: entry.language.clone(),
             model_id: entry.model_id.clone(),
             reasoning_effort: entry.reasoning_effort.clone(),
+            provider_profile_id: entry.provider_profile_id.clone(),
+            provider_display_name: entry.provider_display_name.clone(),
+            provider_protocol: entry.provider_protocol.clone(),
+            destination_origin: entry.destination_origin.clone(),
             included_scopes: entry.included_scopes.clone(),
             completed_at_unix_ms: entry.completed_at_unix_ms,
             is_current_revision: entry.revision_id == trusted.revision_id,
@@ -2162,6 +2436,10 @@ fn archive_save_completed_turn(input: ArchiveSaveCompletedTurnInput<'_>) -> AiAr
             language: language.to_string(),
             model_id: model_id.to_string(),
             reasoning_effort: reasoning_effort.to_string(),
+            provider_profile_id: preview.provider_profile_id.clone(),
+            provider_display_name: preview.provider_display_name.clone(),
+            provider_protocol: preview.provider_protocol.clone(),
+            destination_origin: preview.destination_origin.clone(),
             included_scopes: preview.included_scopes.clone(),
             completed_at_unix_ms,
             question: question.trim().to_string(),
@@ -2191,17 +2469,17 @@ fn archive_save_completed_turn(input: ArchiveSaveCompletedTurnInput<'_>) -> AiAr
     }
 }
 
-struct PersistCompletedAiAnswerInput {
-    trusted: AiTrustedContext,
-    preview: AiContextDisclosureView,
-    language: String,
-    model_id: String,
-    reasoning_effort: String,
-    question: String,
-    answer: StructuredAiAnswer,
+pub(crate) struct PersistCompletedAiAnswerInput {
+    pub(crate) trusted: AiTrustedContext,
+    pub(crate) preview: AiContextDisclosureView,
+    pub(crate) language: String,
+    pub(crate) model_id: String,
+    pub(crate) reasoning_effort: String,
+    pub(crate) question: String,
+    pub(crate) answer: StructuredAiAnswer,
 }
 
-async fn persist_completed_ai_answer(
+pub(crate) async fn persist_completed_ai_answer(
     app: &AppHandle,
     input: PersistCompletedAiAnswerInput,
 ) -> AiArchiveSaveView {
@@ -2574,7 +2852,9 @@ fn validate_semantic_patch_suggestion(
     Ok(())
 }
 
-fn validate_answer(answer: StructuredAiAnswer) -> Result<StructuredAiAnswer, AiDiagnostic> {
+pub(crate) fn validate_answer(
+    answer: StructuredAiAnswer,
+) -> Result<StructuredAiAnswer, AiDiagnostic> {
     let arrays_valid = answer.deterministic_facts.len() <= 8
         && answer.limitations.len() <= 8
         && answer.suggested_questions.len() <= 6
@@ -2818,7 +3098,10 @@ fn process_turn_notification(
     TurnNotificationAction::Continue
 }
 
-fn preview_failure(request_id: String, error: AiDiagnostic) -> DesktopAiContextPreviewResponse {
+pub(crate) fn preview_failure(
+    request_id: String,
+    error: AiDiagnostic,
+) -> DesktopAiContextPreviewResponse {
     DesktopAiContextPreviewResponse {
         request_id,
         preview: None,
@@ -3082,7 +3365,7 @@ pub async fn connect_codex_app_server(
                         request_id,
                         connection: None,
                         error: Some(error),
-                    }
+                    };
                 }
             }
         }
@@ -3269,11 +3552,25 @@ pub async fn refresh_codex_account(
         };
     }
     let store = app.state::<CodexAssistantStore>();
-    let (connection, stale_connection) = {
+    let (connection, stale_connection, active_turn) = {
         let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
         let stale_connection = state.take_unusable_connection();
-        (state.connection.clone(), stale_connection)
+        (
+            state.connection.clone(),
+            stale_connection,
+            state.active_turn_request_id.is_some(),
+        )
     };
+    if active_turn {
+        return DesktopCodexConnectionResponse {
+            request_id,
+            connection: None,
+            error: Some(AiDiagnostic::new(
+                "ai_turn_already_active",
+                "Refresh the Codex account after the active AI turn ends.",
+            )),
+        };
+    }
     if let Some(connection) = stale_connection {
         let _ = close_connection_for_app(&app, connection).await;
         return DesktopCodexConnectionResponse {
@@ -3297,6 +3594,7 @@ pub async fn refresh_codex_account(
     };
     let request_connection = Arc::clone(&connection);
     let result = tauri::async_runtime::spawn_blocking(move || {
+        request_connection.drain_idle_account_notifications()?;
         let account = read_account(&request_connection)?;
         let models = if account.authenticated {
             read_models(&request_connection)?
@@ -3346,11 +3644,390 @@ pub async fn refresh_codex_account(
     }
 }
 
+fn login_failure(request_id: String, error: AiDiagnostic) -> DesktopAiProviderLoginResponse {
+    DesktopAiProviderLoginResponse {
+        request_id,
+        status: "error".to_string(),
+        login: None,
+        connection: None,
+        error: Some(error),
+    }
+}
+
+fn safe_login_value(value: &str, maximum: usize) -> bool {
+    !value.is_empty() && value.chars().count() <= maximum && !value.chars().any(char::is_control)
+}
+
+fn parse_device_login(value: &Value) -> Result<AiProviderLoginView, AiDiagnostic> {
+    if value.get("type").and_then(Value::as_str) != Some("chatgptDeviceCode") {
+        return Err(AiDiagnostic::new(
+            "ai_provider_auth_failed",
+            "The Codex device login response was unsupported.",
+        ));
+    }
+    let login_id = value
+        .get("loginId")
+        .and_then(Value::as_str)
+        .filter(|value| Uuid::parse_str(value).is_ok())
+        .ok_or_else(|| {
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex device login response was invalid.",
+            )
+        })?;
+    let verification_url = value
+        .get("verificationUrl")
+        .and_then(Value::as_str)
+        .filter(|value| safe_login_value(value, 1024))
+        .ok_or_else(|| {
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex verification URL was invalid.",
+            )
+        })?;
+    let url = Url::parse(verification_url).map_err(|_| {
+        AiDiagnostic::new(
+            "ai_provider_auth_failed",
+            "The Codex verification URL was invalid.",
+        )
+    })?;
+    if url.scheme() != "https" || url.username() != "" || url.fragment().is_some() {
+        return Err(AiDiagnostic::new(
+            "ai_provider_auth_failed",
+            "The Codex verification URL was rejected.",
+        ));
+    }
+    let user_code = value
+        .get("userCode")
+        .and_then(Value::as_str)
+        .filter(|value| safe_login_value(value, 80))
+        .ok_or_else(|| {
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex device code was invalid.",
+            )
+        })?;
+    Ok(AiProviderLoginView {
+        login_id: login_id.to_string(),
+        verification_url: Some(verification_url.to_string()),
+        user_code: Some(user_code.to_string()),
+        status: "pending".to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn start_ai_provider_login(
+    app: AppHandle,
+    request_id: String,
+    auth_mode: String,
+    api_key: Option<String>,
+) -> DesktopAiProviderLoginResponse {
+    if !safe_request_id(&request_id) {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex login request was invalid.",
+            ),
+        );
+    }
+    if auth_mode != "chatgptDeviceCode" && auth_mode != "apiKey" && auth_mode != "apikey" {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The requested Codex login mode is unsupported.",
+            ),
+        );
+    }
+    let store = app.state::<CodexAssistantStore>();
+    let connection = {
+        let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+        if state.active_turn_request_id.is_some() {
+            return login_failure(
+                request_id,
+                AiDiagnostic::new(
+                    "ai_turn_already_active",
+                    "Stop the active AI turn before changing Codex login.",
+                ),
+            );
+        }
+        if state.pending_login_id.is_some() {
+            if state
+                .pending_login_started
+                .is_some_and(|started| started.elapsed() > Duration::from_secs(600))
+            {
+                state.clear_pending_login();
+            } else {
+                return login_failure(
+                    request_id,
+                    AiDiagnostic::new(
+                        "ai_provider_login_pending",
+                        "A Codex login is already pending.",
+                    ),
+                );
+            }
+        }
+        state.connection.clone()
+    };
+    let Some(connection) = connection else {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Connect Codex App Server before starting login.",
+            ),
+        );
+    };
+    let key = match auth_mode.as_str() {
+        "chatgptDeviceCode" => None,
+        _ => {
+            let value = match api_key {
+                Some(value)
+                    if safe_login_value(&value, 8 * 1024)
+                        && !value.chars().any(char::is_control) =>
+                {
+                    value
+                }
+                _ => {
+                    return login_failure(
+                        request_id,
+                        AiDiagnostic::new(
+                            "ai_provider_auth_failed",
+                            "The OpenAI Platform API Key input was invalid.",
+                        ),
+                    )
+                }
+            };
+            Some(Zeroizing::new(value))
+        }
+    };
+    let mode_for_task = auth_mode.clone();
+    let connection_for_task = Arc::clone(&connection);
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let params = if mode_for_task == "chatgptDeviceCode" {
+            json!({"type": "chatgptDeviceCode"})
+        } else {
+            let key = key.ok_or_else(|| {
+                AiDiagnostic::new(
+                    "ai_provider_auth_failed",
+                    "The OpenAI Platform API Key input was missing.",
+                )
+            })?;
+            json!({"type": "apiKey", "apiKey": key.as_str()})
+        };
+        connection_for_task
+            .request("account/login/start", params, RPC_TIMEOUT)
+            .map_err(|error| diagnostic_from_rpc(error, "ai_provider_auth_failed"))
+    })
+    .await;
+    let result = match result {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => return login_failure(request_id, error),
+        Err(_) => {
+            return login_failure(
+                request_id,
+                AiDiagnostic::new("ai_provider_auth_failed", "The Codex login request failed."),
+            )
+        }
+    };
+    let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+    if !state.has_connection(&connection) {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "The Codex connection changed during login.",
+            ),
+        );
+    }
+    if auth_mode == "chatgptDeviceCode" {
+        let login = match parse_device_login(&result) {
+            Ok(login) => login,
+            Err(error) => return login_failure(request_id, error),
+        };
+        state.pending_login_id = Some(login.login_id.clone());
+        state.pending_login_started = Some(Instant::now());
+        DesktopAiProviderLoginResponse {
+            request_id,
+            status: "pending".to_string(),
+            login: Some(login),
+            connection: connection_view(&state),
+            error: None,
+        }
+    } else if result.get("type").and_then(Value::as_str) == Some("apiKey") {
+        state.clear_pending_login();
+        DesktopAiProviderLoginResponse {
+            request_id,
+            status: "started".to_string(),
+            login: None,
+            connection: connection_view(&state),
+            error: None,
+        }
+    } else {
+        login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex API Key login response was unsupported.",
+            ),
+        )
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_ai_provider_login(
+    app: AppHandle,
+    request_id: String,
+    login_id: String,
+) -> DesktopAiProviderLoginResponse {
+    if !safe_request_id(&request_id) || Uuid::parse_str(&login_id).is_err() {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex login cancellation request was invalid.",
+            ),
+        );
+    }
+    let store = app.state::<CodexAssistantStore>();
+    let connection = {
+        let state = store.state.lock().expect("Codex assistant mutex poisoned");
+        if state.pending_login_id.as_deref() != Some(login_id.as_str()) {
+            return DesktopAiProviderLoginResponse {
+                request_id,
+                status: "idle".to_string(),
+                login: None,
+                connection: connection_view(&state),
+                error: None,
+            };
+        }
+        state.connection.clone()
+    };
+    let Some(connection) = connection else {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Codex App Server is disconnected.",
+            ),
+        );
+    };
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        connection
+            .request(
+                "account/login/cancel",
+                json!({"loginId": login_id}),
+                RPC_TIMEOUT,
+            )
+            .map_err(|error| diagnostic_from_rpc(error, "ai_provider_auth_failed"))
+    })
+    .await;
+    match result {
+        Ok(Ok(_)) => {
+            let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+            state.clear_pending_login();
+            DesktopAiProviderLoginResponse {
+                request_id,
+                status: "cancelled".to_string(),
+                login: None,
+                connection: connection_view(&state),
+                error: None,
+            }
+        }
+        Ok(Err(error)) => login_failure(request_id, error),
+        Err(_) => login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex login cancellation failed.",
+            ),
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn logout_ai_provider(
+    app: AppHandle,
+    request_id: String,
+) -> DesktopAiProviderLoginResponse {
+    if !safe_request_id(&request_id) {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex logout request was invalid.",
+            ),
+        );
+    }
+    let store = app.state::<CodexAssistantStore>();
+    let connection = {
+        let state = store.state.lock().expect("Codex assistant mutex poisoned");
+        if state.active_turn_request_id.is_some() {
+            return login_failure(
+                request_id,
+                AiDiagnostic::new(
+                    "ai_turn_already_active",
+                    "Stop the active AI turn before logging out.",
+                ),
+            );
+        }
+        state.connection.clone()
+    };
+    let Some(connection) = connection else {
+        return login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "codex_app_server_disconnected",
+                "Codex App Server is disconnected.",
+            ),
+        );
+    };
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        connection
+            .request("account/logout", json!({}), RPC_TIMEOUT)
+            .map_err(|error| diagnostic_from_rpc(error, "ai_provider_auth_failed"))
+    })
+    .await;
+    match result {
+        Ok(Ok(_)) => {
+            let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
+            state.account = Some(CodexAccountView {
+                authenticated: false,
+                auth_mode: None,
+                plan_type: None,
+                requires_login: true,
+            });
+            state.models.clear();
+            state.preview = None;
+            state.thread_id = None;
+            state.thread_binding = None;
+            state.clear_pending_login();
+            DesktopAiProviderLoginResponse {
+                request_id,
+                status: "logged_out".to_string(),
+                login: None,
+                connection: connection_view(&state),
+                error: None,
+            }
+        }
+        Ok(Err(error)) => login_failure(request_id, error),
+        Err(_) => login_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_auth_failed",
+                "The Codex logout request failed.",
+            ),
+        ),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn preview_ai_context(
     app: AppHandle,
     request_id: String,
+    provider_profile_id: String,
     project_session_id: String,
     revision_id: String,
     zone_id: String,
@@ -3377,6 +4054,33 @@ pub async fn preview_ai_context(
         Ok(scopes) => scopes,
         Err(error) => return preview_failure(request_id, error),
     };
+    let provider_profile = match crate::ai_provider::load_profile(&app, &provider_profile_id) {
+        Ok(profile) => profile,
+        Err(error) => return preview_failure(request_id, error.diagnostic()),
+    };
+    if provider_profile.protocol != crate::ai_provider::AiProviderProtocol::CodexAppServer {
+        return crate::ai_provider::preview_http_ai_context(
+            &app,
+            request_id,
+            provider_profile_id,
+            project_session_id,
+            revision_id,
+            zone_id,
+            scopes,
+            language,
+            model_id,
+            reasoning_effort,
+        );
+    }
+    if provider_profile_id != crate::ai_provider::codex_profile_id().to_string() {
+        return preview_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_profile_invalid",
+                "Only the built-in Codex profile can use the Codex App Server.",
+            ),
+        );
+    }
     let assistant = app.state::<CodexAssistantStore>();
     let stale_connection = {
         assistant
@@ -3461,7 +4165,13 @@ pub async fn preview_ai_context(
             return preview_failure(request_id, AiDiagnostic::new(&error.code, &error.message))
         }
     };
-    let fingerprint = match context_fingerprint(&trusted, &scopes) {
+    let fingerprint = match context_fingerprint_for_provider(
+        &trusted,
+        &scopes,
+        &provider_profile,
+        &model_id,
+        &reasoning_effort,
+    ) {
         Ok(value) => value,
         Err(error) => return preview_failure(request_id, error),
     };
@@ -3487,6 +4197,12 @@ pub async fn preview_ai_context(
             contains_complete_result_series: false,
             model_request_uses_network: true,
         },
+        provider_profile_id: provider_profile.profile_id.to_string(),
+        provider_display_name: provider_profile.display_name.clone(),
+        provider_protocol: "codex_app_server".to_string(),
+        destination_origin: None,
+        network_scope: "codex_managed".to_string(),
+        model_id: model_id.clone(),
     };
     let mut state = assistant
         .state
@@ -3520,6 +4236,7 @@ pub async fn preview_ai_context(
 pub async fn start_readonly_ai_turn(
     app: AppHandle,
     request_id: String,
+    provider_profile_id: String,
     project_session_id: String,
     revision_id: String,
     zone_id: String,
@@ -3548,6 +4265,36 @@ pub async fn start_readonly_ai_turn(
         Ok(scopes) => scopes,
         Err(error) => return turn_failure(request_id, error),
     };
+    let provider_profile = match crate::ai_provider::load_profile(&app, &provider_profile_id) {
+        Ok(profile) => profile,
+        Err(error) => return turn_failure(request_id, error.diagnostic()),
+    };
+    if provider_profile.protocol != crate::ai_provider::AiProviderProtocol::CodexAppServer {
+        return crate::ai_provider::start_http_ai_turn(
+            &app,
+            request_id,
+            provider_profile_id,
+            project_session_id,
+            revision_id,
+            zone_id,
+            preview_id,
+            question,
+            scopes,
+            language,
+            model_id,
+            reasoning_effort,
+        )
+        .await;
+    }
+    if provider_profile_id != crate::ai_provider::codex_profile_id().to_string() {
+        return turn_failure(
+            request_id,
+            AiDiagnostic::new(
+                "ai_provider_profile_invalid",
+                "Only the built-in Codex profile can use the Codex App Server.",
+            ),
+        );
+    }
     let assistant = app.state::<CodexAssistantStore>();
     let stale_connection = {
         assistant
@@ -3661,6 +4408,14 @@ pub async fn start_readonly_ai_turn(
             AiDiagnostic::new("ai_context_stale", "The AI context preview is stale."),
         );
     }
+    if preview.view.provider_profile_id != provider_profile_id
+        || preview.view.provider_protocol != "codex_app_server"
+    {
+        return turn_failure(
+            request_id,
+            AiDiagnostic::new("ai_context_stale", "The AI context preview is stale."),
+        );
+    }
     let current = match build_trusted_context_with_attachments(
         &app,
         &project_session_id,
@@ -3675,7 +4430,13 @@ pub async fn start_readonly_ai_turn(
             return turn_failure(request_id, AiDiagnostic::new(&error.code, &error.message))
         }
     };
-    let current_fingerprint = match context_fingerprint(&current, &scopes) {
+    let current_fingerprint = match context_fingerprint_for_provider(
+        &current,
+        &scopes,
+        &provider_profile,
+        &model_id,
+        &reasoning_effort,
+    ) {
         Ok(value) => value,
         Err(error) => return turn_failure(request_id, error),
     };
@@ -3737,6 +4498,7 @@ pub async fn start_readonly_ai_turn(
             || state.preview.as_ref().is_none_or(|current_preview| {
                 current_preview.view.preview_id != preview.view.preview_id
                     || current_preview.view.context_fingerprint != preview.view.context_fingerprint
+                    || current_preview.view.provider_profile_id != provider_profile_id
             })
         {
             return turn_failure(
@@ -3753,6 +4515,9 @@ pub async fn start_readonly_ai_turn(
     };
     let connection_for_task = Arc::clone(&connection);
     let task = tauri::async_runtime::spawn_blocking(move || {
+        connection_for_task
+            .drain_idle_account_notifications()
+            .map_err(TurnStartFailure::before_turn)?;
         let thread_id = if needs_thread {
             let response = connection_for_task
                 .request(
@@ -4417,6 +5182,13 @@ pub async fn interrupt_readonly_ai_turn(
             )),
         };
     }
+    if crate::ai_provider::interrupt_http_turn(&app) {
+        return DesktopAiActionResponse {
+            request_id,
+            status: "interrupting".to_string(),
+            error: None,
+        };
+    }
     let store = app.state::<CodexAssistantStore>();
     let (connection, thread_id, turn_id, pending_start, should_send_interrupt) = {
         let mut state = store.state.lock().expect("Codex assistant mutex poisoned");
@@ -4498,6 +5270,16 @@ pub async fn clear_readonly_ai_session(
             error: Some(AiDiagnostic::new(
                 "ai_context_unavailable",
                 "The clear request was invalid.",
+            )),
+        };
+    }
+    if !crate::ai_provider::clear_http_session(&app) {
+        return DesktopAiActionResponse {
+            request_id,
+            status: "error".to_string(),
+            error: Some(AiDiagnostic::new(
+                "ai_turn_already_active",
+                "Stop the active AI turn before clearing.",
             )),
         };
     }

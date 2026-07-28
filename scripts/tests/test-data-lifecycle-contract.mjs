@@ -22,7 +22,7 @@ function functionExists(source, name, python) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = python
     ? new RegExp(`^\\s*(?:async\\s+)?def\\s+${escaped}\\s*\\(`, "m")
-    : new RegExp(`^\\s*(?:pub\\s+)?(?:async\\s+)?fn\\s+${escaped}\\b`, "m");
+    : new RegExp(`^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?(?:async\\s+)?fn\\s+${escaped}\\b`, "m");
   return pattern.test(source);
 }
 

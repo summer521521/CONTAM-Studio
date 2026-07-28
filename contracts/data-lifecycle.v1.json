@@ -26,6 +26,12 @@
       "joins": ["ai", "conversation-archive", "archive.json"]
     },
     {
+      "id": "ai_provider_profiles",
+      "path": "src-tauri/src/ai_provider/mod.rs",
+      "functions": ["profiles_path", "read_profiles", "write_profiles"],
+      "joins": ["ai", "providers", "profiles.json"]
+    },
+    {
       "id": "contamx_workspace",
       "path": "python/src/contam_studio_core/contamx_runner.py",
       "functions": ["run_contamx", "_copy_verified_input", "_atomic_manifest_write"],
@@ -39,7 +45,7 @@
     }
   ],
   "allowed_rust_literal_joins": [
-    "ai", "archive.json", "bin", "codex-installer", "codex-runtime", "codex.exe", "Codex", "conversation-archive",
+    "ai", "archive.json", "bin", "codex-installer", "codex-runtime", "codex.exe", "Codex", "conversation-archive", "providers", "profiles.json",
     "install-official-codex.ps1", "OpenAI", "powershell.exe", "Programs", "System32", "v1.0", "WindowsPowerShell",
     ",", "evidence", "manifest.json", "project-drafts", "python/.venv/Scripts/python.exe", "result-extractions", "runs", "snapshots", "study-runs", "study-results", "study-reports"
   ]

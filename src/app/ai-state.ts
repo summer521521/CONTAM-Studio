@@ -62,6 +62,67 @@ export interface CodexConnectionView {
   models: CodexModelView[];
 }
 
+export type AiProviderProtocol =
+  | "codex_app_server"
+  | "openai_responses"
+  | "openai_chat_completions"
+  | "anthropic_messages";
+
+export type AiProviderAuthKind = "codex_managed" | "api_key" | "none";
+
+export interface AiProviderCapabilities {
+  model_catalog: boolean;
+  streaming: boolean;
+  token_usage: boolean;
+  structured_json_schema: boolean;
+}
+
+export interface AiProviderModelView {
+  id: string;
+  display_name: string;
+  available: boolean;
+}
+
+export interface AiProviderView {
+  profile_id: string;
+  preset_id: string | null;
+  display_name: string;
+  protocol: AiProviderProtocol;
+  base_url: string | null;
+  auth_kind: AiProviderAuthKind;
+  built_in: boolean;
+  network_scope: "codex_managed" | "remote_https" | "loopback_http";
+  secret_state: "not_required" | "missing" | "present" | "codex_managed" | "unavailable";
+  connection_status: string;
+  catalog_verified: boolean;
+  models: AiProviderModelView[];
+  manual_model_ids: string[];
+  selected_model_id: string | null;
+  config_revision: number;
+  capabilities: AiProviderCapabilities;
+}
+
+export interface AiProviderProfile {
+  profile_id: string;
+  preset_id: string | null;
+  display_name: string;
+  protocol: AiProviderProtocol;
+  base_url: string | null;
+  auth_kind: AiProviderAuthKind;
+  built_in: boolean;
+  manual_model_ids: string[];
+  selected_model_id: string | null;
+  capabilities: AiProviderCapabilities;
+  config_revision: number;
+}
+
+export interface AiProviderLoginView {
+  login_id: string;
+  verification_url: string | null;
+  user_code: string | null;
+  status: "pending" | "completed" | "cancelled";
+}
+
 export interface AiContextDisclosureView {
   preview_id: string;
   project_session_id: string;
@@ -73,6 +134,12 @@ export interface AiContextDisclosureView {
   excluded_scopes: AiContextScope[];
   context_fingerprint: string;
   payload: Record<string, unknown>;
+  provider_profile_id: string;
+  provider_display_name: string;
+  provider_protocol: AiProviderProtocol;
+  destination_origin: string | null;
+  network_scope: "codex_managed" | "remote_https" | "loopback_http";
+  model_id: string;
   disclosure: {
     contains_local_paths: false;
     contains_prj_text: false;
@@ -170,6 +237,10 @@ export interface AiArchivedConversationEntry {
   language: string;
   model_id: string;
   reasoning_effort: string;
+  provider_profile_id: string;
+  provider_display_name: string;
+  provider_protocol: AiProviderProtocol;
+  destination_origin: string | null;
   included_scopes: AiContextScope[];
   completed_at_unix_ms: number;
   is_current_revision: boolean;
@@ -198,6 +269,11 @@ export interface AiState {
   status: AiConnectionStatus;
   cliProbe: CodexCliProbeView | null;
   connection: CodexConnectionView | null;
+  providerProfiles: AiProviderView[];
+  providerProfileId: string;
+  providerProfilesStatus: "idle" | "loading" | "loaded" | "error";
+  providerLogin: AiProviderLoginView | null;
+  providerIssue: AiDiagnostic | null;
   scopes: AiContextScope[];
   modelId: string;
   reasoningEffort: string;
@@ -220,6 +296,11 @@ export const INITIAL_AI_STATE: AiState = {
   status: "probing",
   cliProbe: null,
   connection: null,
+  providerProfiles: [],
+  providerProfileId: "",
+  providerProfilesStatus: "idle",
+  providerLogin: null,
+  providerIssue: null,
   scopes: DEFAULT_AI_SCOPES,
   modelId: "",
   reasoningEffort: "",
@@ -244,6 +325,14 @@ export type AiAction =
   | { type: "install_succeeded"; requestId: string; probe: CodexCliProbeView }
   | { type: "connect_started"; requestId: string }
   | { type: "connect_succeeded"; requestId: string; connection: CodexConnectionView }
+  | { type: "providers_loaded"; profiles: AiProviderView[] }
+  | { type: "provider_selected"; profileId: string }
+  | { type: "provider_profiles_updated"; profiles: AiProviderView[] }
+  | { type: "provider_models_loaded"; profileId: string; models: AiProviderModelView[]; verified: boolean }
+  | { type: "provider_login_started" }
+  | { type: "provider_login_updated"; login: AiProviderLoginView }
+  | { type: "provider_login_cleared" }
+  | { type: "provider_operation_failed"; issue: AiDiagnostic }
   | { type: "operation_failed"; requestId: string | null; issue: AiDiagnostic }
   | { type: "scope_toggled"; scope: AiContextScope }
   | { type: "model_changed"; modelId: string; effort: string }
@@ -270,6 +359,15 @@ function selectValidModel(connection: CodexConnectionView) {
     ?? null;
 }
 
+function selectProviderModel(profile: AiProviderView | undefined, currentModelId = "") {
+  if (!profile) return currentModelId;
+  return profile.models.find((model) => model.available && model.id === currentModelId)?.id
+    ?? profile.models.find((model) => model.available)?.id
+    ?? profile.selected_model_id
+    ?? profile.manual_model_ids[0]
+    ?? "";
+}
+
 function clearConversationForBindingChange(state: AiState, preserveActiveRequest = false): AiState {
   return {
     ...state,
@@ -280,6 +378,16 @@ function clearConversationForBindingChange(state: AiState, preserveActiveRequest
     conversation: [],
     activeRequestId: preserveActiveRequest ? state.activeRequestId : null,
     issue: null,
+  };
+}
+
+function preserveProviderState(state: AiState): Pick<AiState, "providerProfiles" | "providerProfileId" | "providerProfilesStatus" | "providerLogin" | "providerIssue"> {
+  return {
+    providerProfiles: state.providerProfiles,
+    providerProfileId: state.providerProfileId,
+    providerProfilesStatus: state.providerProfilesStatus,
+    providerLogin: null,
+    providerIssue: state.providerIssue,
   };
 }
 
@@ -324,6 +432,64 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
         issue: null,
       };
     }
+    case "providers_loaded": {
+      const selected = action.profiles.find((profile) => profile.profile_id === state.providerProfileId)
+        ?? action.profiles.find((profile) => profile.preset_id === "codex")
+        ?? action.profiles[0];
+      return {
+        ...state,
+        providerProfiles: action.profiles,
+        providerProfileId: selected?.profile_id ?? "",
+        providerProfilesStatus: "loaded",
+        modelId: selected?.protocol === "codex_app_server" ? state.modelId : selectProviderModel(selected),
+        providerIssue: null,
+      };
+    }
+    case "provider_selected": {
+      const profile = state.providerProfiles.find((item) => item.profile_id === action.profileId);
+      if (!profile) return state;
+      return {
+        ...clearConversationForBindingChange(state),
+        providerProfileId: profile.profile_id,
+        modelId: profile.protocol === "codex_app_server" ? state.modelId : selectProviderModel(profile),
+        reasoningEffort: profile.protocol === "codex_app_server" ? state.reasoningEffort : "medium",
+        providerLogin: null,
+        providerIssue: null,
+      };
+    }
+    case "provider_profiles_updated": {
+      const selected = action.profiles.find((profile) => profile.profile_id === state.providerProfileId)
+        ?? action.profiles.find((profile) => profile.preset_id === "codex")
+        ?? action.profiles[0];
+      return {
+        ...state,
+        providerProfiles: action.profiles,
+        providerProfileId: selected?.profile_id ?? "",
+        providerProfilesStatus: "loaded",
+        modelId: selected?.protocol === "codex_app_server" ? state.modelId : selectProviderModel(selected, state.modelId),
+        providerIssue: null,
+      };
+    }
+    case "provider_models_loaded": {
+      const profiles = state.providerProfiles.map((profile) => profile.profile_id === action.profileId
+        ? { ...profile, models: action.models, catalog_verified: action.verified }
+        : profile);
+      const selected = profiles.find((profile) => profile.profile_id === action.profileId);
+      return {
+        ...state,
+        providerProfiles: profiles,
+        modelId: state.providerProfileId === action.profileId ? selectProviderModel(selected, state.modelId) : state.modelId,
+        providerIssue: null,
+      };
+    }
+    case "provider_login_started":
+      return { ...state, providerLogin: null, providerIssue: null };
+    case "provider_login_updated":
+      return { ...state, providerLogin: action.login, providerIssue: null };
+    case "provider_login_cleared":
+      return { ...state, providerLogin: null };
+    case "provider_operation_failed":
+      return { ...state, providerIssue: action.issue };
     case "operation_failed":
       if (action.requestId && action.requestId !== state.activeRequestId) return state;
       if (action.issue.code === "codex_cli_not_found") {
@@ -333,13 +499,21 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
         const cliProbe = state.connection?.cli ?? state.cliProbe;
         return {
           ...INITIAL_AI_STATE,
+          ...preserveProviderState(state),
           status: cliProbe?.found ? "installed" : "disabled",
           cliProbe,
           scopes: state.scopes,
           issue: action.issue,
         };
       }
-      return { ...state, status: "error", activeRequestId: null, pendingQuestion: null, issue: action.issue };
+      return {
+        ...state,
+        status: "error",
+        activeRequestId: null,
+        pendingQuestion: null,
+        issue: action.issue,
+        providerIssue: action.issue.code.startsWith("ai_provider_") ? action.issue : state.providerIssue,
+      };
     case "scope_toggled": {
       const scopes = state.scopes.includes(action.scope)
         ? state.scopes.filter((scope) => scope !== action.scope)
@@ -441,6 +615,7 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
       const cliProbe = state.connection?.cli ?? state.cliProbe;
       return {
         ...INITIAL_AI_STATE,
+        ...preserveProviderState(state),
         status: cliProbe?.found ? "installed" : "disabled",
         cliProbe,
       };
@@ -452,8 +627,18 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
 
 export function isSafeAiPreview(preview: AiContextDisclosureView): boolean {
   const text = JSON.stringify(preview.payload);
+  const safeDestination = preview.network_scope === "codex_managed"
+    ? preview.destination_origin === null
+    : preview.network_scope === "remote_https"
+      ? typeof preview.destination_origin === "string" && /^https:\/\/[^/]+$/i.test(preview.destination_origin)
+      : typeof preview.destination_origin === "string" && /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i.test(preview.destination_origin);
   return preview.preview_id.length > 0
     && preview.context_fingerprint.length > 0
+    && preview.provider_profile_id.length > 0
+    && preview.provider_display_name.length > 0
+    && ["codex_app_server", "openai_responses", "openai_chat_completions", "anthropic_messages"].includes(preview.provider_protocol)
+    && preview.model_id.length > 0
+    && safeDestination
     && preview.included_scopes.length > 0
     && preview.included_scopes.every((scope) => DEFAULT_AI_SCOPES.includes(scope) || ["project_summary", "run_summary", "result_summary", "study_summary", "diagnostics", "attachment_evidence", "semantic_project", "semantic_object"].includes(scope))
     && !preview.disclosure.contains_local_paths
@@ -558,6 +743,10 @@ export function isSafeAiArchive(value: unknown): value is AiConversationArchiveV
     "language",
     "model_id",
     "reasoning_effort",
+    "provider_profile_id",
+    "provider_display_name",
+    "provider_protocol",
+    "destination_origin",
     "included_scopes",
     "completed_at_unix_ms",
     "is_current_revision",
@@ -584,6 +773,16 @@ export function isSafeAiArchive(value: unknown): value is AiConversationArchiveV
       && safeText("language", 32)
       && safeText("model_id", 256)
       && safeText("reasoning_effort", 128)
+      && safeText("provider_profile_id", 128)
+      && safeText("provider_display_name", 256)
+      && typeof item.provider_protocol === "string"
+      && ["codex_app_server", "openai_responses", "openai_chat_completions", "anthropic_messages"].includes(item.provider_protocol)
+      && (item.destination_origin === null
+        || (typeof item.destination_origin === "string"
+          && item.destination_origin.length > 0
+          && item.destination_origin.length <= 512
+          && !containsSensitivePath(item.destination_origin)
+          && ![...item.destination_origin].some((character) => /[\u0000-\u001f\u007f]/.test(character))))
       && Array.isArray(item.included_scopes)
       && item.included_scopes.every((scope) => typeof scope === "string" && [
         "project_summary",

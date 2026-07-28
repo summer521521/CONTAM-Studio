@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-27T06:10:16Z",
+  "last_updated_utc": "2026-07-28T14:12:29.4156961Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -17,6 +17,7 @@
     "implemented不等于automated_verified、manual_gui、merged_to_main、packaged或user_validated。",
     "没有证据时使用unknown；明确未执行时使用not_run；不适用时使用not_required。",
     "Phase 6A的实现和自动检查已合并到main，但Beta-2本地档案GUI逐项验收仍保持pending_user。",
+    "Phase 6B多Provider实现随main交付提交纳入；真实Provider、凭据、GUI和发布证据必须与自动契约/Mock证据分开记录。",
     "完整PRJ、分发和AI写入是能力边界行，不把未实现能力写成阶段完成。",
     "内部Python模型或契约测试通过不等于桌面产品已接入；没有Tauri命令、React入口和纵向证据时不得提升产品能力状态。"
   ],
@@ -196,6 +197,21 @@
       "packaged": "not_run",
       "user_validated": "pending_user",
       "evidence": ["docs/development/phase-6a-codex-readonly-assistant-verification.md", "docs/development/task-log/records/phase-6-02-review-and-delivery.md"]
+    },
+    {
+      "id": "phase-6b-multi-provider-ai",
+      "name": "Phase 6B 多 Provider 只读 AI 助手与受控 HTTP 网关",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "yes",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "evidence": [
+        "docs/development/phase-6b-multi-provider-ai-verification.md",
+        "docs/architecture/multi-provider-readonly-ai.md",
+        "docs/development/task-log/records/phase-6b-multi-provider-ai.md"
+      ]
     },
     {
       "id": "candidate-research-foundations",

@@ -338,6 +338,16 @@ function App() {
     updateAiConnection,
     installCodexCli,
     disconnectAi,
+    selectAiProvider,
+    refreshAiProviderModels,
+    saveProviderProfile,
+    deleteProviderProfile,
+    testSelectedAiProvider,
+    saveSelectedProviderSecret,
+    clearSelectedProviderSecret,
+    startCodexLogin,
+    cancelCodexLogin,
+    logoutCodex,
     toggleAiScope,
     changeAiModel,
     changeAiEffort,
@@ -1234,6 +1244,17 @@ function App() {
               onAiInstall={() => void installCodexCli()}
               onAiRefresh={() => void updateAiConnection(true)}
               onAiDisconnect={() => void disconnectAi()}
+              onAiProviderSelect={selectAiProvider}
+              onAiProviderTest={() => void testSelectedAiProvider()}
+              onAiProviderRefreshModels={() => void refreshAiProviderModels()}
+              onAiProviderSave={(profile) => void saveProviderProfile(profile)}
+              onAiProviderDelete={() => void deleteProviderProfile()}
+              onAiCodexDeviceLogin={() => void startCodexLogin("chatgptDeviceCode")}
+              onAiCodexApiKeyLogin={(apiKey) => void startCodexLogin("apiKey", apiKey)}
+              onAiCodexCancelLogin={() => void cancelCodexLogin()}
+              onAiCodexLogout={() => void logoutCodex()}
+              onAiProviderSecret={(secret) => void saveSelectedProviderSecret(secret)}
+              onAiProviderClearSecret={() => void clearSelectedProviderSecret()}
               onAiScopeToggle={toggleAiScope}
               onAiModelChange={changeAiModel}
               onAiEffortChange={changeAiEffort}

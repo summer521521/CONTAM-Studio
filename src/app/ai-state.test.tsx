@@ -10,6 +10,7 @@ import {
   isSafeAiPreview,
   isStructuredAiAnswer,
   type AiState,
+  type AiProviderView,
   type AiConversationArchiveView,
   type AiContextDisclosureView,
   type CodexConnectionView,
@@ -29,6 +30,25 @@ const connection: CodexConnectionView = {
   }],
 };
 
+const geminiProvider: AiProviderView = {
+  profile_id: "gemini-profile",
+  preset_id: "gemini",
+  display_name: "Google Gemini",
+  protocol: "openai_chat_completions",
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
+  auth_kind: "api_key",
+  built_in: true,
+  network_scope: "remote_https",
+  secret_state: "missing",
+  connection_status: "unknown",
+  catalog_verified: false,
+  models: [],
+  manual_model_ids: ["gemini-2.5-flash"],
+  selected_model_id: "gemini-2.5-flash",
+  config_revision: 1,
+  capabilities: { model_catalog: true, streaming: true, token_usage: true, structured_json_schema: true },
+};
+
 const preview: AiContextDisclosureView = {
   preview_id: "preview-1",
   project_session_id: "session-1",
@@ -40,6 +60,12 @@ const preview: AiContextDisclosureView = {
   excluded_scopes: ["project_summary", "run_summary", "result_summary", "diagnostics"],
   context_fingerprint: "fingerprint-1",
   payload: { selected_zone: { name: "One", volume_m3: 600 }, draft_summary: { revision_number: 1 } },
+  provider_profile_id: "codex-profile",
+  provider_display_name: "Codex",
+  provider_protocol: "codex_app_server",
+  destination_origin: null,
+  network_scope: "codex_managed",
+  model_id: "model-a",
   disclosure: {
     contains_local_paths: false,
     contains_prj_text: false,
@@ -68,6 +94,10 @@ const archiveView: AiConversationArchiveView = {
     language: "en",
     model_id: "model-a",
     reasoning_effort: "low",
+    provider_profile_id: "codex-profile",
+    provider_display_name: "Codex",
+    provider_protocol: "codex_app_server",
+    destination_origin: null,
     included_scopes: ["selected_zone", "draft_summary"],
     completed_at_unix_ms: 1,
     is_current_revision: false,
@@ -165,6 +195,36 @@ describe("read-only AI state", () => {
     expect(html).toContain("Starting the local Codex App Server and reading the account and model catalog.");
   });
 
+  it("keeps HTTP Provider status separate from the local Codex CLI probe", () => {
+    const html = renderToStaticMarkup(
+      <CodexAssistantPanel
+        state={{
+          ...INITIAL_AI_STATE,
+          status: "installed",
+          cliProbe: connection.cli,
+          providerProfiles: [geminiProvider],
+          providerProfileId: geminiProvider.profile_id,
+        }}
+        contextAvailable={false}
+        onConnect={() => undefined}
+        onInstall={() => undefined}
+        onRefresh={() => undefined}
+        onDisconnect={() => undefined}
+        onScopeToggle={() => undefined}
+        onModelChange={() => undefined}
+        onEffortChange={() => undefined}
+        onPreview={() => undefined}
+        onQuestionChange={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+        onClear={() => undefined}
+      />,
+    );
+    expect(html).toContain("Google Gemini");
+    expect(html).toContain("Codex is a separate local App Server backend");
+    expect(html).not.toContain("Codex CLI 1.2.3");
+  });
+
   it("uses the server model order and default reasoning effort", () => {
     const connecting = aiReducer(INITIAL_AI_STATE, { type: "connect_started", requestId: "r1" });
     const ready = aiReducer(connecting, { type: "connect_succeeded", requestId: "r1", connection });
@@ -243,7 +303,7 @@ describe("read-only AI state", () => {
     expect(html).toContain("This context is confirmed. You can hide the preview and send your question.");
     expect(html).not.toContain("Structured context preview");
     expect(html).toContain(">Send<");
-    expect(html).not.toContain("disabled=\"\"");
+    expect(html).not.toContain('class="primary-action" disabled=""');
   });
 
   it("explains the required preview beside a disabled send action", () => {
@@ -446,7 +506,7 @@ describe("read-only AI state", () => {
         onClear={() => undefined}
       />,
     );
-    expect(html).toContain("Local client, online model");
+    expect(html).toContain("Local workbench; Codex uses a local App Server, other providers use direct HTTP APIs");
     expect(html).toContain("Structured context preview");
     expect(html).toContain("This session");
     expect(html).toContain("Your question");
@@ -600,13 +660,14 @@ describe("read-only AI state", () => {
         onClear={() => undefined}
       />,
     );
-    expect(html).toContain("本地客户端，联网模型");
+    expect(html).toContain("本地工作台；Codex为本地App Server，其他Provider直连HTTP API");
     expect(html).toContain("结构化上下文预览");
     expect(html).toContain("不包含绝对路径、PRJ正文或完整结果序列");
     await i18n.changeLanguage("en");
   });
 
-  it("renders an install reminder without exposing a configurable command", () => {
+  it("renders an install reminder without exposing a configurable command", async () => {
+    await i18n.changeLanguage("en");
     const html = renderToStaticMarkup(
       <CodexAssistantPanel
         state={{ ...INITIAL_AI_STATE, status: "disabled", issue: { code: "codex_cli_not_found", message: "hidden" } }}

@@ -15,6 +15,7 @@ ADR用于记录具有长期影响的项目决策、理由、后果和待验证�
 - [ADR-009：使用不可变草稿Revision与确定性Zone UUID](ADR-009-use-immutable-draft-revisions.md)
 - [ADR-010：首个AI后端使用Codex App Server](ADR-010-use-codex-app-server-for-readonly-ai.md)
 - [ADR-011：冻结三层职责与可信边界](ADR-011-freeze-layer-responsibilities-and-trust-boundaries.md)
+- [ADR-016：采用受控多 Provider 只读 AI Gateway](ADR-016-use-bounded-multi-provider-ai-gateway.md)
 
 ## 统一格式
 

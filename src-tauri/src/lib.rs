@@ -1,3 +1,4 @@
+mod ai_provider;
 mod close_protocol;
 mod codex_app_server;
 mod release;
@@ -11,6 +12,7 @@ pub fn run() {
         .manage(zone_bridge::simulation_loop::SimulationLoopStore::default())
         .manage(codex_app_server::CodexAssistantStore::default())
         .manage(codex_app_server::AiConversationArchiveStore::default())
+        .manage(ai_provider::AiProviderStore::default())
         .manage(close_protocol::CloseProtocolStore::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -56,6 +58,16 @@ pub fn run() {
             codex_app_server::interrupt_readonly_ai_turn,
             codex_app_server::clear_readonly_ai_session,
             codex_app_server::disconnect_codex_app_server,
+            ai_provider::list_ai_provider_profiles,
+            ai_provider::save_ai_provider_profile,
+            ai_provider::delete_ai_provider_profile,
+            ai_provider::set_ai_provider_secret,
+            ai_provider::delete_ai_provider_secret,
+            ai_provider::test_ai_provider_connection,
+            ai_provider::refresh_ai_provider_models,
+            codex_app_server::start_ai_provider_login,
+            codex_app_server::cancel_ai_provider_login,
+            codex_app_server::logout_ai_provider,
             release::get_studio_setup,
             release::save_studio_setup,
             release::select_data_directory,

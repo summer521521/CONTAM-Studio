@@ -22,6 +22,10 @@ import type {
   DesktopCodexConnectionResponse,
   DesktopCodexInstallResponse,
   DesktopCodexProbeResponse,
+  AiProviderLoginView,
+  AiProviderModelView,
+  AiProviderProfile,
+  AiProviderView,
 } from "./ai-state";
 import type {
   DesktopActionResponse,
@@ -30,6 +34,35 @@ import type {
   DesktopSetupResponse,
   DesktopToolProbeResponse,
 } from "./release-state";
+
+export interface DesktopAiProviderProfilesResponse {
+  request_id: string;
+  profiles: AiProviderView[];
+  error: { code: string; message: string } | null;
+}
+
+export interface DesktopAiProviderActionResponse {
+  request_id: string;
+  status: string;
+  profiles: AiProviderView[] | null;
+  error: { code: string; message: string } | null;
+}
+
+export interface DesktopAiProviderModelsResponse {
+  request_id: string;
+  profile_id: string;
+  models: AiProviderModelView[];
+  verified: boolean;
+  error: { code: string; message: string } | null;
+}
+
+export interface DesktopAiProviderLoginResponse {
+  request_id: string;
+  status: string;
+  login: AiProviderLoginView | null;
+  connection: DesktopCodexConnectionResponse["connection"];
+  error: { code: string; message: string } | null;
+}
 
 export async function selectAndReadPrjZones(
   requestId: string,
@@ -324,6 +357,38 @@ export async function removeStudioAttachment(requestId: string, attachmentId: st
   return invoke<DesktopAttachmentActionResponse>("remove_studio_attachment", { requestId, attachmentId });
 }
 
+export async function listAiProviderProfiles(requestId: string): Promise<DesktopAiProviderProfilesResponse> {
+  return invoke<DesktopAiProviderProfilesResponse>("list_ai_provider_profiles", { requestId });
+}
+
+export async function saveAiProviderProfile(requestId: string, profile: AiProviderProfile): Promise<DesktopAiProviderActionResponse> {
+  return invoke<DesktopAiProviderActionResponse>("save_ai_provider_profile", { requestId, profile });
+}
+
+export async function deleteAiProviderProfile(requestId: string, profileId: string): Promise<DesktopAiProviderActionResponse> {
+  return invoke<DesktopAiProviderActionResponse>("delete_ai_provider_profile", { requestId, profileId });
+}
+
+export async function setAiProviderSecret(requestId: string, profileId: string, secret: string): Promise<DesktopAiProviderActionResponse> {
+  try {
+    return await invoke<DesktopAiProviderActionResponse>("set_ai_provider_secret", { requestId, profileId, secret });
+  } finally {
+    secret = "";
+  }
+}
+
+export async function deleteAiProviderSecret(requestId: string, profileId: string): Promise<DesktopAiProviderActionResponse> {
+  return invoke<DesktopAiProviderActionResponse>("delete_ai_provider_secret", { requestId, profileId });
+}
+
+export async function testAiProviderConnection(requestId: string, profileId: string): Promise<DesktopAiProviderActionResponse> {
+  return invoke<DesktopAiProviderActionResponse>("test_ai_provider_connection", { requestId, profileId });
+}
+
+export async function refreshAiProviderModels(requestId: string, profileId: string): Promise<DesktopAiProviderModelsResponse> {
+  return invoke<DesktopAiProviderModelsResponse>("refresh_ai_provider_models", { requestId, profileId });
+}
+
 export async function probeCodexAppServer(requestId: string): Promise<DesktopCodexProbeResponse> {
   return invoke<DesktopCodexProbeResponse>("probe_codex_app_server", { requestId });
 }
@@ -340,8 +405,29 @@ export async function refreshCodexAccount(requestId: string): Promise<DesktopCod
   return invoke<DesktopCodexConnectionResponse>("refresh_codex_account", { requestId });
 }
 
+export async function startAiProviderLogin(
+  requestId: string,
+  authMode: "chatgptDeviceCode" | "apiKey",
+  apiKey?: string,
+): Promise<DesktopAiProviderLoginResponse> {
+  try {
+    return await invoke<DesktopAiProviderLoginResponse>("start_ai_provider_login", { requestId, authMode, apiKey });
+  } finally {
+    apiKey = "";
+  }
+}
+
+export async function cancelAiProviderLogin(requestId: string, loginId: string): Promise<DesktopAiProviderLoginResponse> {
+  return invoke<DesktopAiProviderLoginResponse>("cancel_ai_provider_login", { requestId, loginId });
+}
+
+export async function logoutAiProvider(requestId: string): Promise<DesktopAiProviderLoginResponse> {
+  return invoke<DesktopAiProviderLoginResponse>("logout_ai_provider", { requestId });
+}
+
 export async function previewAiContext(
   requestId: string,
+  providerProfileId: string,
   projectSessionId: string,
   revisionId: string,
   zoneId: string,
@@ -352,6 +438,7 @@ export async function previewAiContext(
 ): Promise<DesktopAiContextPreviewResponse> {
   return invoke<DesktopAiContextPreviewResponse>("preview_ai_context", {
     requestId,
+    providerProfileId,
     projectSessionId,
     revisionId,
     zoneId,
@@ -364,6 +451,7 @@ export async function previewAiContext(
 
 export async function startReadonlyAiTurn(
   requestId: string,
+  providerProfileId: string,
   projectSessionId: string,
   revisionId: string,
   zoneId: string,
@@ -376,6 +464,7 @@ export async function startReadonlyAiTurn(
 ): Promise<DesktopAiTurnResponse> {
   return invoke<DesktopAiTurnResponse>("start_readonly_ai_turn", {
     requestId,
+    providerProfileId,
     projectSessionId,
     revisionId,
     zoneId,

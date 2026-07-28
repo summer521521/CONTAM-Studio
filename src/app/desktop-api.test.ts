@@ -2,11 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyZoneVolumePatchToDraft,
+  cancelAiProviderLogin,
   clearAiConversationArchiveForZone,
   clearAllAiConversationArchive,
   clearReadonlyAiSession,
   connectCodexAppServer,
   deleteAiConversationArchiveEntry,
+  deleteAiProviderProfile,
+  deleteAiProviderSecret,
   disconnectCodexAppServer,
   finishAppCloseDraftExport,
   exportActiveProjectDraftCopy,
@@ -15,17 +18,24 @@ import {
   installOfficialCodexCli,
   interruptReadonlyAiTurn,
   loadAiConversationArchive,
+  listAiProviderProfiles,
   planZoneVolumePatch,
   previewAiContext,
   probeCodexAppServer,
   redoProjectDraft,
   refreshCodexAccount,
+  refreshAiProviderModels,
   runActiveContamProject,
   resolveAppClose,
   selectAndExtractZoneAirState,
   selectAndReadPrjZones,
   setAiConversationArchiveEnabled,
+  setAiProviderSecret,
+  saveAiProviderProfile,
   startReadonlyAiTurn,
+  startAiProviderLogin,
+  testAiProviderConnection,
+  logoutAiProvider,
   undoProjectDraft,
 } from "./desktop-api";
 
@@ -34,6 +44,20 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 const invokeMock = vi.mocked(invoke);
+
+const providerProfile = {
+  profile_id: "00000000-0000-4000-8000-000000000001",
+  preset_id: null,
+  display_name: "Local provider",
+  protocol: "openai_chat_completions" as const,
+  base_url: "http://127.0.0.1:11434/v1/",
+  auth_kind: "api_key" as const,
+  built_in: false,
+  manual_model_ids: ["local-model"],
+  selected_model_id: "local-model",
+  capabilities: { model_catalog: true, streaming: true, token_usage: false, structured_json_schema: false },
+  config_revision: 1,
+};
 
 describe("desktop API boundary", () => {
   it("invokes every registered command with the exact complete payload", async () => {
@@ -77,11 +101,22 @@ describe("desktop API boundary", () => {
       ["install_official_codex_cli", installOfficialCodexCli("request-012"), { requestId: "request-012" }],
       ["connect_codex_app_server", connectCodexAppServer("request-013"), { requestId: "request-013" }],
       ["refresh_codex_account", refreshCodexAccount("request-014"), { requestId: "request-014" }],
+      ["list_ai_provider_profiles", listAiProviderProfiles("request-025"), { requestId: "request-025" }],
+      ["save_ai_provider_profile", saveAiProviderProfile("request-026", providerProfile), { requestId: "request-026", profile: providerProfile }],
+      ["delete_ai_provider_profile", deleteAiProviderProfile("request-027", providerProfile.profile_id), { requestId: "request-027", profileId: providerProfile.profile_id }],
+      ["set_ai_provider_secret", setAiProviderSecret("request-028", providerProfile.profile_id, "unit-test-secret-not-real"), { requestId: "request-028", profileId: providerProfile.profile_id, secret: "unit-test-secret-not-real" }],
+      ["delete_ai_provider_secret", deleteAiProviderSecret("request-029", providerProfile.profile_id), { requestId: "request-029", profileId: providerProfile.profile_id }],
+      ["test_ai_provider_connection", testAiProviderConnection("request-030", providerProfile.profile_id), { requestId: "request-030", profileId: providerProfile.profile_id }],
+      ["refresh_ai_provider_models", refreshAiProviderModels("request-031", providerProfile.profile_id), { requestId: "request-031", profileId: providerProfile.profile_id }],
+      ["start_ai_provider_login", startAiProviderLogin("request-032", "apiKey", "unit-test-codex-key-not-real"), { requestId: "request-032", authMode: "apiKey", apiKey: "unit-test-codex-key-not-real" }],
+      ["cancel_ai_provider_login", cancelAiProviderLogin("request-033", "00000000-0000-4000-8000-000000000002"), { requestId: "request-033", loginId: "00000000-0000-4000-8000-000000000002" }],
+      ["logout_ai_provider", logoutAiProvider("request-034"), { requestId: "request-034" }],
       [
         "preview_ai_context",
-        previewAiContext("request-015", "session-001", "revision-001", "zone-001", ["selected_zone"], "zh-CN", "model-001", "medium"),
+        previewAiContext("request-015", "codex-profile", "session-001", "revision-001", "zone-001", ["selected_zone"], "zh-CN", "model-001", "medium"),
         {
           requestId: "request-015",
+          providerProfileId: "codex-profile",
           projectSessionId: "session-001",
           revisionId: "revision-001",
           zoneId: "zone-001",
@@ -93,9 +128,10 @@ describe("desktop API boundary", () => {
       ],
       [
         "start_readonly_ai_turn",
-        startReadonlyAiTurn("request-016", "session-001", "revision-001", "zone-001", "preview-001", "status", ["selected_zone"], "zh-CN", "model-001", "medium"),
+        startReadonlyAiTurn("request-016", "codex-profile", "session-001", "revision-001", "zone-001", "preview-001", "status", ["selected_zone"], "zh-CN", "model-001", "medium"),
         {
           requestId: "request-016",
+          providerProfileId: "codex-profile",
           projectSessionId: "session-001",
           revisionId: "revision-001",
           zoneId: "zone-001",

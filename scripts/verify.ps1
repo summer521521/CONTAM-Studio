@@ -59,6 +59,17 @@ function Assert-TrackedFile {
     return $true
 }
 
+function Test-GitPathChanged {
+    param([string]$RelativePath)
+
+    & git -C $Root diff --quiet -- $RelativePath
+    if ($LASTEXITCODE -ne 0) {
+        return $true
+    }
+    & git -C $Root diff --cached --quiet -- $RelativePath
+    return $LASTEXITCODE -ne 0
+}
+
 function Invoke-Tool {
     param(
         [string]$Name,
@@ -364,23 +375,32 @@ function Check-Docs {
         Add-Passed "tracked Markdown links (${markdownCount} files)"
     }
 
+    $lockCompanions = @{
+        "pnpm-lock.yaml" = @("package.json")
+        "src-tauri/Cargo.lock" = @("src-tauri/Cargo.toml")
+        "python/requirements-ci.lock" = @("python/pyproject.toml")
+    }
     foreach ($lockPath in @($baseline.lock_files)) {
         if (-not (Assert-TrackedFile ([string]$lockPath))) {
             continue
         }
 
-        & git -C $Root diff --quiet -- $lockPath
-        if ($LASTEXITCODE -ne 0) {
-            Add-Failure "lock file ${lockPath}" "Working-tree lockfile changes are present."
+        if (-not (Test-GitPathChanged $lockPath)) {
+            Add-Passed "lock file ${lockPath}"
+            continue
+        }
+        $pairedManifestChanged = $false
+        foreach ($companion in @($lockCompanions[[string]$lockPath])) {
+            if (Test-GitPathChanged $companion) {
+                $pairedManifestChanged = $true
+                break
+            }
+        }
+        if ($pairedManifestChanged) {
+            Add-Passed "lock file ${lockPath} paired with dependency manifest"
         }
         else {
-            & git -C $Root diff --cached --quiet -- $lockPath
-            if ($LASTEXITCODE -ne 0) {
-                Add-Failure "lock file ${lockPath}" "Staged lockfile changes are present."
-            }
-            else {
-                Add-Passed "lock file ${lockPath}"
-            }
+            Add-Failure "lock file ${lockPath}" "Lockfile changes require a paired dependency manifest change."
         }
     }
 

@@ -225,18 +225,88 @@
       "payload_keys": ["requestId"]
     },
     {
+      "command": "list_ai_provider_profiles",
+      "rust_module": "ai_provider",
+      "ts_wrapper": "listAiProviderProfiles",
+      "permission": "allow-list-ai-provider-profiles",
+      "payload_keys": ["requestId"]
+    },
+    {
+      "command": "save_ai_provider_profile",
+      "rust_module": "ai_provider",
+      "ts_wrapper": "saveAiProviderProfile",
+      "permission": "allow-save-ai-provider-profile",
+      "payload_keys": ["requestId", "profile"]
+    },
+    {
+      "command": "delete_ai_provider_profile",
+      "rust_module": "ai_provider",
+      "ts_wrapper": "deleteAiProviderProfile",
+      "permission": "allow-delete-ai-provider-profile",
+      "payload_keys": ["requestId", "profileId"]
+    },
+    {
+      "command": "set_ai_provider_secret",
+      "rust_module": "ai_provider",
+      "ts_wrapper": "setAiProviderSecret",
+      "permission": "allow-set-ai-provider-secret",
+      "payload_keys": ["requestId", "profileId", "secret"]
+    },
+    {
+      "command": "delete_ai_provider_secret",
+      "rust_module": "ai_provider",
+      "ts_wrapper": "deleteAiProviderSecret",
+      "permission": "allow-delete-ai-provider-secret",
+      "payload_keys": ["requestId", "profileId"]
+    },
+    {
+      "command": "test_ai_provider_connection",
+      "rust_module": "ai_provider",
+      "ts_wrapper": "testAiProviderConnection",
+      "permission": "allow-test-ai-provider-connection",
+      "payload_keys": ["requestId", "profileId"]
+    },
+    {
+      "command": "refresh_ai_provider_models",
+      "rust_module": "ai_provider",
+      "ts_wrapper": "refreshAiProviderModels",
+      "permission": "allow-refresh-ai-provider-models",
+      "payload_keys": ["requestId", "profileId"]
+    },
+    {
+      "command": "start_ai_provider_login",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "startAiProviderLogin",
+      "permission": "allow-start-ai-provider-login",
+      "payload_keys": ["requestId", "authMode", "apiKey"]
+    },
+    {
+      "command": "cancel_ai_provider_login",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "cancelAiProviderLogin",
+      "permission": "allow-cancel-ai-provider-login",
+      "payload_keys": ["requestId", "loginId"]
+    },
+    {
+      "command": "logout_ai_provider",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "logoutAiProvider",
+      "permission": "allow-logout-ai-provider",
+      "payload_keys": ["requestId"]
+    },
+    {
       "command": "preview_ai_context",
       "rust_module": "codex_app_server",
       "ts_wrapper": "previewAiContext",
       "permission": "allow-preview-ai-context",
-      "payload_keys": ["requestId", "projectSessionId", "revisionId", "zoneId", "scopes", "language", "modelId", "reasoningEffort"]
+      "payload_keys": ["requestId", "providerProfileId", "projectSessionId", "revisionId", "zoneId", "scopes", "language", "modelId", "reasoningEffort"]
     },
     {
       "command": "start_readonly_ai_turn",
       "rust_module": "codex_app_server",
       "ts_wrapper": "startReadonlyAiTurn",
       "permission": "allow-start-readonly-ai-turn",
-      "payload_keys": ["requestId", "projectSessionId", "revisionId", "zoneId", "previewId", "question", "scopes", "language", "modelId", "reasoningEffort"]
+      "payload_keys": ["requestId", "providerProfileId", "projectSessionId", "revisionId", "zoneId", "previewId", "question", "scopes", "language", "modelId", "reasoningEffort"]
     },
     {
       "command": "load_ai_conversation_archive",

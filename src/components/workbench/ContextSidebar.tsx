@@ -4,7 +4,7 @@ import type { CommandAvailability } from "../../app/command-availability";
 import type { PatchState } from "../../app/patch-state";
 import type { ContextTab } from "../../app/workbench-state";
 import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
-import { INITIAL_AI_STATE, type AiContextScope, type AiSemanticPatchSuggestion, type AiState } from "../../app/ai-state";
+import { INITIAL_AI_STATE, type AiContextScope, type AiProviderProfile, type AiSemanticPatchSuggestion, type AiState } from "../../app/ai-state";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
 import { CodexAssistantPanel } from "./CodexAssistantPanel";
 import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
@@ -30,6 +30,17 @@ interface ContextSidebarProps {
   onAiInstall?: () => void;
   onAiRefresh?: () => void;
   onAiDisconnect?: () => void;
+  onAiProviderSelect?: (profileId: string) => void;
+  onAiProviderTest?: () => void;
+  onAiProviderRefreshModels?: () => void;
+  onAiProviderSave?: (profile: AiProviderProfile) => void;
+  onAiProviderDelete?: () => void;
+  onAiCodexDeviceLogin?: () => void;
+  onAiCodexApiKeyLogin?: (apiKey: string) => void;
+  onAiCodexCancelLogin?: () => void;
+  onAiCodexLogout?: () => void;
+  onAiProviderSecret?: (secret: string) => void;
+  onAiProviderClearSecret?: () => void;
   onAiScopeToggle?: (scope: AiContextScope) => void;
   onAiModelChange?: (modelId: string) => void;
   onAiEffortChange?: (effort: string) => void;
@@ -85,6 +96,17 @@ export function ContextSidebar({
   onAiInstall = () => undefined,
   onAiRefresh = () => undefined,
   onAiDisconnect = () => undefined,
+  onAiProviderSelect = () => undefined,
+  onAiProviderTest = () => undefined,
+  onAiProviderRefreshModels = () => undefined,
+  onAiProviderSave = () => undefined,
+  onAiProviderDelete = () => undefined,
+  onAiCodexDeviceLogin = () => undefined,
+  onAiCodexApiKeyLogin = () => undefined,
+  onAiCodexCancelLogin = () => undefined,
+  onAiCodexLogout = () => undefined,
+  onAiProviderSecret = () => undefined,
+  onAiProviderClearSecret = () => undefined,
   onAiScopeToggle = () => undefined,
   onAiModelChange = () => undefined,
   onAiEffortChange = () => undefined,
@@ -252,6 +274,17 @@ export function ContextSidebar({
           onInstall={onAiInstall}
           onRefresh={onAiRefresh}
           onDisconnect={onAiDisconnect}
+          onProviderSelect={onAiProviderSelect}
+          onProviderTest={onAiProviderTest}
+          onProviderRefreshModels={onAiProviderRefreshModels}
+          onProviderSave={onAiProviderSave}
+          onProviderDelete={onAiProviderDelete}
+          onCodexDeviceLogin={onAiCodexDeviceLogin}
+          onCodexApiKeyLogin={onAiCodexApiKeyLogin}
+          onCodexCancelLogin={onAiCodexCancelLogin}
+          onCodexLogout={onAiCodexLogout}
+          onProviderSecret={onAiProviderSecret}
+          onProviderClearSecret={onAiProviderClearSecret}
           onScopeToggle={onAiScopeToggle}
           onModelChange={onAiModelChange}
           onEffortChange={onAiEffortChange}

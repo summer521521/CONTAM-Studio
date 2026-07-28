@@ -16,6 +16,7 @@ import { TopBar } from "./TopBar";
 import { INITIAL_RESULT_STATE } from "../../app/result-state";
 import { INITIAL_RESULT_EXPORT_STATE } from "../../app/result-export-state";
 import { INITIAL_RUN_STATE } from "../../app/run-state";
+import { INITIAL_AI_STATE, type AiProviderView } from "../../app/ai-state";
 
 const project: ProjectInspection = {
   schema_version: "1.0",
@@ -78,6 +79,25 @@ const zoneResult = {
   samples: [{ index: 0, day_of_year: 1, day_type: null, sim_time_seconds: 0, temperature_k: 293.15, reference_pressure_pa: -1.4222, air_density_kg_m3: 1.2041 }],
   day_type_source: "not_available_in_simread_nfr_v1",
   time_contract: "elapsed_seconds_from_first_sample",
+};
+
+const geminiProvider: AiProviderView = {
+  profile_id: "gemini-profile",
+  preset_id: "gemini",
+  display_name: "Google Gemini",
+  protocol: "openai_chat_completions",
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
+  auth_kind: "api_key",
+  built_in: true,
+  network_scope: "remote_https",
+  secret_state: "missing",
+  connection_status: "unknown",
+  catalog_verified: false,
+  models: [],
+  manual_model_ids: [],
+  selected_model_id: null,
+  config_revision: 1,
+  capabilities: { model_catalog: true, streaming: true, token_usage: true, structured_json_schema: true },
 };
 
 beforeAll(async () => {
@@ -419,6 +439,25 @@ describe("real project components", () => {
     );
     expect(notConfigured).toContain("ContamX未配置");
     expect(notConfigured).not.toContain("internal detail");
+  });
+
+  it("reports the selected Provider without exposing Codex CLI wording", () => {
+    const markup = renderToStaticMarkup(
+      <StatusBar
+        theme="light"
+        projectState={state}
+        runState={INITIAL_RUN_STATE}
+        aiState={{
+          ...INITIAL_AI_STATE,
+          status: "installed",
+          cliProbe: { found: true, version: "1.2.3", source: "path" },
+          providerProfiles: [geminiProvider],
+          providerProfileId: geminiProvider.profile_id,
+        }}
+      />,
+    );
+    expect(markup).toContain("AI：Google Gemini · 未连接");
+    expect(markup).not.toContain("Codex CLI");
   });
 
   it("keeps all 577 raw samples in the equivalent semantic table", () => {

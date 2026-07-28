@@ -9,6 +9,7 @@ const root = path.resolve(
   rootArgument >= 0 ? process.argv[rootArgument + 1] : process.cwd(),
 );
 const strictGeneratedPermissions = process.argv.includes("--strict-generated-permissions");
+const EXPECTED_COMMAND_COUNT = 62;
 const failures = [];
 
 function read(relativePath) {
@@ -94,7 +95,7 @@ function extractRustCommands(sourceText) {
     fail("Rust generate_handler! list is missing");
     return [];
   }
-  return [...handler[1].matchAll(/\b(zone_bridge::(?:simulation_loop|attachment_center)|zone_bridge|codex_app_server|release|close_protocol)::([A-Za-z0-9_]+)\b/g)].map(
+  return [...handler[1].matchAll(/\b(zone_bridge::(?:simulation_loop|attachment_center)|zone_bridge|codex_app_server|ai_provider|release|close_protocol)::([A-Za-z0-9_]+)\b/g)].map(
     ([, sourceModule, command]) => ({
       rustModule: sourceModule.startsWith("zone_bridge") ? "zone_bridge" : sourceModule,
       command,
@@ -148,8 +149,8 @@ function check() {
   }
 
   const commands = Array.isArray(registry.commands) ? registry.commands : [];
-  if (commands.length !== 52) {
-    fail(`registry must contain exactly 52 commands, got ${commands.length}`);
+  if (commands.length !== EXPECTED_COMMAND_COUNT) {
+    fail(`registry must contain exactly ${EXPECTED_COMMAND_COUNT} commands, got ${commands.length}`);
   }
   const commandNames = commands.map((entry) => entry.command);
   if (new Set(commandNames).size !== commandNames.length) {
@@ -231,8 +232,8 @@ function check() {
   } finally {
     typeScriptApi.close();
   }
-  if (invokes.length !== 52) {
-    fail(`desktop-api.ts must contain exactly 52 invoke wrappers, got ${invokes.length}`);
+  if (invokes.length !== EXPECTED_COMMAND_COUNT) {
+    fail(`desktop-api.ts must contain exactly ${EXPECTED_COMMAND_COUNT} invoke wrappers, got ${invokes.length}`);
   }
   const expectedByCommand = new Map(commands.map((entry) => [entry.command, entry]));
   compareSets(
@@ -263,5 +264,5 @@ if (failures.length > 0) {
   }
   process.exitCode = 1;
 } else {
-    console.log("Tauri command contract passed: 52 commands, exact Rust/capability/permission/TypeScript sets.");
+    console.log(`Tauri command contract passed: ${EXPECTED_COMMAND_COUNT} commands, exact Rust/capability/permission/TypeScript sets.`);
 }

@@ -4,7 +4,7 @@ import type { AppTheme } from "../../app/workbench-state";
 import type { ProjectState } from "../../app/project-state";
 import { projectFileName } from "../../app/project-state";
 import type { RunState } from "../../app/run-state";
-import type { AiState } from "../../app/ai-state";
+import type { AiConnectionStatus, AiState } from "../../app/ai-state";
 
 interface StatusBarProps {
   theme: AppTheme;
@@ -22,6 +22,13 @@ export function StatusBar({ theme, projectState, runState, aiState }: StatusBarP
       : runState.issue?.code === "contamx_solver_not_configured"
         ? t("status.contamxNotConfigured")
         : t("status.contamx");
+  const selectedProvider = aiState?.providerProfiles.find((profile) => profile.profile_id === aiState.providerProfileId);
+  const providerLabel = selectedProvider?.preset_id === "codex"
+    ? t("assistant.codexProviderLabel")
+    : selectedProvider?.preset_id === "openai"
+      ? t("assistant.openaiProviderLabel")
+      : selectedProvider?.display_name ?? t("assistant.provider");
+  const aiStatus = aiState ? genericAiStatus(aiState.status, t) : t("assistant.statusBar.notConnected");
 
   return (
     <footer className="status-bar">
@@ -56,8 +63,16 @@ export function StatusBar({ theme, projectState, runState, aiState }: StatusBarP
       </span>
       <span className="status-item">
         {aiState?.status === "available" ? <Bot size={13} aria-hidden="true" /> : <BotOff size={13} aria-hidden="true" />}
-        {aiState ? t(`assistant.status.${aiState.status}`) : t("status.ai")}
+        {t("assistant.statusBar.provider", { provider: providerLabel, status: aiStatus })}
       </span>
     </footer>
   );
+}
+
+function genericAiStatus(status: AiConnectionStatus, translate: (key: string) => string) {
+  if (status === "available") return translate("assistant.statusBar.connected");
+  if (["probing", "connecting", "installing"].includes(status)) return translate("assistant.statusBar.checking");
+  if (["generating", "interrupting"].includes(status)) return translate("assistant.statusBar.working");
+  if (status === "error") return translate("assistant.statusBar.error");
+  return translate("assistant.statusBar.notConnected");
 }

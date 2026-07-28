@@ -70,6 +70,12 @@ fn archive_test_preview(context: &AiTrustedContext) -> AiContextDisclosureView {
             contains_complete_result_series: false,
             model_request_uses_network: true,
         },
+        provider_profile_id: crate::ai_provider::codex_profile_id().to_string(),
+        provider_display_name: "Codex".to_string(),
+        provider_protocol: "codex_app_server".to_string(),
+        destination_origin: None,
+        network_scope: "codex_managed".to_string(),
+        model_id: "test-model".to_string(),
     }
 }
 
@@ -386,6 +392,50 @@ fn local_conversation_archive_rejects_corrupt_or_sensitive_storage() {
 }
 
 #[test]
+fn local_conversation_archive_migrates_v1_to_provider_bound_v2_atomically() {
+    let root = test_root("archive-migration");
+    let path = root.join("archive.json");
+    let baseline = "f".repeat(64);
+    let revision_id = "00000000-0000-5000-8000-000000000001";
+    let zone_id = "00000000-0000-5000-8000-000000000003";
+    let legacy = AiConversationArchiveFileV1 {
+        schema_version: "1.0".to_string(),
+        persistence_enabled: true,
+        entries: vec![StoredAiConversationArchiveEntryV1 {
+            entry_id: "00000000-0000-5000-8000-000000000010".to_string(),
+            baseline_source_sha256: baseline,
+            revision_id: revision_id.to_string(),
+            revision_number: 1,
+            zone_id: zone_id.to_string(),
+            zone_name: "One".to_string(),
+            context_fingerprint: "00000000-0000-5000-8000-000000000011".to_string(),
+            language: "en".to_string(),
+            model_id: "model-a".to_string(),
+            reasoning_effort: "low".to_string(),
+            included_scopes: vec!["selected_zone".to_string()],
+            completed_at_unix_ms: 1,
+            question: "Explain this Zone.".to_string(),
+            answer: archive_test_answer(),
+        }],
+    };
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+
+    let migrated = read_archive_file(&path).unwrap();
+    assert_eq!(migrated.schema_version, "2.0");
+    assert_eq!(migrated.entries.len(), 1);
+    assert_eq!(migrated.entries[0].provider_protocol, "codex_app_server");
+    assert_eq!(
+        migrated.entries[0].provider_profile_id,
+        crate::ai_provider::codex_profile_id().to_string()
+    );
+    assert!(path.with_extension("json.bak").exists());
+    let round_trip = read_archive_file(&path).unwrap();
+    assert_eq!(round_trip.entries[0].provider_display_name, "Codex");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn tool_events_are_blocked_without_retaining_payloads() {
     for item_type in TOOL_ITEM_TYPES {
         let value = json!({
@@ -552,6 +602,50 @@ fn account_response_exposes_only_safe_subscription_state() {
 }
 
 #[test]
+fn account_response_accepts_api_key_auth_mode_without_exposing_credentials() {
+    let view = parse_account_response(&json!({
+        "account": {
+            "type": "apiKey",
+            "planType": "api"
+        }
+    }))
+    .unwrap();
+    assert!(view.authenticated);
+    assert_eq!(view.auth_mode.as_deref(), Some("apikey"));
+    assert_eq!(view.plan_type.as_deref(), Some("api"));
+    assert!(!serde_json::to_string(&view).unwrap().contains("apiKey"));
+}
+
+#[test]
+fn device_login_response_is_restricted_to_safe_fields() {
+    let login = parse_device_login(&json!({
+        "type": "chatgptDeviceCode",
+        "loginId": "00000000-0000-4000-8000-000000000001",
+        "verificationUrl": "https://auth.openai.com/codex/device",
+        "userCode": "ABCD-EFGH"
+    }))
+    .unwrap();
+    assert_eq!(login.login_id, "00000000-0000-4000-8000-000000000001");
+    assert_eq!(
+        login.verification_url.as_deref(),
+        Some("https://auth.openai.com/codex/device")
+    );
+    assert_eq!(login.user_code.as_deref(), Some("ABCD-EFGH"));
+    assert_eq!(login.status, "pending");
+    assert_eq!(
+        parse_device_login(&json!({
+            "type": "chatgptDeviceCode",
+            "loginId": "00000000-0000-4000-8000-000000000001",
+            "verificationUrl": "http://auth.openai.com/codex/device",
+            "userCode": "ABCD-EFGH"
+        }))
+        .unwrap_err()
+        .code,
+        "ai_provider_auth_failed"
+    );
+}
+
+#[test]
 fn model_catalog_preserves_server_order_and_skips_hidden_models() {
     let mut models = Vec::new();
     let cursor = append_model_page(
@@ -662,6 +756,7 @@ fn notification_poll_timeout_is_not_treated_as_disconnect() {
         stdin: Mutex::new(None),
         pending: Mutex::new(HashMap::new()),
         notifications: Mutex::new(receiver),
+        deferred_notifications: Mutex::new(VecDeque::new()),
         next_id: AtomicU64::new(1),
         disconnected: AtomicBool::new(false),
         stdout_thread: Mutex::new(None),
@@ -692,6 +787,7 @@ fn close_keeps_runtime_until_blocked_stream_threads_are_joined() {
         stdin: Mutex::new(None),
         pending: Mutex::new(HashMap::new()),
         notifications: Mutex::new(receiver),
+        deferred_notifications: Mutex::new(VecDeque::new()),
         next_id: AtomicU64::new(1),
         disconnected: AtomicBool::new(false),
         stdout_thread: Mutex::new(Some(blocked_stdout)),
@@ -750,6 +846,7 @@ fn incomplete_close_is_retained_until_a_later_retry_finishes() {
         stdin: Mutex::new(None),
         pending: Mutex::new(HashMap::new()),
         notifications: Mutex::new(receiver),
+        deferred_notifications: Mutex::new(VecDeque::new()),
         next_id: AtomicU64::new(1),
         disconnected: AtomicBool::new(false),
         stdout_thread: Mutex::new(Some(blocked_stdout)),
@@ -780,6 +877,7 @@ fn stale_connection_is_cleared_before_a_catalog_can_be_reused() {
         stdin: Mutex::new(None),
         pending: Mutex::new(HashMap::new()),
         notifications: Mutex::new(receiver),
+        deferred_notifications: Mutex::new(VecDeque::new()),
         next_id: AtomicU64::new(1),
         disconnected: AtomicBool::new(false),
         stdout_thread: Mutex::new(None),
@@ -854,6 +952,7 @@ fn replaced_connection_cannot_be_used_to_start_a_turn() {
         stdin: Mutex::new(None),
         pending: Mutex::new(HashMap::new()),
         notifications: Mutex::new(first_receiver),
+        deferred_notifications: Mutex::new(VecDeque::new()),
         next_id: AtomicU64::new(1),
         disconnected: AtomicBool::new(false),
         stdout_thread: Mutex::new(None),
@@ -867,6 +966,7 @@ fn replaced_connection_cannot_be_used_to_start_a_turn() {
         stdin: Mutex::new(None),
         pending: Mutex::new(HashMap::new()),
         notifications: Mutex::new(second_receiver),
+        deferred_notifications: Mutex::new(VecDeque::new()),
         next_id: AtomicU64::new(1),
         disconnected: AtomicBool::new(false),
         stdout_thread: Mutex::new(None),
@@ -1371,6 +1471,12 @@ fn preview_is_bound_to_language_model_and_reasoning_effort() {
                 contains_complete_result_series: false,
                 model_request_uses_network: true,
             },
+            provider_profile_id: crate::ai_provider::codex_profile_id().to_string(),
+            provider_display_name: "Codex".to_string(),
+            provider_protocol: "codex_app_server".to_string(),
+            destination_origin: None,
+            network_scope: "codex_managed".to_string(),
+            model_id: "test-model".to_string(),
         },
         trusted,
         language: "en".into(),

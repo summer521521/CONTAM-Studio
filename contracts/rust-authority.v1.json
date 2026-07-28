@@ -103,7 +103,10 @@
           "clear_all_ai_conversation_archive",
           "interrupt_readonly_ai_turn",
           "clear_readonly_ai_session",
-          "disconnect_codex_app_server"
+          "disconnect_codex_app_server",
+          "start_ai_provider_login",
+          "cancel_ai_provider_login",
+          "logout_ai_provider"
         ],
         "structs": [
           "AiDiagnostic",
@@ -115,6 +118,8 @@
           "DesktopCodexProbeResponse",
           "DesktopCodexConnectionResponse",
           "DesktopCodexInstallResponse",
+          "AiProviderLoginView",
+          "DesktopAiProviderLoginResponse",
           "AiContextDisclosureView",
           "AiDisclosureBoundary",
           "DesktopAiContextPreviewResponse",
@@ -132,6 +137,38 @@
           "AiConversationArchiveStore"
         ],
         "enums": [],
+        "traits": [],
+        "types": [],
+        "statics": [],
+        "constants": [],
+        "unions": [],
+        "reexports": [],
+        "modules": []
+      }
+    },
+    {
+      "path": "src-tauri/src/ai_provider/mod.rs",
+      "required_facade": {"functions": [], "reexports": [], "public_modules": []},
+      "expected": {
+        "functions": [
+          "list_ai_provider_profiles",
+          "save_ai_provider_profile",
+          "delete_ai_provider_profile",
+          "set_ai_provider_secret",
+          "delete_ai_provider_secret",
+          "test_ai_provider_connection",
+          "refresh_ai_provider_models"
+        ],
+        "structs": [
+          "AiProviderCapabilities",
+          "AiProviderProfile",
+          "AiProviderModelView",
+          "AiProviderView",
+          "DesktopAiProviderProfilesResponse",
+          "DesktopAiProviderActionResponse",
+          "DesktopAiProviderModelsResponse"
+        ],
+        "enums": ["AiProviderProtocol", "AiProviderAuthKind"],
         "traits": [],
         "types": [],
         "statics": [],

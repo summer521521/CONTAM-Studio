@@ -1,10 +1,17 @@
 # 当前状态
 
-记录日期：2026-07-27。
+记录日期：2026-07-28。
 
 当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.1.0桌面纵向路径包括受支持PRJ语义树、多对象草稿Patch、官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心及受审批AI仿真和结果解释。
 
 Windows x64便携版、NSIS和MSI安装器已生成并通过自动内容审计。用户已接受0.1.0 GUI和发布范围，并明确豁免独立干净Windows执行；这项豁免不是另一台机器的实测证据。代码签名与公开发布状态以[0.1.0发布说明](release/CONTAM-Studio-0.1.0-release-notes.md)为准。
+
+## Phase 6B 多 Provider 只读 AI 助手
+
+- Phase 6B 已实现并接通 Provider Profile、OpenAI Responses、OpenAI-compatible Chat Completions、Anthropic Messages、Windows Credential Manager 凭据边界、模型目录/手动模型回退和自定义端点配置。内置预设覆盖 OpenAI、Anthropic、Gemini、OpenRouter、DeepSeek、Ollama、LM Studio 与 vLLM。
+- Codex ChatGPT 登录路径继续保留，并增加设备码、OpenAI Platform API Key、取消和退出登录命令；HTTP Provider 与 Codex 共用可信上下文、预览失效、结构化回答、工具阻断、停止和 Archive v2 边界。
+- 已完成前端定向测试/构建、Provider Mock Server、Archive 回归、Rust/ACL/数据生命周期契约检查；修复最终门禁发现的旧 ACL 计数和 Clippy 告警后，`scripts/verify.ps1 -Mode Full` 通过，详见[Phase 6B验证记录](development/phase-6b-multi-provider-ai-verification.md)。
+- Codex 自动执行未读取真实密钥或调用真实付费 Provider；用户随后报告真实 Provider 请求、API Key 配置与使用、真实 AI 回答和本轮 GUI 验收通过，因此能力矩阵记录为 `manual_gui=passed`、`user_validated=passed`。具体 Provider/协议清单、设备码账户、费用与请求内容未逐项留存；安装包、干净机、签名和产品发布仍为 `not_run` 或未验证。本切片随当前 `main` 交付提交纳入，不能用合并状态代替发布证据。
 
 Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.1.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.1.0结论。
 

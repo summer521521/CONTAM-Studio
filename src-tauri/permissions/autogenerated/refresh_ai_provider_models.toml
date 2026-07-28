@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-refresh-ai-provider-models"
+description = "Enables the refresh_ai_provider_models command without any pre-configured scope."
+commands.allow = ["refresh_ai_provider_models"]
+
+[[permission]]
+identifier = "deny-refresh-ai-provider-models"
+description = "Denies the refresh_ai_provider_models command without any pre-configured scope."
+commands.deny = ["refresh_ai_provider_models"]
