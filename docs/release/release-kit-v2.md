@@ -3,7 +3,8 @@
 ## 资产
 
 - `CONTAM-Studio-v0.2.0-windows-x64-portable.zip`
-- `CONTAM Studio_0.2.0_x64-setup.exe`
+- `CONTAM-Studio-v0.2.0-windows-x64-setup.exe`
+- `CONTAM-Studio-v0.2.0-windows-x64.msi`
 - `CONTAM Studio_0.2.0_x64_en-US.msi`
 - `SHA256SUMS.txt`
 - `manifest.json`
@@ -29,7 +30,8 @@
 
 ```powershell
 Get-FileHash -Algorithm SHA256 ".\CONTAM-Studio-v0.2.0-windows-x64-portable.zip"
-Get-FileHash -Algorithm SHA256 ".\CONTAM Studio_0.2.0_x64-setup.exe"
+Get-FileHash -Algorithm SHA256 ".\CONTAM-Studio-v0.2.0-windows-x64-setup.exe"
+Get-FileHash -Algorithm SHA256 ".\CONTAM-Studio-v0.2.0-windows-x64.msi"
 Get-FileHash -Algorithm SHA256 ".\CONTAM Studio_0.2.0_x64_en-US.msi"
 ```
 

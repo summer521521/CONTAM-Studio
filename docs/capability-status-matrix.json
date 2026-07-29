@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-28T14:12:29.4156961Z",
+  "last_updated_utc": "2026-07-29T02:19:10.0055691Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -205,12 +205,29 @@
       "automated_verified": "passed",
       "manual_gui": "passed",
       "merged_to_main": "yes",
-      "packaged": "not_run",
+      "packaged": "yes",
       "user_validated": "passed",
       "evidence": [
         "docs/development/phase-6b-multi-provider-ai-verification.md",
         "docs/architecture/multi-provider-readonly-ai.md",
-        "docs/development/task-log/records/phase-6b-multi-provider-ai.md"
+        "docs/development/task-log/records/phase-6b-multi-provider-ai.md",
+        "docs/release/CONTAM-Studio-0.2.0-release-notes.md"
+      ]
+    },
+    {
+      "id": "expert-fix-01-runtime-process-distribution",
+      "name": "冻结Python Worker、Windows Job Object进程树与0.2.0发布闭环",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "not_required",
+      "merged_to_main": "yes",
+      "packaged": "yes",
+      "user_validated": "not_required",
+      "evidence": [
+        "docs/adr/ADR-017-package-frozen-worker-and-own-windows-process-trees.md",
+        "docs/development/task-log/records/expert-fix-01-v0-2-0-release.md",
+        "docs/release/CONTAM-Studio-0.2.0-release-notes.md",
+        "docs/release/release-kit-v2.md"
       ]
     },
     {
@@ -310,7 +327,7 @@
       "merged_to_main": "yes",
       "packaged": "yes",
       "user_validated": "passed",
-      "evidence": ["docs/release/agent-08-installer-clean-machine.md", "docs/release/CONTAM-Studio-0.1.0-release-notes.md", "docs/uat/manual-acceptance-matrix-v1.md"]
+      "evidence": ["docs/release/agent-08-installer-clean-machine.md", "docs/release/CONTAM-Studio-0.2.0-release-notes.md", "docs/release/known-limitations-0.2.0.md", "docs/uat/manual-acceptance-matrix-v1.md"]
     },
     {
       "id": "full-prj",

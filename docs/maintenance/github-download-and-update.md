@@ -9,7 +9,8 @@
 | 文件 | 用途 |
 | --- | --- |
 | `CONTAM-Studio-v<version>-windows-x64-portable.zip` | 含冻结Worker和许可证的完整便携包 |
-| `CONTAM Studio_<version>_x64-setup.exe` | 推荐的NSIS安装器 |
+| `CONTAM-Studio-v<version>-windows-x64-setup.exe` | 推荐的NSIS安装器 |
+| `CONTAM-Studio-v<version>-windows-x64.msi` | MSI安装器 |
 | `CONTAM Studio_<version>_x64_en-US.msi` | 适合Windows Installer管理的MSI |
 | `SHA256SUMS.txt` | 文件完整性校验 |
 | `manifest.json` | 版本、提交和包内文件哈希 |

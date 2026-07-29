@@ -37,6 +37,7 @@ token_usage:
 notes:
   - 未读取真实 Credential Manager、Codex 认证文件或用户 PRJ/SIM/CSV/真实 AppData。
   - Codex 本地执行未读取或调用真实付费 Provider；用户随后明确报告真实 Provider 请求、API Key 配置与真实 AI 回答全部验收成功；本记录随当前 main 交付提交纳入，安装包、签名和产品发布状态仍独立记录。
+  - 2026-07-29：Phase 6B 已随 `v0.2.0` 发布；便携 ZIP、未签名 NSIS/MSI、SHA-256 回下载校验和 GitHub Release 资产证明通过。独立干净 Windows 安装、本机安装和 Authenticode 签名仍未执行。
   - 定向证据包含前端30项测试、Provider Rust 15项、Codex/Archive Rust 50项、Tauri命令/authority/数据生命周期契约及变异测试、Windows CI契约及变异测试、生产构建和Cargo check。
   - Full 首次运行发现旧 ACL 命令计数和新增 Provider 的 Clippy 告警；修复后最终 Full 通过，未以失败运行作为完成证据。
   - 用户本轮 GUI 问题清单：底部状态栏不应显示 Codex CLI 安装状态；Gemini Provider 不应显示 Codex CLI 版本；Codex 登录与 OpenAI Platform API Key 需要视觉区分；需要说明 Codex App Server 与直接 HTTP Provider 的架构边界，以及其他本地 Agent 登录不自动复用。

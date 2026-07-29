@@ -57,9 +57,15 @@ $portableZipName = "CONTAM-Studio-v$($version)-windows-x64-portable.zip"
 $portableZip = Join-Path $assets $portableZipName
 Compress-Archive -Path (Join-Path $portable "*") -DestinationPath $portableZip -CompressionLevel Optimal
 
-foreach ($installer in @(Get-ChildItem -LiteralPath $installers -File | Where-Object { $_.Extension -in @(".exe", ".msi") })) {
-  Copy-Item -LiteralPath $installer.FullName -Destination (Join-Path $assets $installer.Name)
+$nsisInstaller = @(Get-ChildItem -LiteralPath $installers -File | Where-Object { $_.Extension -eq ".exe" })
+$msiInstaller = @(Get-ChildItem -LiteralPath $installers -File | Where-Object { $_.Extension -eq ".msi" })
+if ($nsisInstaller.Count -ne 1 -or $msiInstaller.Count -ne 1) {
+  throw "release inputs must contain exactly one NSIS installer and one MSI"
 }
+$nsisAssetName = "CONTAM-Studio-v$($version)-windows-x64-setup.exe"
+$msiAssetName = "CONTAM-Studio-v$($version)-windows-x64.msi"
+Copy-Item -LiteralPath $nsisInstaller[0].FullName -Destination (Join-Path $assets $nsisAssetName)
+Copy-Item -LiteralPath $msiInstaller[0].FullName -Destination (Join-Path $assets $msiAssetName)
 if ($RequireInstallers -and
     @(Get-ChildItem -LiteralPath $assets -File | Where-Object { $_.Extension -in @(".exe", ".msi") }).Count -ne 2) {
   throw "release assets must contain exactly one NSIS installer and one MSI"

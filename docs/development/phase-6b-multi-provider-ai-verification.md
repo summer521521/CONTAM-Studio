@@ -83,3 +83,7 @@ powershell -NoProfile -File scripts/verify.ps1 -Mode Full
 
 - 具体 Provider 名称、协议覆盖、费用和账户状态未写入本记录。
 - Windows 打包、安装、干净机、签名和发布仍未验收。
+
+## 0.2.0 发布关联
+
+Phase 6B 已随提交 `7500aff68a78ef4c1807b2ce79e5f5f68325717b` 纳入稳定版 `v0.2.0`。便携 ZIP、NSIS 和 MSI 已生成、发布、回下载并通过 SHA-256 校验，GitHub Release 资产证明工作流通过；安装器仍为未签名构建，独立干净 Windows 安装与本机安装均未执行。本节只更新交付状态，不改写上文 Phase 6B 原始自动测试和用户真实 Provider/GUI 验收证据。

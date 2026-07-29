@@ -4,11 +4,11 @@
 task_id: expert-fix-01-v0-2-0-release
 phase: EXPERT-FIX-01 / Release 0.2.0
 title: 冻结Python运行时、Windows进程树治理与Phase 6B正式发布
-status: in_progress
+status: completed
 record_origin: live
 started_at_utc: 2026-07-28T14:48:08.0253760Z
-ended_at_utc: null
-duration_seconds: null
+ended_at_utc: 2026-07-29T02:19:10.0055691Z
+duration_seconds: 41462
 base_commit: 8a1cfa72912be801c099f7e439f26907668bf16e
 branch: codex/release-v0.2.0
 task_source: 用户明确要求一次性完成本次更新的修复、验证、打包、推送、标签和GitHub Release闭环
@@ -34,7 +34,13 @@ validation:
   - Frontend Vitest passed: 175 tests
   - Rust tests passed: 122 passed, 1 ignored
   - Rust format, Clippy, Cargo check, production build and mutation contracts passed
-delivery_status: release_candidate_ready_for_exact_commit_build
+  - Frozen Python worker detached protocol and 7-zone PRJ read passed without source tree; source fixture unchanged
+  - Portable ZIP, unsigned NSIS and unsigned MSI built from commit 7500aff68a78ef4c1807b2ce79e5f5f68325717b and passed release artifact audit
+  - GitHub Windows CI run 30415119095 passed
+  - Stable GitHub Release v0.2.0 published and final downloaded assets matched SHA256SUMS.txt
+  - GitHub release asset attestation run 30416432745 passed
+  - Independent clean-Windows installation not run; local installer installation not run to protect host registry; Authenticode remains unsigned
+delivery_status: published_v0.2.0
 token_usage:
   input_tokens: null
   cached_input_tokens: null
@@ -45,4 +51,7 @@ notes:
   - 本任务按一次性发布闭环推进，中途不把本地提交、推送或单个安装包当成最终交付。
   - 默认候选版本为0.2.0；如现有发布契约证明需要不同版本，将在创建远端标签前统一修正。
   - 未读取真实Credential Manager、Codex认证文件、Provider Key或用户工程数据。
+  - Release: https://github.com/summer521521/CONTAM-Studio/releases/tag/v0.2.0
+  - Windows CI: https://github.com/summer521521/CONTAM-Studio/actions/runs/30415119095
+  - Release attestation: https://github.com/summer521521/CONTAM-Studio/actions/runs/30416432745
 ```
