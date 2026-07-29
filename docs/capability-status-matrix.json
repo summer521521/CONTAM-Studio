@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-29T07:52:00Z",
+  "last_updated_utc": "2026-07-29T08:28:32Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -11,7 +11,8 @@
     "manual_gui": ["passed", "pending_user", "not_run", "not_required", "failed", "unknown"],
     "merged_to_main": ["yes", "no", "unknown"],
     "packaged": ["yes", "no", "not_run", "unknown"],
-    "user_validated": ["passed", "pending_user", "not_run", "not_required", "unknown"]
+    "user_validated": ["passed", "pending_user", "not_run", "not_required", "unknown"],
+    "released": ["yes", "no", "pending", "unknown"]
   },
   "rules": [
     "implemented不等于automated_verified、manual_gui、merged_to_main、packaged或user_validated。",
@@ -220,9 +221,14 @@
       "implemented": "complete",
       "automated_verified": "passed",
       "manual_gui": "passed",
-      "merged_to_main": "no",
+      "merged_to_main": "yes",
       "packaged": "yes",
       "user_validated": "passed",
+      "released": "yes",
+      "release_version": "v0.3.0",
+      "release_url": "https://github.com/summer521521/CONTAM-Studio/releases/tag/v0.3.0",
+      "release_commit": "72b7d09637ba8bb695b47337a4799531858a055c",
+      "released_at_utc": "2026-07-29T08:28:32Z",
       "evidence": [
         "docs/adr/ADR-018-adopt-user-first-online-enhanced-runtime.md",
         "docs/user-guide/local-data-and-privacy.md",

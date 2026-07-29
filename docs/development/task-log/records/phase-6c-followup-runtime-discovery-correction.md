@@ -35,17 +35,22 @@ validation:
   - NIST ZIP SHA-256：3F11B44513F1046D378226B3D63644493B78F0E8241DC70F83E319A458A14052；四个锁定 runtime 文件逐文件哈希一致
   - Portable 目录及解压后的 Portable ZIP 均通过 node scripts/audit-release.mjs
   - 隔离命令行 smoke：ContamX --Version 退出码 0、输出 3.4.0.3 64 bit；官方 test_GetPrjInfo.prj 副本退出码 0、生成 545892 字节 SIM；SimRead Windows 文件版本 3.4.0.3；源夹具未变化
-  - 未运行宿主机安装/卸载、真实 Provider、签名或发布；用户已在本记录候选包上完成 GUI 验收并报告成功
+  - 未运行宿主机安装/卸载、真实 Provider 或签名；用户已在本记录候选包上完成 GUI 验收并报告成功
+  - GitHub Release 已发布为非 Draft、非 Prerelease；6 个资产已上传，GitHub 记录的大小与 SHA-256 均与本地产物一致
   - git diff --check：通过
-delivery_status: working_tree_only_and_external_candidate_artifacts
-source_tree_dirty: true
+delivery_status: github_release_published
+source_tree_dirty: false
 automated_verified: passed
 packaged: passed
 manual_gui: passed
 real_provider: not_run
 user_validated: passed
 signed: not_run
-released: no
+released: yes
+release_version: v0.3.0
+release_url: https://github.com/summer521521/CONTAM-Studio/releases/tag/v0.3.0
+release_commit: 72b7d09637ba8bb695b47337a4799531858a055c
+released_at_utc: 2026-07-29T08:28:32Z
 token_usage:
   input_tokens: null
   cached_input_tokens: null
@@ -63,6 +68,6 @@ candidate_assets:
 notes:
   - 之前的候选包只证明 runtime 文件存在，未证明应用从安装目录发现 runtime；该候选包已被本记录产物替代，不要继续使用旧包。
   - 未读取真实 API Key、Credential Manager、Cookie、WebView 数据库或真实 AppData；未修改真实用户文件。
-  - 用户于本记录候选包上报告 GUI 验收成功；真实 Provider、签名和发布仍未执行。
-  - 未提交、推送、打标签或发布；候选包未签名。
+  - 用户于本记录候选包上报告 GUI 验收成功；真实 Provider 未执行，Windows 构建未签名。
+  - 功能提交、main 推送、annotated tag 和 GitHub Release 已完成；发布证据由后续文档提交记录。
 ```
