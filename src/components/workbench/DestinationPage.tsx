@@ -11,6 +11,7 @@ import type { StorageUsageView, StudioSetup, ToolKind } from "../../app/release-
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { StudyWorkspace } from "./StudyWorkspace";
 import { ReleaseSettings } from "./ReleaseSettings";
+import { HoverHint } from "./HoverHint";
 
 interface DestinationPageProps {
   destination: Exclude<WorkbenchDestination, "project">;
@@ -143,12 +144,12 @@ export function DestinationPage({
     <section className="destination-page" aria-labelledby="destination-title">
       <header className="destination-header"><Settings2 size={22} aria-hidden="true" /><div><span>{t("toolbar.settings")}</span><h1 id="destination-title">{t("settings.destinationTitle")}</h1></div></header>
       <section className="destination-section settings-list">
-        <div><strong>{t("settings.languageTitle")}</strong><p>{t("settings.languageBody")}</p></div>
-        <div><strong>{t("settings.privacyTitle")}</strong><p>{t("settings.privacyBody")}</p></div>
-        <div><strong>{t("settings.toolTitle")}</strong><p>{t("settings.toolBody")}</p></div>
-        <div><strong>{t("settings.storageTitle")}</strong><p>{t("settings.storageBody")}</p></div>
-        <div><strong>{t("settings.helpTitle")}</strong><p>{t("settings.helpBody")}</p></div>
-        <div><strong>{t("settings.recoveryTitle")}</strong><p>{t("settings.recoveryBody")}</p></div>
+        <div><strong>{t("settings.languageTitle")} <HoverHint label={t("settings.languageBody")} /></strong></div>
+        <div><strong>{t("settings.privacyTitle")} <HoverHint label={t("settings.privacyBody")} /></strong></div>
+        <div><strong>{t("settings.toolTitle")} <HoverHint label={t("settings.toolBody")} /></strong></div>
+        <div><strong>{t("settings.storageTitle")} <HoverHint label={t("settings.storageBody")} /></strong></div>
+        <div><strong>{t("settings.helpTitle")} <HoverHint label={t("settings.helpBody")} /></strong></div>
+        <div><strong>{t("settings.recoveryTitle")} <HoverHint label={t("settings.recoveryBody")} /></strong></div>
         <ReleaseSettings
           setup={setup}
           language={language}

@@ -31,6 +31,15 @@ for (const marker of ["resolve-packaging-toolchain.ps1", "F:\\Codex_File\\toolch
   if (!build.includes(marker)) failures.push(`installer build boundary missing ${marker}`);
 }
 if (build.includes("[Environment]::SetEnvironmentVariable") || build.includes("Set-ItemProperty")) failures.push("installer build attempts persistent system mutation");
+const repackage = read("scripts/repackage-bundles-local.ps1");
+for (const marker of ['GetOptions} $CMDLINE "/_?="', 'ReadRegStr $R0 SHCTX "${MANUPRODUCTKEY}" ""', 'BM_SETCHECK} ${BST_UNCHECKED}', 'MUI_UNCONFIRMPAGE_TEXT_TOP', 'ShowWindow $4 ${SW_HIDE}', 'ShowWindow $5 ${SW_HIDE}', "runtime cleanup", "final RMDir"]) {
+  if (!repackage.includes(marker)) failures.push(`uninstaller cleanup marker missing ${marker}`);
+}
+if (repackage.includes('StrCpy $INSTDIR "$EXEDIR"')) failures.push("uninstaller must not use the NSIS temporary $EXEDIR");
+const isolated = read("scripts/tests/test-installer-isolated.ps1");
+for (const marker of ["runtime\\contam-tools", "NSIS uninstall left application directory", "user data sentinel"]) {
+  if (!isolated.includes(marker)) failures.push(`isolated uninstall test missing ${marker}`);
+}
 const closure = read("scripts/release-closure.ps1");
 for (const marker of ["agent-08", "ToolchainRoot", "release-diagnostics", "audit-release", "clean_windows_install = \"blocked\"", "signature = \"unsigned\""]) {
   if (!closure.includes(marker)) failures.push(`release closure marker missing ${marker}`);

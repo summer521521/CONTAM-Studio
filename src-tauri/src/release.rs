@@ -17,6 +17,15 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
+#[cfg(windows)]
+use std::ffi::c_void;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::{
+    GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW,
+};
+
 use crate::controlled_process::ControlledChild;
 
 pub const CONFIG_SCHEMA_VERSION: u32 = 1;
@@ -387,18 +396,39 @@ fn bundled_tool_from_root(root: &Path, kind: ToolKind) -> Option<ToolState> {
     Some(state)
 }
 
+fn push_unique_tool_root(roots: &mut Vec<PathBuf>, root: PathBuf) {
+    if !roots.iter().any(|existing| existing == &root) {
+        roots.push(root);
+    }
+}
+
+fn add_packaged_tool_root_variants(roots: &mut Vec<PathBuf>, base: &Path) {
+    push_unique_tool_root(roots, base.join("runtime").join("contam-tools"));
+    push_unique_tool_root(roots, base.join("contam-tools"));
+}
+
 fn bundled_tool_roots(app: &AppHandle) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     #[cfg(debug_assertions)]
     if let Ok(value) = std::env::var("CONTAM_STUDIO_CONTAM_TOOLS_DIR") {
         let path = PathBuf::from(value);
         if path.is_absolute() {
-            roots.push(path);
+            push_unique_tool_root(&mut roots, path);
         }
     }
     if let Ok(resource) = app.path().resource_dir() {
-        roots.push(resource.join("runtime").join("contam-tools"));
-        roots.push(resource.join("contam-tools"));
+        // Tauri's bundled resource directory is normally `<install>\\resources`,
+        // while the CONTAM runtime is deliberately packaged as a sibling at
+        // `<install>\\runtime\\contam-tools`. Keep the resource-relative probes
+        // for development layouts, then probe the executable directory used by
+        // NSIS/MSI and Portable bundles.
+        add_packaged_tool_root_variants(&mut roots, &resource);
+        if let Some(exe_dir) = resource.parent() {
+            add_packaged_tool_root_variants(&mut roots, exe_dir);
+        }
+    }
+    if let Ok(exe_dir) = app.path().executable_dir() {
+        add_packaged_tool_root_variants(&mut roots, &exe_dir);
     }
     roots
 }
@@ -684,67 +714,38 @@ fn tool_from_path(kind: ToolKind, path: Option<&Path>) -> ToolState {
             detail: Some("所选文件不是Windows可执行文件。".to_owned()),
         };
     }
-    let mut command = Command::new(path);
-    command
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = match ControlledChild::spawn(&mut command) {
-        Ok(value) => value,
-        Err(_) => {
-            return ToolState {
-                kind: kind_name,
-                status: ToolStatus::ProbeFailed,
-                path: Some(path_string),
-                version: None,
-                detail: Some("无法启动版本探测。".to_owned()),
-            }
-        }
-    };
-    let start = std::time::Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if start.elapsed() >= PROBE_TIMEOUT => {
-                let _ = child.kill();
+    let (version, probe_text) = match &kind {
+        ToolKind::Contamx => match command_probe_version(path) {
+            Ok(value) => value,
+            Err(detail) => {
                 return ToolState {
                     kind: kind_name,
                     status: ToolStatus::ProbeFailed,
                     path: Some(path_string),
                     version: None,
-                    detail: Some("版本探测超时。".to_owned()),
-                };
-            }
-            Ok(None) => thread::sleep(Duration::from_millis(30)),
-            Err(_) => {
-                return ToolState {
-                    kind: kind_name,
-                    status: ToolStatus::ProbeFailed,
-                    path: Some(path_string),
-                    version: None,
-                    detail: Some("读取版本探测状态失败。".to_owned()),
+                    detail: Some(detail.to_owned()),
                 }
             }
-        }
-    }
-    let output = child.wait_with_output().ok();
-    let text = output
-        .as_ref()
-        .map(|value| {
-            let mut combined = String::from_utf8_lossy(&value.stdout).into_owned();
-            combined.push_str(&String::from_utf8_lossy(&value.stderr));
-            combined.chars().take(MAX_PROBE_OUTPUT).collect::<String>()
-        })
-        .unwrap_or_default();
-    let version = version_token(&text);
+        },
+        // Official SimRead does not expose a version switch. Its Windows
+        // VERSIONINFO resource is the same identity evidence used by the
+        // Python runner, so probing it must not invoke SimRead with a fake
+        // input file such as `--version.sim`.
+        ToolKind::Simread => (windows_file_version(path), String::new()),
+    };
     if version.is_none() {
         return ToolState {
             kind: kind_name,
             status: ToolStatus::ProbeFailed,
             path: Some(path_string),
             version: None,
-            detail: Some("版本输出不可识别。".to_owned()),
+            detail: Some(
+                match kind {
+                    ToolKind::Contamx => "版本输出不可识别。",
+                    ToolKind::Simread => "无法读取Windows版本资源。",
+                }
+                .to_owned(),
+            ),
         };
     }
     if !version.as_deref().is_some_and(supported_version) {
@@ -756,7 +757,7 @@ fn tool_from_path(kind: ToolKind, path: Option<&Path>) -> ToolState {
             detail: Some("工具版本不在当前支持范围内。".to_owned()),
         };
     }
-    if text.to_ascii_lowercase().contains("32-bit") && std::env::consts::ARCH.contains("64") {
+    if probe_text.to_ascii_lowercase().contains("32-bit") && std::env::consts::ARCH.contains("64") {
         return ToolState {
             kind: kind_name,
             status: ToolStatus::ArchitectureMismatch,
@@ -772,6 +773,119 @@ fn tool_from_path(kind: ToolKind, path: Option<&Path>) -> ToolState {
         version,
         detail: Some("版本探测成功；运行时仍会在独立目录中验证。".to_owned()),
     }
+}
+
+fn version_probe_argument(kind: &ToolKind) -> Option<&'static str> {
+    match kind {
+        ToolKind::Contamx => Some("--Version"),
+        ToolKind::Simread => None,
+    }
+}
+
+fn command_probe_version(path: &Path) -> Result<(Option<String>, String), &'static str> {
+    let mut command = Command::new(path);
+    // ContamX 3.4.x uses a capital V; `--version` is rejected by the
+    // official executable and only prints its help text.
+    command
+        .arg(version_probe_argument(&ToolKind::Contamx).expect("ContamX probe argument"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = ControlledChild::spawn(&mut command).map_err(|_| "无法启动版本探测。")?;
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if start.elapsed() >= PROBE_TIMEOUT => {
+                let _ = child.kill();
+                return Err("版本探测超时。");
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(30)),
+            Err(_) => return Err("读取版本探测状态失败。"),
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|_| "读取版本探测输出失败。")?;
+    let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    let text = combined.chars().take(MAX_PROBE_OUTPUT).collect::<String>();
+    Ok((version_token(&text), text))
+}
+
+#[cfg(windows)]
+fn windows_file_version(path: &Path) -> Option<String> {
+    #[repr(C)]
+    struct FixedFileInfo {
+        signature: u32,
+        _struct_version: u32,
+        file_version_ms: u32,
+        file_version_ls: u32,
+        _product_version_ms: u32,
+        _product_version_ls: u32,
+        _file_flags_mask: u32,
+        _file_flags: u32,
+        _file_os: u32,
+        _file_type: u32,
+        _file_subtype: u32,
+        _file_date_ms: u32,
+        _file_date_ls: u32,
+    }
+
+    let file_name: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let size = unsafe { GetFileVersionInfoSizeW(file_name.as_ptr(), std::ptr::null_mut()) };
+    if size == 0 {
+        return None;
+    }
+    let mut buffer = vec![0_u8; size as usize];
+    let loaded = unsafe {
+        GetFileVersionInfoW(
+            file_name.as_ptr(),
+            0,
+            size,
+            buffer.as_mut_ptr() as *mut c_void,
+        )
+    };
+    if loaded == 0 {
+        return None;
+    }
+    let query = [92_u16, 0_u16];
+    let mut value: *mut c_void = std::ptr::null_mut();
+    let mut value_len = 0_u32;
+    let queried = unsafe {
+        VerQueryValueW(
+            buffer.as_ptr() as *const c_void,
+            query.as_ptr(),
+            &mut value,
+            &mut value_len,
+        )
+    };
+    if queried == 0
+        || value.is_null()
+        || (value_len as usize) < std::mem::size_of::<FixedFileInfo>()
+    {
+        return None;
+    }
+    let info = unsafe { std::ptr::read_unaligned(value as *const FixedFileInfo) };
+    if info.signature != 0xFEEF04BD {
+        return None;
+    }
+    Some(format!(
+        "{}.{}.{}.{}",
+        info.file_version_ms >> 16,
+        info.file_version_ms & 0xFFFF,
+        info.file_version_ls >> 16,
+        info.file_version_ls & 0xFFFF
+    ))
+}
+
+#[cfg(not(windows))]
+fn windows_file_version(_path: &Path) -> Option<String> {
+    None
 }
 
 fn version_token(text: &str) -> Option<String> {
@@ -1358,6 +1472,23 @@ mod tests {
         assert_eq!(version_token("no version"), None);
         assert!(supported_version("3.4.0.3"));
         assert!(!supported_version("2.0.0"));
+    }
+
+    #[test]
+    fn official_tool_probe_contract_matches_the_real_binaries() {
+        assert_eq!(
+            version_probe_argument(&ToolKind::Contamx),
+            Some("--Version")
+        );
+        assert_eq!(version_probe_argument(&ToolKind::Simread), None);
+        assert_eq!(version_token("3.4.0.3 64 bit"), Some("3.4.0.3".to_owned()));
+    }
+
+    #[test]
+    fn packaged_tool_roots_cover_executable_sibling_runtime_layout() {
+        let mut roots = Vec::new();
+        add_packaged_tool_root_variants(&mut roots, Path::new(r"F:\CONTAM Studio"));
+        assert!(roots.contains(&PathBuf::from(r"F:\CONTAM Studio\runtime\contam-tools")));
     }
 
     #[test]

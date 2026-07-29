@@ -51,6 +51,9 @@
 | [Phase 6B 多Provider只读AI助手](records/phase-6b-multi-provider-ai.md) | Phase 6B | completed | live |
 | [Phase 6C 用户优先官方模型目录、内置NIST工具与界面减负](records/phase-6c-user-first-runtime.md) | Phase 6C | completed | live |
 | [PHASE-6C-CLOSE-01 最终验证与本地发布候选包](records/phase-6c-close-01.md) | Phase 6C close | completed | live |
+| [Phase 6C 后续：工具探测、卸载清理与界面提示](records/phase-6c-followup-runtime-probe-uninstall-ui.md) | Phase 6C follow-up | completed | live |
+| [Phase 6C 后续：候选安装包纠正与本地发布收口](records/phase-6c-followup-package-correction.md) | Phase 6C follow-up | completed | live |
+| [Phase 6C 后续：修正安装包内置 CONTAM runtime 发现路径](records/phase-6c-followup-runtime-discovery-correction.md) | Phase 6C follow-up | completed | live |
 | [EXPERT-FIX-01与0.2.0发布闭环](records/expert-fix-01-v0-2-0-release.md) | EXPERT-FIX-01 / Release 0.2.0 | completed | live |
 | [TRUTH-01唯一能力状态矩阵](records/truth-01-capability-status-matrix.md) | TRUTH-01 | completed | live |
 | [TRUTH-02同步漂移文档与研究证据标签](records/truth-02-document-drift.md) | TRUTH-02 | completed | live |

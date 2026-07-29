@@ -4,6 +4,7 @@ import type { AppLanguage, AppTheme } from "../../app/workbench-state";
 import { displayVersion } from "../../app/build-info";
 import type { StorageUsageView, StudioSetup, ToolKind, ToolState } from "../../app/release-state";
 import { toolStatusLabel } from "../../app/release-state";
+import { HoverHint } from "./HoverHint";
 
 interface ReleaseSettingsProps {
   setup: StudioSetup | null;
@@ -108,22 +109,22 @@ export function ReleaseSettings({
       <div className="release-callout">
         <Wrench size={20} aria-hidden="true" />
         <div>
-          <strong>{text(language, "本地优先，联网增强", "Local first, online enhanced")}</strong>
-          <p>{text(language, "项目、仿真和用户文件保留在本机；联网只在你主动配置并调用 Provider 或官方服务时发生。", "Projects, simulations, and user files stay local; network access occurs only when you configure and use a Provider or official service.")}</p>
+          <strong>
+            {text(language, "本地优先，联网增强", "Local first, online enhanced")}
+            <HoverHint label={text(language, "项目、仿真和用户文件留在本机；联网只在你主动使用 Provider 或官方服务时发生。", "Projects, simulations, and user files stay local; network access occurs only when you actively use a Provider or official service.")} />
+          </strong>
         </div>
       </div>
 
       <div className="release-grid">
         <div className="release-card" aria-labelledby="release-tools-title">
-          <div className="release-card-heading"><HardDrive size={17} /><strong id="release-tools-title">{text(language, "仿真引擎", "Simulation engine")}</strong></div>
-          <p className="release-muted">{text(language, "软件会优先使用随应用提供并已校验的 NIST 工具。", "The app uses verified NIST tools shipped with the application first.")}</p>
+          <div className="release-card-heading"><HardDrive size={17} /><strong id="release-tools-title">{text(language, "仿真引擎", "Simulation engine")} <HoverHint label={text(language, "优先使用随应用提供并已校验的官方 NIST 工具。", "Verified official NIST tools shipped with the app are preferred.")} /></strong></div>
           <div className="release-tool-row"><div><strong>ContamX</strong><span>{toolStatus(setup?.contamx, language)}</span></div><span aria-label={text(language, "ContamX状态", "ContamX status")}>{setup?.contamx.status === "available" ? "✓" : "—"}</span></div>
           <div className="release-tool-row"><div><strong>SimRead</strong><span>{setup?.simread.status === "available" && setup.simread.version ? text(language, `已就绪 · SimRead ${setup.simread.version}`, `Ready · SimRead ${setup.simread.version}`) : toolStatus(setup?.simread, language)}</span></div><span aria-label={text(language, "SimRead状态", "SimRead status")}>{setup?.simread.status === "available" ? "✓" : "—"}</span></div>
         </div>
 
         <div className="release-card" aria-labelledby="release-storage-title">
-          <div className="release-card-heading"><Database size={17} /><strong id="release-storage-title">{text(language, "本地存储", "Local storage")}</strong></div>
-          <p className="release-muted">{text(language, "这里显示文件数量和占用空间，不读取文件正文。", "Counts and sizes are shown without reading file contents.")}</p>
+          <div className="release-card-heading"><Database size={17} /><strong id="release-storage-title">{text(language, "本地存储", "Local storage")} <HoverHint label={text(language, "只统计白名单目录中的文件数量和大小，不读取文件正文。", "Only file counts and sizes from the allowlisted directories are read; file contents are not read.")} /></strong></div>
           <div className="release-storage-list" aria-live="polite">
             {storageUsage?.categories.map((category) => <div className="release-storage-row" key={category.id}><span>{categoryLabel(category.id, language)}</span><span>{category.file_count} · {formatBytes(category.bytes, language)}</span></div>)}
             {!storageUsage ? <p className="release-muted">{text(language, "正在读取存储统计…", "Loading storage statistics…")}</p> : null}
@@ -135,8 +136,7 @@ export function ReleaseSettings({
       <details className="release-advanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
         <summary>{text(language, "高级设置与诊断", "Advanced settings and diagnostics")}</summary>
         <div className="release-card">
-          <div className="release-card-heading"><Settings2 size={17} /><strong>{text(language, "数据目录", "Data directory")}</strong></div>
-          <p className="release-muted">{text(language, "仅在需要迁移本地项目数据时使用；工具路径只保留给旧版诊断。", "Use this only when moving local project data; tool paths are retained only for legacy diagnostics.")}</p>
+          <div className="release-card-heading"><Settings2 size={17} /><strong>{text(language, "数据目录", "Data directory")} <HoverHint label={text(language, "仅在迁移本地项目数据时修改；旧版工具路径只用于诊断。", "Change this only when moving local project data; legacy tool paths are diagnostic-only.")} /></strong></div>
           <div className="release-path-row"><code>{dataDirectory || text(language, "尚未选择", "Not selected")}</code><button className="secondary-action" type="button" disabled={busy} onClick={() => void chooseData()}><FolderOpen size={15} />{text(language, "选择", "Choose")}</button></div>
           <div className="release-actions"><button className="primary-action" type="button" disabled={busy || !dataDirectory.trim()} onClick={() => void save()}><CheckCircle2 size={16} />{text(language, "保存配置", "Save configuration")}</button><button className="secondary-action" type="button" disabled={busy} onClick={() => void onOpenDirectory("data")}><FolderOpen size={16} />{text(language, "打开项目数据目录", "Open project data folder")}</button></div>
         </div>

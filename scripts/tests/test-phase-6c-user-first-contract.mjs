@@ -68,7 +68,7 @@ check(!releaseSettings.includes("clear_studio_cache") && !releaseSettings.includ
 check(releaseSettings.includes("storageUsage?.categories") && releaseSettings.includes("onOpenDirectory(\"app-data\")"), "storage settings must expose read-only statistics and the data-folder action");
 check(rustRelease.includes("storage_category_paths") && rustRelease.includes("symlink_metadata"), "storage measurement must use an explicit allowlist and skip symlinks");
 check(rustRelease.includes("CONTAM_TOOLS_LOCK_JSON") && rustRelease.includes("HashMismatch"), "runtime discovery must verify the locked tool identity");
-check(rustRelease.includes("resource_dir") && rustRelease.includes("Legacy user paths remain a diagnostic-only fallback"), "bundled tools must precede legacy diagnostic paths");
+check(rustRelease.includes("resource_dir") && rustRelease.includes("executable_dir") && rustRelease.includes("Legacy user paths remain a diagnostic-only fallback"), "bundled tools must probe packaged executable and resource roots before legacy diagnostic paths");
 
 check(rustCatalog.includes("parse_openai_models") && rustCatalog.includes("openai_model_verification"), "OpenAI catalog must filter supported text-generation models");
 check(rustCatalog.includes("parse_anthropic_models") && rustCatalog.includes("has_more"), "Anthropic catalog must handle pagination");

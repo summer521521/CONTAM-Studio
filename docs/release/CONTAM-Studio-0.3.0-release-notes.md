@@ -1,6 +1,6 @@
-# CONTAM Studio 0.3.0
+# CONTAM Studio v0.3.0
 
-CONTAM Studio 0.3.0 是 Phase 6C 的本地发布候选版本，定位为“Windows 优先、本地优先、联网增强的 CONTAM 桌面工作台”。本候选包把官方模型目录、用户优先界面、只读本地存储透明度和哈希锁定的 NIST CONTAM 工具资源纳入同一条发布路径。
+CONTAM Studio v0.3.0 定位为“Windows 优先、本地优先、联网增强的 CONTAM 桌面工作台”。本版本把官方模型目录、用户优先界面、只读本地存储透明度和哈希锁定的 NIST CONTAM 工具资源纳入同一条发布路径。
 
 ## 主要变化
 
@@ -10,6 +10,7 @@ CONTAM Studio 0.3.0 是 Phase 6C 的本地发布候选版本，定位为“Windo
 - NIST 官方 ContamX 3.4.0.3 Windows x64 及 SimRead、SimComp、PrjUp 通过锁定清单和逐文件 SHA-256 校验进入构建输入。
 - 默认 AI 和工具设置减少协议、端点、路径、哈希等工程细节；Diff、确认、错误和数据风险仍保留。
 - 设置中新增只读“存储与隐私”统计；不会读取文件正文，也不提供删除按钮。
+- 项目、仿真和用户文件继续在本地运行；联网仅在用户主动配置并调用 Provider 或官方服务时发生，不会静默上传项目文件。
 
 ## 来源与资源
 
@@ -20,4 +21,6 @@ CONTAM Studio 0.3.0 是 Phase 6C 的本地发布候选版本，定位为“Windo
 
 ## 状态边界
 
-本文件描述本地候选版本，不代表 GitHub Release、签名或真实用户验收已经完成。GUI、真实 Provider、签名和公开发布状态以能力矩阵及 PHASE-6C-CLOSE-01 任务记录为准。
+自动化验证、候选包审计、GUI 验收和用户验收均已通过；本轮未进行真实 Provider 回归请求，不能据此推断真实 Provider 已验证。
+
+Windows 构建当前未进行代码签名，可能触发 SmartScreen；`signed=not_run`。API Key 仍由 Windows Credential Manager 管理。正式 GitHub Release 的标签、资产和 URL 以发布后任务记录为准。

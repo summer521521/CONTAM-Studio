@@ -14,7 +14,7 @@ $dataRoot = Join-Path $rootFull "user-data"
 New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
 $sentinel = Join-Path $dataRoot "preserve.txt"
 Set-Content -LiteralPath $sentinel -Value "AGENT-08 sentinel" -Encoding UTF8
-$installRoot = Join-Path $rootFull "installed"
+$installRoot = Join-Path $rootFull "CONTAM Studio"
 New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
 
 if (-not $installerFull.EndsWith(".exe", [StringComparison]::OrdinalIgnoreCase)) { throw "isolated test expects an NSIS executable" }
@@ -24,6 +24,12 @@ $app = @(Get-ChildItem -LiteralPath $installRoot -Recurse -File -Filter "*.exe")
 $uninstaller = $app | Where-Object { $_.Name -match "(?i)^uninstall\.exe$" } | Select-Object -First 1
 if ($app.Count -eq 0) { throw "NSIS installer produced no executable" }
 if ($null -eq $uninstaller) { throw "NSIS uninstaller is missing" }
+foreach ($requiredRuntimeFile in @(
+  (Join-Path $installRoot "runtime\contam-tools\contam-x-3.4.0.3-Windows-64bit\contamx3.exe"),
+  (Join-Path $installRoot "runtime\contam-tools\contam-x-3.4.0.3-Windows-64bit\simread.exe")
+)) {
+  if (-not (Test-Path -LiteralPath $requiredRuntimeFile -PathType Leaf)) { throw "bundled runtime file is missing: $requiredRuntimeFile" }
+}
 
 # Upgrade simulation: the same package must be able to run again without deleting the sentinel.
 $upgrade = Start-Process -FilePath $installerFull -ArgumentList @("/S", "/D=$installRoot") -Wait -PassThru -WindowStyle Hidden
@@ -33,6 +39,7 @@ if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) { throw "upgrade rem
 $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList @("/S") -Wait -PassThru -WindowStyle Hidden
 if ($uninstallProcess.ExitCode -ne 0) { throw "NSIS uninstall failed with exit code $($uninstallProcess.ExitCode)" }
 if (Test-Path -LiteralPath $installRoot) { throw "NSIS uninstall left application directory" }
+if (Test-Path -LiteralPath (Join-Path $installRoot "runtime")) { throw "NSIS uninstall left runtime directory" }
 if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) { throw "NSIS uninstall removed user data sentinel" }
 
 [ordered]@{

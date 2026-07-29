@@ -6,6 +6,7 @@ import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } fr
 import { SimulationPlanPanel } from "./SimulationPlanPanel";
 import { AttachmentCenterPanel } from "./AttachmentCenterPanel";
 import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
+import { HoverHint } from "./HoverHint";
 
 const SCOPES: AiContextScope[] = [
   "project_summary",
@@ -249,7 +250,7 @@ export function CodexAssistantPanel({
         <Bot size={22} aria-hidden="true" />
         <div>
           <h2>{t("assistant.title")}</h2>
-          <p>{t("assistant.localClientOnlineModel")}</p>
+          <p className="assistant-compact-note">{t("assistant.localClientOnlineShort")} <HoverHint label={t("assistant.localClientOnlineModel")} /></p>
         </div>
       </div>
 
@@ -263,8 +264,10 @@ export function CodexAssistantPanel({
               ))}
             </select>
           </label>
-          <p className="assistant-safe-note">{t("assistant.providerArchitecture")}</p>
-          {selectedProvider ? <p className="assistant-safe-note">{t("assistant.providerRequestDisclosure")}</p> : null}
+          <p className="assistant-compact-note">
+            {t("assistant.providerArchitectureShort")} · {t("assistant.providerRequestDisclosureShort")}
+            <HoverHint label={selectedProvider ? `${t("assistant.providerArchitecture")} ${t("assistant.providerRequestDisclosure")}` : t("assistant.providerArchitecture")} />
+          </p>
           <button
             type="button"
             className="secondary-action assistant-wide-action"
@@ -387,8 +390,10 @@ export function CodexAssistantPanel({
       ) : null}
 
       <div className="assistant-boundary">
-        <p>{isCodexProvider ? t("assistant.networkDisclosure") : t("assistant.providerRequestDisclosure")}</p>
-        <p>{t("assistant.coreUnaffected")}</p>
+        <p className="assistant-compact-note">
+          {t("assistant.networkDisclosureShort")} · {t("assistant.coreUnaffectedShort")}
+          <HoverHint label={`${isCodexProvider ? t("assistant.networkDisclosure") : t("assistant.providerRequestDisclosure")} ${t("assistant.coreUnaffected")}`} />
+        </p>
       </div>
 
       {isCodexProvider && state.status === "not_authenticated" ? <p className="assistant-login-note">{t("assistant.loginInstruction")}</p> : null}
@@ -442,7 +447,7 @@ export function CodexAssistantPanel({
       {!isCodexProvider && selectedProvider ? (
         <section className="assistant-provider-config" aria-labelledby="assistant-provider-secret-title">
           <h3 id="assistant-provider-secret-title">{t("assistant.providerConfiguration")}</h3>
-          {selectedProvider.built_in ? <p className="assistant-safe-note">{t("assistant.officialCatalogHint")}</p> : null}
+          {selectedProvider.built_in ? <p className="assistant-compact-note">{t("assistant.officialCatalogShort")} <HoverHint label={t("assistant.officialCatalogHint")} /></p> : null}
           <details className="assistant-advanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
             <summary>{t("assistant.advancedSettings")}</summary>
             {selectedProvider.built_in ? (
@@ -504,7 +509,7 @@ export function CodexAssistantPanel({
               </div>
             </>
           ) : <p className="assistant-safe-note">{t("assistant.noKeyRequired")}</p>}
-          {!selectedProvider.catalog_verified ? <p className="assistant-safe-note">{t("assistant.catalogUnverified")}</p> : null}
+          {!selectedProvider.catalog_verified ? <p className="assistant-compact-note assistant-catalog-warning">{t("assistant.catalogUnverifiedShort")} <HoverHint label={t("assistant.catalogUnverified")} /></p> : null}
         </section>
       ) : null}
 

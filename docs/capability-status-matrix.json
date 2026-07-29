@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-29T05:59:21.4177880Z",
+  "last_updated_utc": "2026-07-29T07:52:00Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -219,16 +219,17 @@
       "name": "Phase 6C 用户优先官方模型目录、内置 NIST 工具与界面减负",
       "implemented": "complete",
       "automated_verified": "passed",
-      "manual_gui": "pending_user",
+      "manual_gui": "passed",
       "merged_to_main": "no",
       "packaged": "yes",
-      "user_validated": "pending_user",
+      "user_validated": "passed",
       "evidence": [
         "docs/adr/ADR-018-adopt-user-first-online-enhanced-runtime.md",
         "docs/user-guide/local-data-and-privacy.md",
         "docs/ai/provider-capability-matrix.md",
         "docs/development/task-log/records/phase-6c-user-first-runtime.md",
         "docs/development/task-log/records/phase-6c-close-01.md",
+        "docs/development/task-log/records/phase-6c-followup-runtime-discovery-correction.md",
         "docs/release/CONTAM-Studio-0.3.0-release-notes.md",
         "resources/contam-tools.lock.json"
       ]
