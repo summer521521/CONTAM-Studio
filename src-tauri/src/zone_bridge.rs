@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
@@ -14,6 +14,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
+use crate::controlled_process::ControlledChild;
+
 const PROTOCOL_VERSION: &str = "1.2";
 const RESULT_SCHEMA_VERSION: &str = "1.0";
 const READER_MODE: &str = "strict_contam_3_4_simple_zone_v1";
@@ -21,6 +23,7 @@ const PATCH_TYPE: &str = "replace_zone_volume";
 const PATCH_FIELD: &str = "volume_m3";
 const VOLUME_TOKEN_INDEX: i64 = 7;
 const BRIDGE_MODULE: &str = "contam_studio_core.zone_bridge";
+const FROZEN_WORKER_RELATIVE_PATH: &str = "runtime/python-worker/contam-studio-python-worker.exe";
 const PYTHON_ENVIRONMENT_VARIABLE: &str = "CONTAM_STUDIO_PYTHON";
 const READ_OPERATION: &str = "read_simple_zones";
 const PLAN_OPERATION: &str = "plan_zone_volume_patch";
@@ -1571,6 +1574,21 @@ struct ProcessOutcome {
 
 type HostFailure = (&'static str, &'static str, BTreeMap<String, Value>);
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum BridgeRuntimeKind {
+    FrozenWorker,
+    DevelopmentPython,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BridgeRuntime {
+    executable: PathBuf,
+    arguments: Vec<OsString>,
+    working_directory: PathBuf,
+    kind: BridgeRuntimeKind,
+}
+
+#[cfg(any(test, debug_assertions))]
 fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -1578,17 +1596,63 @@ fn project_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn discover_python(configured: Option<OsString>, root: &Path) -> Result<PathBuf, &'static str> {
+fn python_bridge_arguments() -> Vec<OsString> {
+    vec![
+        OsString::from("-I"),
+        OsString::from("-m"),
+        OsString::from(BRIDGE_MODULE),
+    ]
+}
+
+fn discover_bridge_runtime(
+    configured: Option<OsString>,
+    resource_root: &Path,
+    development_root: Option<&Path>,
+) -> Result<BridgeRuntime, &'static str> {
     if let Some(value) = configured {
         let candidate = PathBuf::from(value);
         return (candidate.is_absolute() && candidate.is_file())
-            .then_some(candidate)
+            .then(|| BridgeRuntime {
+                executable: candidate,
+                arguments: python_bridge_arguments(),
+                working_directory: development_root.unwrap_or(resource_root).to_path_buf(),
+                kind: BridgeRuntimeKind::DevelopmentPython,
+            })
             .ok_or("python_runtime_not_found");
     }
-    let candidate = root.join("python/.venv/Scripts/python.exe");
-    candidate
-        .is_file()
-        .then_some(candidate)
+
+    let frozen_worker = resource_root.join(FROZEN_WORKER_RELATIVE_PATH);
+    if frozen_worker.is_file() {
+        return Ok(BridgeRuntime {
+            working_directory: frozen_worker
+                .parent()
+                .expect("frozen worker has a parent")
+                .to_path_buf(),
+            executable: frozen_worker,
+            arguments: Vec::new(),
+            kind: BridgeRuntimeKind::FrozenWorker,
+        });
+    }
+
+    if let Some(root) = development_root {
+        let python = root.join("python/.venv/Scripts/python.exe");
+        if python.is_file() {
+            return Ok(BridgeRuntime {
+                executable: python,
+                arguments: python_bridge_arguments(),
+                working_directory: root.to_path_buf(),
+                kind: BridgeRuntimeKind::DevelopmentPython,
+            });
+        }
+    }
+
+    Err("python_runtime_not_found")
+}
+
+fn executable_resource_root() -> Result<PathBuf, &'static str> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
         .ok_or("python_runtime_not_found")
 }
 
@@ -1852,7 +1916,7 @@ fn read_limited<R: Read>(mut reader: R, limit: usize) -> Capture {
 }
 
 fn wait_with_timeout(
-    child: &mut Child,
+    child: &mut ControlledChild,
     timeout: Duration,
 ) -> std::io::Result<(bool, bool, Option<i32>)> {
     let started = Instant::now();
@@ -1878,18 +1942,19 @@ fn run_process(
     stdout_limit: usize,
     stderr_limit: usize,
 ) -> Result<ProcessOutcome, std::io::Error> {
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .args(arguments)
         .current_dir(working_directory)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    let stdout = child.stdout.take().expect("piped stdout");
-    let stderr = child.stderr.take().expect("piped stderr");
+        .stderr(Stdio::piped());
+    let mut child = ControlledChild::spawn(&mut command)?;
+    let stdout = child.stdout().take().expect("piped stdout");
+    let stderr = child.stderr().take().expect("piped stderr");
     let stdout_reader = thread::spawn(move || read_limited(stdout, stdout_limit));
     let stderr_reader = thread::spawn(move || read_limited(stderr, stderr_limit));
-    if let Some(mut stdin) = child.stdin.take() {
+    if let Some(mut stdin) = child.stdin().take() {
         if stdin.write_all(stdin_bytes).is_err() {
             let _ = child.kill();
         }
@@ -1999,15 +2064,29 @@ fn execute_bridge_request(
     request_id: &str,
     timeout: Duration,
 ) -> Result<RawBridgeEnvelope, ReaderDiagnostic> {
-    let root = project_root();
-    let python =
-        discover_python(std::env::var_os(PYTHON_ENVIRONMENT_VARIABLE), &root).map_err(|code| {
-            host_diagnostic(
-                code,
-                "The project Python runtime was not found.",
-                BTreeMap::new(),
-            )
-        })?;
+    let resource_root = executable_resource_root().map_err(|code| {
+        host_diagnostic(
+            code,
+            "The packaged bridge runtime location was not found.",
+            BTreeMap::new(),
+        )
+    })?;
+    #[cfg(debug_assertions)]
+    let development_root = Some(project_root());
+    #[cfg(not(debug_assertions))]
+    let development_root: Option<PathBuf> = None;
+    let runtime = discover_bridge_runtime(
+        std::env::var_os(PYTHON_ENVIRONMENT_VARIABLE),
+        &resource_root,
+        development_root.as_deref(),
+    )
+    .map_err(|code| {
+        host_diagnostic(
+            code,
+            "The packaged bridge worker was not found.",
+            BTreeMap::new(),
+        )
+    })?;
     let stdin_bytes = serde_json::to_vec(request).map_err(|_| {
         host_diagnostic(
             "bridge_request_serialization_failed",
@@ -2022,16 +2101,11 @@ fn execute_bridge_request(
             BTreeMap::new(),
         ));
     }
-    let arguments = [
-        OsString::from("-I"),
-        OsString::from("-m"),
-        OsString::from(BRIDGE_MODULE),
-    ];
     let outcome = run_process(
-        &python,
-        &arguments,
+        &runtime.executable,
+        &runtime.arguments,
         &stdin_bytes,
-        &root,
+        &runtime.working_directory,
         timeout,
         MAX_STDOUT_BYTES,
         MAX_STDERR_BYTES,

@@ -1,6 +1,6 @@
 [package]
 name = "contam-studio"
-version = "0.1.0"
+version = "0.2.0"
 description = "Offline-first desktop workbench for CONTAM teaching and research"
 license = "Apache-2.0"
 repository = "https://github.com/summer521521/CONTAM-Studio"
@@ -20,9 +20,19 @@ serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 uuid = { version = "1", default-features = false, features = ["v4", "v5", "serde"] }
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 futures-util = "0.3"
 url = "2"
 keyring = { version = "4", default-features = false, features = ["v1"] }
 zeroize = "1"
 tokio = { version = "1", features = ["time", "sync", "macros"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }

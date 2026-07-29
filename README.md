@@ -22,11 +22,11 @@ CONTAM Studio是一个面向教学与科研的现代化、离线优先、中英�
 
 ## 当前能力
 
-0.1.0桌面主线已经形成可用纵向闭环：打开受支持PRJ，浏览Project/Level/Zone/FlowPath/Species语义树，在不可变草稿中审阅和应用受支持的Zone名称、体积及FlowPath multiplier事务，运行官方ContamX/SimRead，执行单参数或多参数研究，分页和筛选可信结果，查看参数关系图与时间序列，并导出HTML、PDF、CSV和JSON报告。未知或不能可靠回写的内容保持只读，原始PRJ不由GUI或AI直接覆盖。
+0.2.0桌面主线已经形成可用纵向闭环：打开受支持PRJ，浏览Project/Level/Zone/FlowPath/Species语义树，在不可变草稿中审阅和应用受支持的Zone名称、体积及FlowPath multiplier事务，运行官方ContamX/SimRead，执行单参数或多参数研究，分页和筛选可信结果，查看参数关系图与时间序列，并导出HTML、PDF、CSV和JSON报告。未知或不能可靠回写的内容保持只读，原始PRJ不由GUI或AI直接覆盖。
 
-AI助手支持用户主动连接、附件证据披露、结构化仿真方案、哈希绑定批准和研究结果解释。所有写入均通过GUI共用的领域Patch、Diff、确定性验证和用户确认；未连接AI时，项目、草稿、运行、研究和报告仍可离线使用。图片当前只进入本地预览和受控元数据证据，不宣称已向远程模型发送像素。
+AI助手支持 Codex/ChatGPT 登录，以及用户主动配置的 OpenAI、Anthropic、Gemini、OpenRouter、DeepSeek 和本地 OpenAI-compatible Provider。它复用可信上下文预览、附件证据披露、结构化仿真方案、哈希绑定批准和研究结果解释边界；API Key 只进入 Windows Credential Manager。所有写入均通过GUI共用的领域Patch、Diff、确定性验证和用户确认；未连接AI时，项目、草稿、运行、研究和报告仍可离线使用。图片当前只进入本地预览和受控元数据证据，不宣称已向远程模型发送像素。
 
-Windows x64提供便携版、NSIS安装器和MSI安装器。0.1.0冻结范围及限制见[发布说明](docs/release/CONTAM-Studio-0.1.0-release-notes.md)和[已知限制](docs/release/known-limitations-0.1.0.md)，产品事实以[能力状态矩阵](docs/capability-status-matrix.json)为准。
+Windows x64提供便携版、NSIS安装器和MSI安装器。0.2.0 将冻结 Python Worker 随应用分发，普通用户不需要源码仓库、项目 `.venv` 或系统 Python。冻结范围及限制见[发布说明](docs/release/CONTAM-Studio-0.2.0-release-notes.md)和[已知限制](docs/release/known-limitations-0.2.0.md)，产品事实以[能力状态矩阵](docs/capability-status-matrix.json)为准。
 
 CONTAM Studio自身源码采用[Apache License 2.0](LICENSE)。官方CONTAM、ContamX、SimRead、Codex及其他第三方组件不因本仓库许可证而改变其各自许可；本项目不是NIST或OpenAI官方产品，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
 
@@ -36,26 +36,26 @@ CONTAM Studio自身源码采用[Apache License 2.0](LICENSE)。官方CONTAM、Co
 
 普通用户应从[GitHub Releases](https://github.com/summer521521/CONTAM-Studio/releases/latest)下载，不要从仓库源码页寻找EXE。每个版本提供便携版、NSIS安装器、MSI安装器和SHA-256清单。
 
-0.1.0没有后台自动更新。更新时退出Studio，从GitHub Releases下载更高版本并覆盖安装；用户项目、已保存研究、报告和外部ContamX/SimRead不属于卸载或升级清理对象。详细说明见[下载与更新](docs/maintenance/github-download-and-update.md)。
+0.2.0没有后台自动更新。更新时退出Studio，从GitHub Releases下载更高版本并覆盖安装；便携版必须完整解压，不能只复制主 EXE。用户项目、已保存研究、报告、外部ContamX/SimRead和系统凭据不属于发布资产。详细说明见[下载与更新](docs/maintenance/github-download-and-update.md)。
 
 ## 架构方向
 
-0.1.0采用React+TypeScript前端、Tauri 2桌面宿主、Python CONTAM领域核心和官方ContamX/SimRead，Windows 10/11 x64为正式目标平台。Rust拥有桌面权限、活动项目、草稿、运行、结果、附件、AI批准与发布配置边界；Python承担严格文档解析、语义Patch、官方工具编排和结果/报告领域逻辑；React只使用路径受控的语义桌面API。
+0.2.0采用React+TypeScript前端、Tauri 2桌面宿主、随包冻结的Python CONTAM领域核心和官方ContamX/SimRead，Windows 10/11 x64为正式目标平台。Rust拥有桌面权限、活动项目、草稿、运行、结果、附件、AI批准、受控网络、凭据引用、进程树和发布配置边界；Python承担严格文档解析、语义Patch、官方工具编排和结果/报告领域逻辑；React只使用路径受控的语义桌面API。
 
 ```text
 React GUI
 ↓
 Tauri桌面宿主
 ├─受控stdio JSON-RPC→本地Codex App Server→ChatGPT订阅
+├─受控HTTPS/回环HTTP→用户配置的AI Provider
+↓ Windows Job Object拥有的stdio
 ↓
-受控通信接口
-↓
-Python CONTAM领域核心
+随包冻结的Python CONTAM领域Worker
 ↓
 官方ContamX
 ```
 
-历史阶段证据仍保留在`docs/development/`，但阶段名不再代表当前产品范围。0.1.0的唯一发布事实来源是能力矩阵、发布说明、已知限制和最终交接文档。
+历史阶段证据仍保留在`docs/development/`，但阶段名不再代表当前产品范围。0.2.0的发布事实来源是能力矩阵、发布说明、已知限制、发布包清单和对应任务记录。
 
 ## 开发启动
 
@@ -68,7 +68,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-仅构建前端可运行`pnpm build`，前端单元测试运行`pnpm test`。开发环境可通过`CONTAM_STUDIO_PYTHON`显式指定一个绝对Python解释器路径；未配置时只检查仓库内`python\.venv\Scripts\python.exe`，不会回退到系统PATH。
+仅构建前端可运行`pnpm build`，前端单元测试运行`pnpm test`。开发环境可通过`CONTAM_STUDIO_PYTHON`显式指定一个绝对Python解释器路径；debug 构建未配置时只检查仓库内`python\.venv\Scripts\python.exe`，不会回退到系统PATH。Release 构建只使用主程序旁的冻结 Worker。
 
 QA-01工具链基线和统一验证入口见[工具链基线](docs/development/toolchain-baseline.md)。依赖已安装后，可从仓库根目录运行`powershell -NoProfile -File scripts\verify.ps1 -Mode Full`；脚本不会自动安装工具或读取未跟踪用户文件。
 

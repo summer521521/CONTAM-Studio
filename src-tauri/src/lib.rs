@@ -1,6 +1,7 @@
 mod ai_provider;
 mod close_protocol;
 mod codex_app_server;
+mod controlled_process;
 mod release;
 mod zone_bridge;
 

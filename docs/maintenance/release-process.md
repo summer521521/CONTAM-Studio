@@ -3,7 +3,7 @@
 ## 版本准备
 
 1. 确认`main`干净并已同步`origin/main`。
-2. 同步`package.json`、`src-tauri/Cargo.toml`和`src-tauri/tauri.conf.json`版本。
+2. 同步`package.json`、`python/pyproject.toml`、`src-tauri/Cargo.toml`和`src-tauri/tauri.conf.json`版本。
 3. 更新发布说明、已知限制、能力矩阵、UAT和任务日志。
 4. 运行Full验证。
 5. 从最终提交生成便携版、NSIS和MSI。
@@ -20,7 +20,7 @@
 ## GitHub发布
 
 1. 推送最终`main`。
-2. 创建带说明的版本标签，例如`v0.1.0`。
+2. 创建带说明的版本标签，例如`v0.2.0`。
 3. 创建GitHub Release。
 4. 上传便携版、NSIS、MSI和`SHA256SUMS.txt`。
 5. 发布说明必须列出平台、安装方式、已知限制、签名主体和干净机证据状态。
@@ -36,4 +36,4 @@
 
 ## 后续开发
 
-发布后从最新`main`创建新任务分支。不要直接修改或移动既有Release资产；修复使用`0.1.1`，兼容功能升级使用`0.2.0`。
+发布后从最新`main`创建新任务分支。不要直接修改或移动既有Release资产；0.2.0的补丁修复使用`0.2.1`，下一次不兼容范围调整再按语义化版本升级。

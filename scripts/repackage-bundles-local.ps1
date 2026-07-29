@@ -6,10 +6,22 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function Get-Sha256Hex([string]$FilePath) {
+  $stream = [IO.File]::OpenRead($FilePath)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try {
+    return -join ($sha256.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") })
+  } finally {
+    $sha256.Dispose()
+    $stream.Dispose()
+  }
+}
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path }
 if ([string]::IsNullOrWhiteSpace($ArtifactInstallerRoot)) { throw "ArtifactInstallerRoot is required" }
 $RepoRoot = [IO.Path]::GetFullPath($RepoRoot).TrimEnd("\")
 $ArtifactInstallerRoot = [IO.Path]::GetFullPath($ArtifactInstallerRoot).TrimEnd("\")
+$version = node -p "require('$($RepoRoot.Replace('\', '/'))/package.json').version"
 $manifestPath = Join-Path $RepoRoot "docs\release\agent-08-packaging-toolchain.json"
 $resolver = Join-Path $RepoRoot "scripts\resolve-packaging-toolchain.ps1"
 $toolchain = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $resolver -ToolchainRoot $ToolchainRoot | Out-String | ConvertFrom-Json)
@@ -60,8 +72,8 @@ if ($LASTEXITCODE -ne 0) { throw "local WiX light failed" }
 if (-not (Test-Path -LiteralPath $msiOutput -PathType Leaf)) { throw "local MSI output is missing" }
 
 New-Item -ItemType Directory -Path $ArtifactInstallerRoot -Force | Out-Null
-$nsisDestination = Join-Path $ArtifactInstallerRoot "CONTAM Studio_0.1.0_x64-setup.exe"
-$msiDestination = Join-Path $ArtifactInstallerRoot "CONTAM Studio_0.1.0_x64_en-US.msi"
+$nsisDestination = Join-Path $ArtifactInstallerRoot "CONTAM Studio_$($version)_x64-setup.exe"
+$msiDestination = Join-Path $ArtifactInstallerRoot "CONTAM Studio_$($version)_x64_en-US.msi"
 Copy-Item -LiteralPath $nsisOutput -Destination $nsisDestination -Force
 Copy-Item -LiteralPath $msiOutput -Destination $msiDestination -Force
 
@@ -72,7 +84,7 @@ Copy-Item -LiteralPath $msiOutput -Destination $msiDestination -Force
   nsis_version = [string]$toolchain.nsis.version
   wix_version = [string]$toolchain.candle.version
   outputs = @(
-    [ordered]@{ path = (Split-Path -Leaf $nsisDestination); sha256 = (Get-FileHash -LiteralPath $nsisDestination -Algorithm SHA256).Hash.ToLowerInvariant() },
-    [ordered]@{ path = (Split-Path -Leaf $msiDestination); sha256 = (Get-FileHash -LiteralPath $msiDestination -Algorithm SHA256).Hash.ToLowerInvariant() }
+    [ordered]@{ path = (Split-Path -Leaf $nsisDestination); sha256 = (Get-Sha256Hex $nsisDestination) },
+    [ordered]@{ path = (Split-Path -Leaf $msiDestination); sha256 = (Get-Sha256Hex $msiDestination) }
   )
 } | ConvertTo-Json -Depth 6

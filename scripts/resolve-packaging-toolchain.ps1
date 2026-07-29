@@ -5,6 +5,17 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function Get-Sha256Hex([string]$FilePath) {
+  $stream = [IO.File]::OpenRead($FilePath)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try {
+    return -join ($sha256.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") })
+  } finally {
+    $sha256.Dispose()
+    $stream.Dispose()
+  }
+}
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
   $ManifestPath = Join-Path $repo "docs\release\agent-08-packaging-toolchain.json"
@@ -24,7 +35,7 @@ function Get-VerifiedFile {
   param([string]$RelativePath, [string]$ExpectedHash)
   $candidate = Assert-UnderRoot (Join-Path $ToolchainRoot ($RelativePath -replace "/", "\")) $ToolchainRoot
   if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "missing packaging tool file: $RelativePath" }
-  $actual = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToUpperInvariant()
+  $actual = Get-Sha256Hex $candidate
   if ($actual -ne $ExpectedHash.ToUpperInvariant()) { throw "packaging tool hash mismatch: $RelativePath" }
   return $candidate
 }

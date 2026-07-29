@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "contam-studio-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Strict PRJ Zone reading, copy-only patches, and isolated CONTAM inspection"
 readme = "README.md"
 requires-python = ">=3.12"

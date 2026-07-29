@@ -2,9 +2,9 @@
 
 记录日期：2026-07-28。
 
-当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.1.0桌面纵向路径包括受支持PRJ语义树、多对象草稿Patch、官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心及受审批AI仿真和结果解释。
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.2.0桌面纵向路径包括受支持PRJ语义树、多对象草稿Patch、官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心、受审批AI仿真、多Provider只读AI和结果解释。
 
-Windows x64便携版、NSIS和MSI安装器已生成并通过自动内容审计。用户已接受0.1.0 GUI和发布范围，并明确豁免独立干净Windows执行；这项豁免不是另一台机器的实测证据。代码签名与公开发布状态以[0.1.0发布说明](release/CONTAM-Studio-0.1.0-release-notes.md)为准。
+0.2.0将冻结Python Worker作为Tauri资源和便携目录的一部分，不再从Release二进制使用`CARGO_MANIFEST_DIR`或仓库`.venv`。Python、ContamX、SimRead、Codex App Server和受控探测/安装命令的后代由Windows Job Object收口。便携版、NSIS、MSI、签名、独立干净机和公开发布状态以[0.2.0发布说明](release/CONTAM-Studio-0.2.0-release-notes.md)、[发布包](release/release-kit-v2.md)及本轮任务记录为准，不能从源码实现状态推断。
 
 ## Phase 6B 多 Provider 只读 AI 助手
 
@@ -13,7 +13,7 @@ Windows x64便携版、NSIS和MSI安装器已生成并通过自动内容审计�
 - 已完成前端定向测试/构建、Provider Mock Server、Archive 回归、Rust/ACL/数据生命周期契约检查；修复最终门禁发现的旧 ACL 计数和 Clippy 告警后，`scripts/verify.ps1 -Mode Full` 通过，详见[Phase 6B验证记录](development/phase-6b-multi-provider-ai-verification.md)。
 - Codex 自动执行未读取真实密钥或调用真实付费 Provider；用户随后报告真实 Provider 请求、API Key 配置与使用、真实 AI 回答和本轮 GUI 验收通过，因此能力矩阵记录为 `manual_gui=passed`、`user_validated=passed`。具体 Provider/协议清单、设备码账户、费用与请求内容未逐项留存；安装包、干净机、签名和产品发布仍为 `not_run` 或未验证。本切片随当前 `main` 交付提交纳入，不能用合并状态代替发布证据。
 
-Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.1.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.1.0结论。
+Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.2.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.2.0结论。
 
 ## Phase 6A Codex只读AI助手
 
@@ -26,7 +26,7 @@ Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议�
 - AI侧栏在CLI缺失时提供安装提醒和二次确认。受控安装只在用户确认后从固定OpenAI入口下载当前已审阅的安装脚本，校验大小和SHA-256后执行；脚本身份变化时拒绝继续。React不能提供URL、命令、参数或路径，Tauri capability也未开放通用Shell、文件系统或网络权限。
 - 首次绘制后的CLI状态探测已与显式连接身份验证分离：启动探测只执行有界`codex --version`及文件大小/修改时间前后检查，不再对大型CLI可执行文件做两次全量哈希；用户点击连接和安装后验证仍执行完整前后SHA-256。进程等待和双流捕获均有共享上限，异常时恢复可重试状态。
 - 用户计时确认剩余冷启动等待发生在React首屏之前，而不是CLI探测阶段。桌面HTML现在立即提供双语启动表面，避免WebView在模块加载期间只显示黑色背景；ECharts结果图表改为按需加载，生产首屏JavaScript由约985KB降至约431KB。Codex仍只在用户点击连接后启动App Server。
-- 最终生命周期收口使用单调连接租约、上下文代际和活动Turn取消标记，防止并发连接、迟到初始化、旧预览或旧Turn覆盖当前状态。关闭时仅在stdin、子进程、stdout/stderr读取线程和受控运行目录均完成后才视为清理成功；未完成连接保留给后续受控重试。当前仍未使用Windows Job Object治理整个子进程树。
+- 最终生命周期收口使用单调连接租约、上下文代际和活动Turn取消标记，防止并发连接、迟到初始化、旧预览或旧Turn覆盖当前状态。0.2.0关闭时除原有stdin、直接子进程、stdout/stderr读取线程和受控运行目录外，还由带`KILL_ON_JOB_CLOSE`的Windows Job Object治理完整子进程树；显式终止和仅关闭Job句柄的孙进程回收均有真实Rust测试。
 - Phase 6A-Beta-1在同一可信绑定内仅以内存保留至多12条已完成的结构化问答。重新生成或收起同一预览不会清空记录；停止只丢弃未完成回答。项目、Revision、Zone、模型、推理强度、披露范围、语言、连接或应用生命周期变化都会同时清空Thread、预览和记录。
 - Phase 6A-Beta-2增加默认关闭、由用户明确启用的本地只读对话档案。Rust仅把已完成且通过闭合Schema验证的安全问答原子写入应用本地数据；档案按基线SHA-256和稳定Zone UUID过滤，同一项目同一Zone可查看历史Revision并明确标记。档案不包含Thread、认证、路径、PRJ正文、manifest、SIM、原始日志或完整结果序列，不会自动再发送给模型；用户可删除单条、当前Zone或全部档案，关闭只停止后续保存。
 
@@ -185,7 +185,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 - `build.rs`通过`AppManifest`登记该命令，main窗口capability只授予`core:default`与`allow-select-and-read-prj-zones`；前端dialog依赖和权限已移除，未开放文件系统、Shell、HTTP、远程URL或自动更新能力。
 - React不读取文件、不启动进程；Rust宿主把内部持有的规范化选择路径作为JSON请求字段，通过参数数组启动一次性Python进程，并将结构化Envelope返回前端。取消选择以独立`cancelled`响应返回，不伪装为读取错误。
 - Python桥现使用协议`1.2`，显式允许读取、计划Zone体积Patch、应用到副本、提取Zone空气状态和受控活动项目运行五个操作；stdout仅输出一条JSON，运行诊断不进入前端，未处理异常不会泄露Traceback。
-- Python解释器按`CONTAM_STUDIO_PYTHON`绝对路径、仓库内`python/.venv/Scripts/python.exe`顺序发现；缺失时返回`python_runtime_not_found`，不回退到PATH、全局Python或Microsoft Store别名。
+- 0.2.0 Release按显式`CONTAM_STUDIO_PYTHON`开发覆盖、主程序旁冻结Worker顺序发现；仓库`python/.venv/Scripts/python.exe`只存在于debug/test回退。缺失时返回`python_runtime_not_found`，不回退到PATH、全局Python或Microsoft Store别名。
 - Rust端超时为10秒，stdout上限2 MiB、stderr上限16 KiB；超时终止进程，并拒绝非UTF-8、无效JSON、协议不匹配、request_id不匹配、非零退出、超大输出及任意非空stderr。
 - Python响应先进入不可序列化到WebView的Raw类型；Rust验证诊断code，以固定消息替换Python原始message，并对白名单context执行类型检查与120字符截断。成功diagnostics和失败error使用同一规则，TypeScript清理保留为第二道防线。
 - Python成功结果的`source_path`必须规范化后与Rust实际选择路径一致；不一致、路径失效或无法规范化时整体返回`python_response_source_mismatch`，不返回两个路径。
@@ -232,11 +232,11 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入一个Zone体积的Diff审阅、不可变草稿Revision、稳定Zone UUID、撤销/重做和安全另存副本，并可对当前Revision运行ContamX、读取`zone_air_state`、显示曲线与统计和导出CSV。Phase 6A已实现并已合并到`main`；AGENT-01增加受限、批准后运行的单Zone闭环，自动验证已通过，真实GUI和用户验证仍待用户确认。Beta-2可选本地档案只保存经验证的已完成问答，不能恢复Thread、自动继续聊天或自动重放给模型。尚未实现完整PRJ加载、其他区块解析、源文件保存或回写、完整领域模型、多字段或多Patch事务、跨重启草稿恢复、其他结果类型、多Zone/多运行比较、运行历史、通用AI写入、其他AI后端、附件产品工作流、多参数研究、网络服务或Python打包分发；Phase 3C、Phase 5C、Phase 6A和AGENT-01不得解释为完整编辑、完整结果分析或自主Agent系统。
+桌面GUI已接入受限多对象Diff审阅、不可变草稿Revision、稳定对象UUID、撤销/重做、安全副本、官方ContamX/SimRead、结果可视化/报告、附件证据、受审批仿真以及多Provider只读AI。Beta-2/Archive v2只保存经验证的已完成问答，不能恢复远程Thread、自动继续聊天或自动重放给模型。尚未实现任意PRJ完整无损编辑、Schedule/Species参数化、跨重启草稿恢复、通用AI写入、图片像素远程协议、自动更新、云协作或非Windows发行；既有切片不得解释为自主Agent或通用BIM平台。
 
 ## 待验证问题
 
 - PRJ完整格式、无损解析、无损回写、未知区块保留、编号重排和复杂引用关系。
-- 一次性Python进程方案在安装包中的运行时冻结、定位、升级、签名和取消策略；是否需要在后续阶段改为长期受控sidecar仍待证据。
+- 冻结Worker已解决源码独立运行与取消/退出进程树收口；跨版本升级、可信Authenticode签名、长期Worker性能以及是否需要常驻sidecar仍待后续证据。
 - ContamX支持版本、发现方式、捆绑方式及对应许可和第三方声明。
 - Windows 10/11 64位安装、签名、sidecar生命周期和依赖兼容性。

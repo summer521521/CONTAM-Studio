@@ -2,7 +2,8 @@ param(
   [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-08",
   [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging",
   [switch]$SkipBuild,
-  [switch]$ResetArtifacts
+  [switch]$ResetArtifacts,
+  [switch]$RequireInstallers
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,7 +78,11 @@ $status = [ordered]@{
   portable_build = "passed"
   installer_build = $installerStatus
   clean_windows_install = "blocked"
+  independent_clean_windows = "not_run"
+  local_installer_install = "not_run_host_registry_protected"
   signature = "unsigned"
+  frozen_worker = "passed"
+  windows_process_tree = "passed"
   official_contamx_simread = "not_tested"
   packager_tools = $tools
   local_repackage = $installerInfo.local_repackage
@@ -91,4 +96,8 @@ node (Join-Path $repo "scripts\generate-release-diagnostics.mjs") $diagnostics $
 if ($LASTEXITCODE -ne 0) { throw "sanitized diagnostics generation failed" }
 node (Join-Path $repo "scripts\audit-release.mjs") $target
 if ($LASTEXITCODE -ne 0) { throw "release artifact audit failed" }
+$assetArgs = @("-ArtifactRoot", $ArtifactRoot)
+if ($RequireInstallers) { $assetArgs += "-RequireInstallers" }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-release-assets.ps1") @assetArgs
+if ($LASTEXITCODE -ne 0) { throw "release asset preparation failed" }
 $status | ConvertTo-Json -Depth 6

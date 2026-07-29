@@ -6,6 +6,8 @@ build/
 # Rust / Tauri
 target/
 src-tauri/gen/
+src-tauri/runtime/python-worker/*
+!src-tauri/runtime/python-worker/README.md
 
 # Python
 .venv/

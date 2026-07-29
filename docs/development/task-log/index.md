@@ -49,6 +49,7 @@
 | [PH6-02记录验收并收口当前分支](records/phase-6-02-branch-closeout.md) | PH6-02 | completed | live |
 | [PH6-02结果审核与Phase 6A/SAFE-01独立交付](records/phase-6-02-review-and-delivery.md) | PH6-02 | completed | live |
 | [Phase 6B 多Provider只读AI助手](records/phase-6b-multi-provider-ai.md) | Phase 6B | completed | live |
+| [EXPERT-FIX-01与0.2.0发布闭环](records/expert-fix-01-v0-2-0-release.md) | EXPERT-FIX-01 / Release 0.2.0 | in_progress | live |
 | [TRUTH-01唯一能力状态矩阵](records/truth-01-capability-status-matrix.md) | TRUTH-01 | completed | live |
 | [TRUTH-02同步漂移文档与研究证据标签](records/truth-02-document-drift.md) | TRUTH-02 | completed | live |
 | [CONTAM Studio全项目审计与执行计划](records/project-wide-audit-and-execution-plan.md) | Cross-phase planning | completed | live |

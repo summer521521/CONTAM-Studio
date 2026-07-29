@@ -16,6 +16,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::controlled_process::ControlledChild;
+
 pub const CONFIG_SCHEMA_VERSION: u32 = 1;
 const CONFIG_FILE_NAME: &str = "studio-config.json";
 const MAX_PROBE_OUTPUT: usize = 16 * 1024;
@@ -481,13 +483,13 @@ fn tool_from_path(kind: ToolKind, path: Option<&Path>) -> ToolState {
             detail: Some("所选文件不是Windows可执行文件。".to_owned()),
         };
     }
-    let mut child = match Command::new(path)
+    let mut command = Command::new(path);
+    command
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
+        .stderr(Stdio::piped());
+    let mut child = match ControlledChild::spawn(&mut command) {
         Ok(value) => value,
         Err(_) => {
             return ToolState {

@@ -66,7 +66,7 @@ try {
     append(root, "src-tauri/src/zone_bridge.rs", "fn ninth_process_authority() { let _ = Command::new(\"unexpected\"); }");
   });
   expectFailure("duplicate-process-call", "process_unregistered", (root) => {
-    replace(root, "src-tauri/src/zone_bridge.rs", "let mut child = Command::new(executable)", "let _ = Command::new(executable);\n    let mut child = Command::new(executable)");
+    replace(root, "src-tauri/src/zone_bridge.rs", "let mut command = Command::new(executable);", "let _ = Command::new(executable);\n    let mut command = Command::new(executable);");
   });
   expectFailure("wrong-process-owner", "process_unregistered", (root) => {
     replace(root, "contracts/rust-authority.v1.json", '"owner": "probe_codex_version_at"', '"owner": "run_official_installer"');

@@ -166,16 +166,61 @@ fn outcome(stdout: Vec<u8>) -> ProcessOutcome {
 
 #[test]
 fn python_discovery_and_timeout_limits_are_explicit() {
-    let python = project_root().join("python/.venv/Scripts/python.exe");
-    assert_eq!(
-        discover_python(Some(python.clone().into_os_string()), Path::new("ignored")),
-        Ok(python)
-    );
+    let root = project_root();
+    let python = root.join("python/.venv/Scripts/python.exe");
+    let runtime = discover_bridge_runtime(
+        Some(python.clone().into_os_string()),
+        Path::new("ignored"),
+        Some(&root),
+    )
+    .unwrap();
+    assert_eq!(runtime.executable, python);
+    assert_eq!(runtime.arguments, python_bridge_arguments());
+    assert_eq!(runtime.working_directory, root);
+    assert_eq!(runtime.kind, BridgeRuntimeKind::DevelopmentPython);
     assert_eq!(READ_AND_PLAN_TIMEOUT, Duration::from_secs(10));
     assert_eq!(APPLY_TIMEOUT, Duration::from_secs(15));
     assert_eq!(EXTRACT_TIMEOUT, Duration::from_secs(45));
     assert_eq!(RUN_TIMEOUT, Duration::from_secs(75));
     assert_eq!(MAX_REQUEST_BYTES, 128 * 1024);
+}
+
+#[test]
+fn frozen_worker_is_preferred_and_does_not_require_a_source_tree() {
+    let root = std::env::temp_dir().join(format!(
+        "contam-studio-frozen-worker-{}-{}",
+        std::process::id(),
+        Uuid::new_v4()
+    ));
+    let worker = root.join(FROZEN_WORKER_RELATIVE_PATH);
+    fs::create_dir_all(worker.parent().unwrap()).unwrap();
+    fs::write(&worker, b"test worker").unwrap();
+
+    let runtime = discover_bridge_runtime(None, &root, Some(Path::new("missing-source"))).unwrap();
+    assert_eq!(runtime.executable, worker);
+    assert!(runtime.arguments.is_empty());
+    assert_eq!(
+        runtime.working_directory,
+        root.join("runtime/python-worker")
+    );
+    assert_eq!(runtime.kind, BridgeRuntimeKind::FrozenWorker);
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn release_runtime_discovery_has_no_implicit_source_fallback() {
+    let root = std::env::temp_dir().join(format!(
+        "contam-studio-missing-worker-{}-{}",
+        std::process::id(),
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&root).unwrap();
+    assert_eq!(
+        discover_bridge_runtime(None, &root, None),
+        Err("python_runtime_not_found")
+    );
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

@@ -15,14 +15,20 @@ function walk(directory) {
 }
 walk(root);
 const forbiddenNames = [/\.prj$/i, /\.sim$/i, /\.csv$/i, /\.nfr$/i, /fixture/i, /node_modules/i, /\.venv/i, /secret/i, /token/i, /cookie/i, /debug\.log$/i];
-const forbiddenContent = [/F:\\CONTAM Studio/i, /F:\\Codex_File/i, /C:\\Users\\[^\\]+\\/i, /agent-08-installer-clean-machine/i, /BEGIN (RSA|OPENSSH) PRIVATE KEY/i, /password\s*=/i];
+const forbiddenProvenance = [/F:\\CONTAM Studio/i, /F:\\Codex_File/i, /F:\\python\\/i, /C:\\Users\\[^\\]+\\/i, /agent-08-installer-clean-machine/i];
+const forbiddenSensitiveText = [/BEGIN (RSA|OPENSSH) PRIVATE KEY/i, /password\s*=/i, /api[_-]?key\s*=/i, /bearer\s+[a-z0-9._~-]{16,}/i];
+const textExtensions = new Set([".json", ".md", ".txt", ".log", ".ini", ".conf", ".toml", ".yaml", ".yml", ".xml", ".html", ".js", ".mjs", ".css", ".ps1"]);
 for (const file of files) {
   const relative = path.relative(root, file);
   if (forbiddenNames.some((pattern) => pattern.test(relative))) failures.push(`forbidden artifact name: ${relative}`);
   const bytes = fs.readFileSync(file);
-  if (bytes.length <= 8 * 1024 * 1024) {
-    const text = bytes.toString("utf8");
-    for (const pattern of forbiddenContent) if (pattern.test(text)) failures.push(`forbidden content ${pattern}: ${relative}`);
+  const representations = [bytes.toString("utf8"), bytes.toString("utf16le"), bytes.toString("latin1")];
+  for (const pattern of forbiddenProvenance) {
+    if (representations.some((text) => pattern.test(text))) failures.push(`forbidden provenance ${pattern}: ${relative}`);
+  }
+  if (textExtensions.has(path.extname(file).toLowerCase())) {
+    const text = representations[0];
+    for (const pattern of forbiddenSensitiveText) if (pattern.test(text)) failures.push(`forbidden sensitive text ${pattern}: ${relative}`);
   }
 }
 if (!files.some((file) => /manifest\.json$/i.test(file))) failures.push("artifact manifest is missing");

@@ -57,8 +57,8 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / e
 1. React生成`request_id`，调用`select_and_read_prj_zones`，不提供文件路径。
 2. Rust通过官方原生对话框选择单个`.prj`；取消直接返回`cancelled=true`且不创建错误Envelope。
 3. Rust将本地选择转换为路径，确认其存在、为文件且扩展名为`.prj`，随后执行规范化。无效选择不会进入Python。
-4. Rust发现允许的Python解释器，以参数数组执行`python -I -m contam_studio_core.zone_bridge`；不使用Shell、`cmd /c`或PowerShell拼接。
-5. Rust设置仓库根目录为开发期工作目录，写入JSON后关闭stdin，并并行、有限读取stdout和stderr。
+4. Release 构建从主程序目录解析冻结 Worker；debug/test 可使用显式开发解释器或仓库 `.venv`。Rust以参数数组启动，不使用Shell、`cmd /c`或PowerShell拼接。
+5. 冻结 Worker 使用自身资源目录，开发解释器使用仓库根目录作为工作目录；Rust写入JSON后关闭stdin，并并行、有限读取stdout和stderr。
 6. 进程结束后Rust验证UTF-8、JSON、协议和`request_id`。任意非空stderr均使请求失败，stderr内容不进入响应或普通日志。
 7. 成功结果的`source_path`必须规范化后与Rust实际选择的路径一致；Rust只返回已验证的规范化路径。
 8. Python诊断先进入仅可反序列化的Raw类型，由Rust清理后才转换为可序列化到WebView的类型。
@@ -69,17 +69,18 @@ read_simple_zones / plan_zone_volume_patch / apply_zone_volume_patch_to_copy / e
 13. 最新运行结果命令不打开对话框，从Rust `ActiveRunContext`取得受控manifest；它额外验证项目session、源SHA-256、运行根和返回`run_id`，但复用第12步相同的Python操作与结果验证。
 14. 两种结果入口成功后，Rust保存仅存在于内存且绑定`revision_id`的`ActiveResultContext`。CSV导出重新验证项目、Revision、Zone、运行和提取身份，原生选择目标并在Rust中编码；React不提交路径、样本或CSV，导出不启动Python。新Revision、Undo或Redo成功后旧运行和结果上下文失效。
 
-读取和计划超时为10秒，应用超时为15秒，结果提取超时为45秒，桌面ContamX运行桥超时为75秒（大于Python求解器60秒上限）；stdout上限2 MiB，stderr上限16 KiB。超时后Rust终止Python进程；超过上限的内容继续被排空但不保存在内存中。stderr必须为空且不会返回前端，Python正常用户输入错误通过stdout Envelope表达。
+读取和计划超时为10秒，应用超时为15秒，结果提取超时为45秒，桌面ContamX运行桥超时为75秒（大于Python求解器60秒上限）；stdout上限2 MiB，stderr上限16 KiB。超时后Rust终止拥有Python及其全部后代的Windows Job Object；超过上限的内容继续被排空但不保存在内存中。stderr必须为空且不会返回前端，Python正常用户输入错误通过stdout Envelope表达。
 
-## Python发现
+## Worker发现
 
-开发期顺序固定为：
+0.2.0顺序固定为：
 
-1. `CONTAM_STUDIO_PYTHON`指定的绝对、存在的文件路径；
-2. 仓库内`python/.venv/Scripts/python.exe`；
-3. 返回`python_runtime_not_found`。
+1. 用户显式设置且指向绝对、存在文件的`CONTAM_STUDIO_PYTHON`开发覆盖；
+2. 主程序目录下`runtime/python-worker/contam-studio-python-worker.exe`；
+3. 仅在debug/test构建中检查仓库`python/.venv/Scripts/python.exe`；
+4. 返回`python_runtime_not_found`。
 
-显式配置无效时失败关闭，不回退到项目虚拟环境或PATH。默认不尝试系统Python、`F:/python/python.exe`、Codex通用环境或Microsoft Store别名。安装包内Python冻结和定位尚未实现。
+显式配置无效时失败关闭，不继续回退。Release 二进制不编译仓库根发现路径，不尝试系统Python、PATH、`F:/python/python.exe`、Codex通用环境或Microsoft Store别名。便携版与Tauri安装器保持相同资源布局，且构建清单必须证明Worker与候选提交一致并通过脱离源码冒烟。
 
 ## 错误分类
 
@@ -108,8 +109,8 @@ Rust只接受不超过80字符的`[a-z0-9_]`诊断code；Python原始message被�
 
 ## 当前不支持与待验证
 
-- Python运行时冻结、安装包集成、签名、升级和卸载。
-- 进程主动取消、进程树清理及大量并发请求；当前UI在选择和读取期间禁用重复打开，状态层仍拒绝旧响应。
+- Authenticode签名、另一台全新Windows的独立执行证据、自动更新和跨版本Worker迁移。
+- 大量并发请求；当前UI在选择和读取期间禁用重复打开，状态层仍拒绝旧响应。0.2.0已为超时、取消、父进程正常退出和Studio退出提供Job Object进程树收口。
 - 完整PRJ、Zone条件尾部、其他区块、源文件保存和完整回写；当前未知区块仅通过单记号替换时保留原始字节。
 - 跨重启草稿恢复、多个Patch、多字段事务、复杂分支历史和其他字段编辑。
 - 运行结束后自动提取、任意SIM/NFR入口、其他结果类型、多Zone/多运行比较、Excel原生格式和自动导出。最新成功运行仍必须由用户明确点击后加载，CSV仍必须由用户明确选择新文件。

@@ -8,11 +8,11 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `CONTAM-Studio.exe` | 无需安装的便携版 |
-| `CONTAM-Studio_<version>_portable.zip` | 含许可证声明的完整便携包 |
-| `CONTAM.Studio_<version>_x64-setup.exe` | 推荐的NSIS安装器 |
-| `CONTAM.Studio_<version>_x64_en-US.msi` | 适合Windows Installer管理的MSI |
+| `CONTAM-Studio-v<version>-windows-x64-portable.zip` | 含冻结Worker和许可证的完整便携包 |
+| `CONTAM Studio_<version>_x64-setup.exe` | 推荐的NSIS安装器 |
+| `CONTAM Studio_<version>_x64_en-US.msi` | 适合Windows Installer管理的MSI |
 | `SHA256SUMS.txt` | 文件完整性校验 |
+| `manifest.json` | 版本、提交和包内文件哈希 |
 
 源码页中的“Source code”压缩包不是桌面安装包。
 
@@ -26,10 +26,10 @@ Get-FileHash -Algorithm SHA256 -LiteralPath ".\下载的文件.exe"
 
 结果应与同一Release中的`SHA256SUMS.txt`一致。签名版本还应在文件属性的“数字签名”页显示发布者和有效签名。
 
-0.1.0没有Authenticode签名，Windows可能显示未知发布者。其GitHub Sigstore记录可用GitHub CLI验证：
+0.2.0没有Authenticode签名，Windows可能显示未知发布者。如同一Release已生成GitHub证明记录，可用GitHub CLI验证：
 
 ```powershell
-gh attestation verify ".\CONTAM-Studio.exe" `
+gh attestation verify ".\CONTAM-Studio-v0.2.0-windows-x64-portable.zip" `
   --repo summer521521/CONTAM-Studio `
   --predicate-type "https://github.com/summer521521/CONTAM-Studio/attestations/release-verification/v1"
 ```
@@ -38,7 +38,7 @@ gh attestation verify ".\CONTAM-Studio.exe" `
 
 ## 更新
 
-0.1.0不在后台检查或自动下载更新：
+0.2.0不在后台检查或自动下载更新：
 
 1. 保存草稿并退出Studio。
 2. 打开GitHub Releases。
@@ -47,6 +47,8 @@ gh attestation verify ".\CONTAM-Studio.exe" `
 5. 校验SHA-256和数字签名。
 6. 运行安装包完成覆盖安装。
 7. 启动后在“关于”中确认版本。
+
+便携版必须完整解压后运行；不能只复制`CONTAM-Studio.exe`，否则会缺少`runtime/python-worker`。
 
 升级和卸载默认保留用户项目、研究结果、报告、配置及外部ContamX/SimRead。重要研究仍应由用户单独备份。
 

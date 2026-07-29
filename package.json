@@ -1,7 +1,7 @@
 {
   "name": "contam-studio",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "Apache-2.0",
   "repository": "https://github.com/summer521521/CONTAM-Studio",
   "type": "module",
@@ -14,6 +14,7 @@
     "build:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "test:release-closure": "node scripts/tests/test-release-closure-contract.mjs",
     "test:installer-clean-machine": "node scripts/tests/test-agent-08-installer-clean-machine-contract.mjs",
+    "test:runtime-distribution": "node scripts/tests/test-expert-fix-runtime-contract.mjs",
     "release:closure": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-closure.ps1",
     "preview": "vite preview --host 127.0.0.1 --port 1420",
     "tauri": "tauri"

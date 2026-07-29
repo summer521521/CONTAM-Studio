@@ -1,4 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Once;
 use std::time::Duration;
 
 use futures_util::StreamExt;
@@ -31,6 +32,7 @@ pub(crate) struct ControlledHttpClient {
 
 impl ControlledHttpClient {
     pub(crate) fn new() -> Result<Self, AiProviderError> {
+        install_rustls_provider();
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(CONNECT_TIMEOUT)
@@ -111,6 +113,15 @@ impl ControlledHttpClient {
         }
         Ok(response)
     }
+}
+
+fn install_rustls_provider() {
+    static INSTALL_PROVIDER: Once = Once::new();
+    INSTALL_PROVIDER.call_once(|| {
+        if rustls::crypto::CryptoProvider::get_default().is_none() {
+            let _ = rustls::crypto::ring::default_provider().install_default();
+        }
+    });
 }
 
 fn map_reqwest_error(error: &reqwest::Error) -> AiProviderError {

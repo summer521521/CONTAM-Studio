@@ -4,9 +4,38 @@ param(
   [switch]$SkipTauriBuild
 )
 $ErrorActionPreference = "Stop"
+
+function Get-Sha256Hex([string]$FilePath) {
+  $stream = [IO.File]::OpenRead($FilePath)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try {
+    return -join ($sha256.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") })
+  } finally {
+    $sha256.Dispose()
+    $stream.Dispose()
+  }
+}
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $version = node -p "require('$($repo.Replace('\', '/'))/package.json').version"
+$commit = (git -C $repo rev-parse HEAD).Trim()
 $target = Join-Path (Join-Path $ArtifactRoot $version) "installers"
+$workerRoot = Join-Path $repo "src-tauri\runtime\python-worker"
+$workerManifestPath = Join-Path $workerRoot "runtime-manifest.json"
+$encodedSeparator = [string][char]0x1f
+$releaseRustFlags = @(
+  "--remap-path-prefix=$repo=.",
+  "--remap-path-prefix=$($env:USERPROFILE)=.user"
+)
+if (-not [string]::IsNullOrWhiteSpace($env:CARGO_ENCODED_RUSTFLAGS)) {
+  $releaseRustFlags = @($env:CARGO_ENCODED_RUSTFLAGS -split $encodedSeparator) + $releaseRustFlags
+}
+$env:CARGO_ENCODED_RUSTFLAGS = $releaseRustFlags -join $encodedSeparator
+$nativePathMaps = @(
+  "/pathmap:$($env:USERPROFILE)\.cargo=.",
+  "/pathmap:$repo=."
+)
+$env:CFLAGS = (@($env:CFLAGS) + $nativePathMaps -join " ").Trim()
+$env:CXXFLAGS = (@($env:CXXFLAGS) + $nativePathMaps -join " ").Trim()
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 $resolver = Join-Path $PSScriptRoot "resolve-packaging-toolchain.ps1"
 $toolchain = $null
@@ -25,6 +54,15 @@ try {
   $resolverError = $_.Exception.Message
 }
 if ($status -eq "available") {
+  if (-not (Test-Path -LiteralPath (Join-Path $workerRoot "contam-studio-python-worker.exe") -PathType Leaf) -or
+      -not (Test-Path -LiteralPath (Join-Path $workerRoot "_internal") -PathType Container) -or
+      -not (Test-Path -LiteralPath $workerManifestPath -PathType Leaf)) {
+    throw "complete frozen Python worker runtime is missing"
+  }
+  $workerManifest = Get-Content -LiteralPath $workerManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($workerManifest.commit_sha -ne $commit -or $workerManifest.source_tree_required -ne $false) {
+    throw "frozen Python worker manifest does not match this installer commit"
+  }
   if (-not $SkipTauriBuild) {
     Push-Location $repo
     try {
@@ -45,8 +83,8 @@ if ($status -eq "available") {
     nsis_version = [string]$toolchain.nsis.version
     wix_version = [string]$toolchain.candle.version
     outputs = @(
-      [ordered]@{ path = "CONTAM Studio_0.1.0_x64-setup.exe"; sha256 = (Get-FileHash -LiteralPath (Join-Path $target "CONTAM Studio_0.1.0_x64-setup.exe") -Algorithm SHA256).Hash.ToLowerInvariant() },
-      [ordered]@{ path = "CONTAM Studio_0.1.0_x64_en-US.msi"; sha256 = (Get-FileHash -LiteralPath (Join-Path $target "CONTAM Studio_0.1.0_x64_en-US.msi") -Algorithm SHA256).Hash.ToLowerInvariant() }
+      [ordered]@{ path = "CONTAM Studio_$($version)_x64-setup.exe"; sha256 = (Get-Sha256Hex (Join-Path $target "CONTAM Studio_$($version)_x64-setup.exe")) },
+      [ordered]@{ path = "CONTAM Studio_$($version)_x64_en-US.msi"; sha256 = (Get-Sha256Hex (Join-Path $target "CONTAM Studio_$($version)_x64_en-US.msi")) }
     )
   }
 } else {

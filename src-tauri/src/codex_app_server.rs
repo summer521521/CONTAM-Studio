@@ -11,7 +11,7 @@ use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
+use std::process::{ChildStdin, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -20,6 +20,8 @@ use tauri::{AppHandle, Manager};
 use url::Url;
 use uuid::Uuid;
 use zeroize::Zeroizing;
+
+use crate::controlled_process::ControlledChild;
 
 const CODEX_ENVIRONMENT_VARIABLE: &str = "CONTAM_STUDIO_CODEX";
 const OFFICIAL_CODEX_INSTALLER_URL: &str = "https://chatgpt.com/codex/install.ps1";
@@ -690,7 +692,7 @@ impl RpcFailure {
 }
 
 struct AppServerConnection {
-    child: Mutex<Option<Child>>,
+    child: Mutex<Option<ControlledChild>>,
     stdin: Mutex<Option<ChildStdin>>,
     pending: Mutex<HashMap<u64, mpsc::SyncSender<Result<Value, RpcFailure>>>>,
     notifications: Mutex<mpsc::Receiver<Value>>,
@@ -758,12 +760,13 @@ impl AppServerConnection {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         apply_codex_environment(&mut command);
-        let mut child = command
-            .spawn()
+        let mut child = ControlledChild::spawn(&mut command)
             .map_err(|_| RpcFailure::new("codex_app_server_start_failed"))?;
-        let (Some(stdin), Some(stdout), Some(stderr)) =
-            (child.stdin.take(), child.stdout.take(), child.stderr.take())
-        else {
+        let (Some(stdin), Some(stdout), Some(stderr)) = (
+            child.stdin().take(),
+            child.stdout().take(),
+            child.stderr().take(),
+        ) else {
             let _ = child.kill();
             let _ = Self::wait_for_exit(&mut child, Instant::now() + PROCESS_STOP_TIMEOUT);
             return Err(RpcFailure::new("codex_app_server_start_failed"));
@@ -1015,7 +1018,7 @@ impl AppServerConnection {
         }
     }
 
-    fn wait_for_exit(child: &mut Child, deadline: Instant) -> bool {
+    fn wait_for_exit(child: &mut ControlledChild, deadline: Instant) -> bool {
         loop {
             match child.try_wait() {
                 Ok(Some(_)) => return true,
@@ -1245,7 +1248,7 @@ fn join_capture_pair_bounded(
     Some((first.join().ok()?, second.join().ok()?))
 }
 
-fn wait_for_child_exit(child: &mut Child, timeout: Duration) -> Option<ExitStatus> {
+fn wait_for_child_exit(child: &mut ControlledChild, timeout: Duration) -> Option<ExitStatus> {
     let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
@@ -1342,15 +1345,15 @@ fn probe_codex_version_at(path: &Path, probe_dir: &Path) -> Result<String, AiDia
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     apply_codex_environment(&mut command);
-    let mut child = command.spawn().map_err(|_| {
+    let mut child = ControlledChild::spawn(&mut command).map_err(|_| {
         AiDiagnostic::new("codex_cli_probe_failed", "Codex CLI version probe failed.")
     })?;
     let stdout = capture_limited(
-        child.stdout.take().expect("piped Codex probe stdout"),
+        child.stdout().take().expect("piped Codex probe stdout"),
         MAX_PROBE_STREAM_BYTES,
     );
     let stderr = capture_limited(
-        child.stderr.take().expect("piped Codex probe stderr"),
+        child.stderr().take().expect("piped Codex probe stderr"),
         MAX_PROBE_STREAM_BYTES,
     );
     let deadline = Instant::now() + PROBE_TIMEOUT;
@@ -1568,18 +1571,18 @@ fn run_official_installer(install_dir: &Path) -> Result<(), AiDiagnostic> {
         .stderr(Stdio::piped());
     apply_codex_environment(&mut command);
     command.env("CODEX_NON_INTERACTIVE", "1");
-    let mut child = command.spawn().map_err(|_| {
+    let mut child = ControlledChild::spawn(&mut command).map_err(|_| {
         AiDiagnostic::new(
             "codex_cli_install_failed",
             "The controlled Codex CLI installer could not be started.",
         )
     })?;
     let stdout = capture_limited(
-        child.stdout.take().expect("piped installer stdout"),
+        child.stdout().take().expect("piped installer stdout"),
         MAX_PROBE_STREAM_BYTES,
     );
     let stderr = capture_limited(
-        child.stderr.take().expect("piped installer stderr"),
+        child.stderr().take().expect("piped installer stderr"),
         MAX_PROBE_STREAM_BYTES,
     );
     let deadline = Instant::now() + INSTALL_TIMEOUT;
