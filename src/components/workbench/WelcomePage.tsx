@@ -20,7 +20,7 @@ import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { DestinationPage } from "./DestinationPage";
 import type { WorkbenchDestination } from "../../app/workbench-state";
 import type { SemanticSnapshot } from "../../app/semantic-state";
-import type { StudioSetup, ToolKind } from "../../app/release-state";
+import type { StorageUsageView, StudioSetup, ToolKind } from "../../app/release-state";
 
 interface WelcomePageProps {
   destination?: WorkbenchDestination;
@@ -52,8 +52,9 @@ interface WelcomePageProps {
   onChooseDataDirectory?: () => Promise<string | null>;
   onProbeTool?: (kind: ToolKind) => Promise<import("../../app/release-state").ToolState | null>;
   onSaveSetup?: (dataDirectory: string, contamxPath: string | null, simreadPath: string | null) => Promise<void>;
-  onOpenStudioDirectory?: (kind: "data" | "logs" | "cache") => Promise<void>;
+  onOpenStudioDirectory?: (kind: "data" | "app-data" | "logs" | "cache") => Promise<void>;
   onClearStudioCache?: () => Promise<void>;
+  storageUsage?: StorageUsageView | null;
   onCopyDiagnostics?: () => Promise<void>;
   onExportDiagnostics?: () => Promise<void>;
 }
@@ -89,6 +90,7 @@ export function WelcomePage({
   onSaveSetup = async () => undefined,
   onOpenStudioDirectory = async () => undefined,
   onClearStudioCache = async () => undefined,
+  storageUsage = null,
   onCopyDiagnostics = async () => undefined,
   onExportDiagnostics = async () => undefined,
 }: WelcomePageProps) {
@@ -153,6 +155,7 @@ export function WelcomePage({
             onSaveSetup={onSaveSetup}
             onOpenStudioDirectory={onOpenStudioDirectory}
             onClearStudioCache={onClearStudioCache}
+            storageUsage={storageUsage}
             onCopyDiagnostics={onCopyDiagnostics}
             onExportDiagnostics={onExportDiagnostics}
           />

@@ -23,8 +23,8 @@ const required = [
   "src-tauri/runtime/python-worker/README.md",
   "src-tauri/src/controlled_process.rs",
   "docs/adr/ADR-017-package-frozen-worker-and-own-windows-process-trees.md",
-  "docs/release/CONTAM-Studio-0.2.0-release-notes.md",
-  "docs/release/known-limitations-0.2.0.md",
+  "docs/release/CONTAM-Studio-0.3.0-release-notes.md",
+  "docs/release/known-limitations-0.3.0.md",
   "docs/release/release-kit-v2.md",
 ];
 for (const file of required) read(file);
@@ -40,7 +40,7 @@ for (const [label, version] of [
 ]) {
   if (version !== packageJson.version) failures.push(`${label} version ${version} does not match package ${packageJson.version}`);
 }
-if (packageJson.version !== "0.2.0") failures.push("EXPERT-FIX release version must be 0.2.0");
+if (packageJson.version !== "0.3.0") failures.push("current release version must be 0.3.0");
 
 const cargo = read("src-tauri/Cargo.toml");
 for (const marker of [

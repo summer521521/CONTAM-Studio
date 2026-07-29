@@ -33,6 +33,7 @@ import type {
   DesktopDirectoryResponse,
   DesktopSetupResponse,
   DesktopToolProbeResponse,
+  DesktopStorageUsageResponse,
 } from "./release-state";
 
 export interface DesktopAiProviderProfilesResponse {
@@ -53,6 +54,9 @@ export interface DesktopAiProviderModelsResponse {
   profile_id: string;
   models: AiProviderModelView[];
   verified: boolean;
+  stale?: boolean;
+  source?: string | null;
+  fetched_at?: string | null;
   error: { code: string; message: string } | null;
 }
 
@@ -574,8 +578,12 @@ export async function selectAndProbeOfficialTool(requestId: string, toolKind: "c
   return invoke<DesktopToolProbeResponse>("select_and_probe_official_tool", { requestId, toolKind });
 }
 
-export async function openStudioDirectory(requestId: string, directoryKind: "data" | "logs" | "cache"): Promise<DesktopActionResponse> {
+export async function openStudioDirectory(requestId: string, directoryKind: "data" | "app-data" | "logs" | "cache"): Promise<DesktopActionResponse> {
   return invoke<DesktopActionResponse>("open_studio_directory", { requestId, directoryKind });
+}
+
+export async function getStorageUsage(requestId: string): Promise<DesktopStorageUsageResponse> {
+  return invoke<DesktopStorageUsageResponse>("get_storage_usage", { requestId });
 }
 
 export async function clearStudioCache(requestId: string): Promise<DesktopActionResponse> {

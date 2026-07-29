@@ -1874,7 +1874,7 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     ] {
         assert!(build_script.contains(command));
     }
-    assert_eq!(capability["permissions"].as_array().unwrap().len(), 63);
+    assert_eq!(capability["permissions"].as_array().unwrap().len(), 64);
     let forbidden = [
         "sourcePath",
         "outputPath",

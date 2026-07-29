@@ -400,6 +400,13 @@
       "payload_keys": ["requestId", "directoryKind"]
     },
     {
+      "command": "get_storage_usage",
+      "rust_module": "release",
+      "ts_wrapper": "getStorageUsage",
+      "permission": "allow-get-storage-usage",
+      "payload_keys": ["requestId"]
+    },
+    {
       "command": "clear_studio_cache",
       "rust_module": "release",
       "ts_wrapper": "clearStudioCache",

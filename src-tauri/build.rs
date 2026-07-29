@@ -78,6 +78,7 @@ fn main() {
         "select_data_directory",
         "select_and_probe_official_tool",
         "open_studio_directory",
+        "get_storage_usage",
         "clear_studio_cache",
         "get_diagnostics_summary",
         "export_sanitized_diagnostics",

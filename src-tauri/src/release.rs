@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -22,6 +23,7 @@ pub const CONFIG_SCHEMA_VERSION: u32 = 1;
 const CONFIG_FILE_NAME: &str = "studio-config.json";
 const MAX_PROBE_OUTPUT: usize = 16 * 1024;
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+const CONTAM_TOOLS_LOCK_JSON: &str = include_str!("../../resources/contam-tools.lock.json");
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -58,6 +60,8 @@ pub enum ToolStatus {
     UnsupportedVersion,
     ArchitectureMismatch,
     ProbeFailed,
+    ResourceMissing,
+    HashMismatch,
     Available,
 }
 
@@ -99,6 +103,20 @@ pub struct StorageLayout {
     pub cache_directory: String,
     pub log_directory: String,
     pub temporary_directory: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StorageCategoryView {
+    pub id: String,
+    pub kind: String,
+    pub file_count: u64,
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StorageUsageView {
+    pub root_label: String,
+    pub categories: Vec<StorageCategoryView>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -157,6 +175,13 @@ pub struct DesktopDiagnosticsResponse {
     pub error: Option<SetupError>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DesktopStorageUsageResponse {
+    pub request_id: String,
+    pub usage: Option<StorageUsageView>,
+    pub error: Option<SetupError>,
+}
+
 fn error(_request_id: &str, code: &str, message: impl Into<String>) -> SetupError {
     SetupError {
         code: code.to_owned(),
@@ -211,6 +236,182 @@ fn layout(app: &AppHandle, configured_data: Option<&Path>) -> StorageLayout {
         log_directory: path_string(logs),
         temporary_directory: path_string(temp),
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ContamToolsLockEntry {
+    file: String,
+    sha256: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ContamToolsLock {
+    files: Vec<ContamToolsLockEntry>,
+}
+
+fn parse_contam_tools_lock() -> Result<ContamToolsLock, SetupError> {
+    serde_json::from_str(CONTAM_TOOLS_LOCK_JSON)
+        .map_err(|_| error("", "tool_lock_invalid", "内置工具清单无效。"))
+}
+
+fn is_path_within(root: &Path, candidate: &Path) -> bool {
+    let Ok(root) = fs::canonicalize(root) else {
+        return false;
+    };
+    let Ok(candidate) = fs::canonicalize(candidate) else {
+        return false;
+    };
+    candidate.starts_with(root)
+}
+
+fn sha256_file(path: &Path) -> Result<String, SetupError> {
+    let mut file =
+        File::open(path).map_err(|_| error("", "tool_hash_failed", "无法验证内置工具。"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|_| error("", "tool_hash_failed", "无法验证内置工具。"))?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(format!("{:X}", hasher.finalize()))
+}
+
+fn find_file_under(root: &Path, file_name: &str) -> Option<PathBuf> {
+    if !root.is_dir() {
+        return None;
+    }
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory).ok()?.flatten() {
+            let path = entry.path();
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if metadata.file_type().is_symlink() {
+                continue;
+            }
+            if metadata.is_dir() {
+                pending.push(path);
+            } else if metadata.is_file()
+                && path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| value.eq_ignore_ascii_case(file_name))
+            {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+fn bundled_tool_from_root(root: &Path, kind: ToolKind) -> Option<ToolState> {
+    if !root.is_dir() {
+        return None;
+    }
+    let expected_name = match kind {
+        ToolKind::Contamx => "contamx3.exe",
+        ToolKind::Simread => "simread.exe",
+    };
+    let lock = match parse_contam_tools_lock() {
+        Ok(value) => value,
+        Err(value) => {
+            return Some(ToolState {
+                kind: kind.as_str().to_owned(),
+                status: ToolStatus::ProbeFailed,
+                path: None,
+                version: None,
+                detail: Some(value.message),
+            })
+        }
+    };
+    let Some(lock_entry) = lock.files.iter().find(|entry| {
+        Path::new(&entry.file)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case(expected_name))
+    }) else {
+        return Some(ToolState {
+            kind: kind.as_str().to_owned(),
+            status: ToolStatus::ResourceMissing,
+            path: None,
+            version: None,
+            detail: Some("内置工具清单中缺少所需程序；请重新构建资源。".to_owned()),
+        });
+    };
+    let locked_path = root.join(&lock_entry.file);
+    let path = if locked_path.is_file() {
+        locked_path
+    } else {
+        find_file_under(root, expected_name).unwrap_or(locked_path)
+    };
+    if !path.is_file() || !is_path_within(root, &path) {
+        return Some(ToolState {
+            kind: kind.as_str().to_owned(),
+            status: ToolStatus::ResourceMissing,
+            path: None,
+            version: None,
+            detail: Some("未找到内置仿真工具；请重新安装或查看诊断。".to_owned()),
+        });
+    }
+    let actual = match sha256_file(&path) {
+        Ok(value) => value,
+        Err(value) => {
+            return Some(ToolState {
+                kind: kind.as_str().to_owned(),
+                status: ToolStatus::HashMismatch,
+                path: None,
+                version: None,
+                detail: Some(value.message),
+            })
+        }
+    };
+    if !actual.eq_ignore_ascii_case(&lock_entry.sha256) {
+        return Some(ToolState {
+            kind: kind.as_str().to_owned(),
+            status: ToolStatus::HashMismatch,
+            path: None,
+            version: None,
+            detail: Some("内置工具身份校验失败；请重新安装官方资源。".to_owned()),
+        });
+    }
+    let mut state = tool_from_path(kind, Some(&path));
+    if state.status == ToolStatus::Available {
+        state.detail = Some("内置 NIST 仿真引擎已通过身份校验。".to_owned());
+    }
+    Some(state)
+}
+
+fn bundled_tool_roots(app: &AppHandle) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    #[cfg(debug_assertions)]
+    if let Ok(value) = std::env::var("CONTAM_STUDIO_CONTAM_TOOLS_DIR") {
+        let path = PathBuf::from(value);
+        if path.is_absolute() {
+            roots.push(path);
+        }
+    }
+    if let Ok(resource) = app.path().resource_dir() {
+        roots.push(resource.join("runtime").join("contam-tools"));
+        roots.push(resource.join("contam-tools"));
+    }
+    roots
+}
+
+fn resolve_tool(app: &AppHandle, kind: ToolKind, legacy_path: Option<&Path>) -> ToolState {
+    for root in bundled_tool_roots(app) {
+        if let Some(state) = bundled_tool_from_root(&root, kind.clone()) {
+            return state;
+        }
+    }
+    // Legacy user paths remain a diagnostic-only fallback for older installs;
+    // the normal UI never offers or writes them.
+    tool_from_path(kind, legacy_path)
 }
 
 fn runtime_info() -> RuntimeInfo {
@@ -603,8 +804,8 @@ fn setup_from_config(app: &AppHandle) -> Result<StudioSetup, SetupError> {
         language,
         theme,
         data_directory: path_string(data_path.clone()),
-        contamx: tool_from_path(ToolKind::Contamx, contamx.as_deref()),
-        simread: tool_from_path(ToolKind::Simread, simread.as_deref()),
+        contamx: resolve_tool(app, ToolKind::Contamx, contamx.as_deref()),
+        simread: resolve_tool(app, ToolKind::Simread, simread.as_deref()),
         runtime: runtime_info(),
         storage: layout(app, Some(&data_path)),
     })
@@ -644,8 +845,8 @@ pub fn save_studio_setup(
     language: String,
     theme: String,
     data_directory: String,
-    contamx_path: Option<String>,
-    simread_path: Option<String>,
+    _contamx_path: Option<String>,
+    _simread_path: Option<String>,
 ) -> DesktopSetupResponse {
     if !valid_request(&request_id) {
         return response_error(request_id, "bridge_request_invalid", "request_id无效。");
@@ -680,17 +881,7 @@ pub fn save_studio_setup(
             "无法创建或访问数据目录。",
         );
     }
-    let contamx = contamx_path.as_deref().map(PathBuf::from);
-    let simread = simread_path.as_deref().map(PathBuf::from);
-    if let Err(value) = write_config(
-        &app,
-        true,
-        &language,
-        &theme,
-        &data,
-        contamx.as_deref(),
-        simread.as_deref(),
-    ) {
+    if let Err(value) = write_config(&app, true, &language, &theme, &data, None, None) {
         return DesktopSetupResponse {
             request_id,
             setup: None,
@@ -838,6 +1029,16 @@ pub fn open_studio_directory(
     };
     let path = match directory_kind.as_str() {
         "data" => PathBuf::from(setup.storage.data_directory),
+        "app-data" => match app.path().app_local_data_dir() {
+            Ok(value) => value,
+            Err(_) => {
+                return DesktopActionResponse {
+                    request_id,
+                    succeeded: false,
+                    error: Some(error("", "directory_unavailable", "无法访问应用数据目录。")),
+                }
+            }
+        },
         "logs" => PathBuf::from(setup.storage.log_directory),
         "cache" => PathBuf::from(setup.storage.cache_directory),
         _ => {
@@ -871,6 +1072,103 @@ pub fn open_studio_directory(
             succeeded: false,
             error: Some(error("", "directory_open_failed", "无法打开目录。")),
         }
+    }
+}
+
+fn measure_directory(root: &Path) -> (u64, u64) {
+    if !root.is_dir() {
+        return (0, 0);
+    }
+    let mut stack = vec![root.to_path_buf()];
+    let mut file_count = 0_u64;
+    let mut bytes = 0_u64;
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if metadata.file_type().is_symlink() {
+                continue;
+            }
+            if metadata.is_dir() {
+                stack.push(path);
+            } else if metadata.is_file() {
+                file_count = file_count.saturating_add(1);
+                bytes = bytes.saturating_add(metadata.len());
+            }
+        }
+    }
+    (file_count, bytes)
+}
+
+fn storage_category_paths(
+    app: &AppHandle,
+) -> Result<Vec<(&'static str, &'static str, PathBuf)>, SetupError> {
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|_| error("", "directory_unavailable", "无法访问应用数据目录。"))?;
+    let logs = app
+        .path()
+        .app_log_dir()
+        .map_err(|_| error("", "directory_unavailable", "无法访问日志目录。"))?;
+    Ok(vec![
+        ("EBWebView", "cache", root.join("EBWebView")),
+        ("project-drafts", "user_data", root.join("project-drafts")),
+        ("runs", "user_data", root.join("runs")),
+        (
+            "result-extractions",
+            "user_data",
+            root.join("result-extractions"),
+        ),
+        ("study-runs", "user_data", root.join("study-runs")),
+        ("study-reports", "user_data", root.join("study-reports")),
+        ("logs", "cache", logs),
+    ])
+}
+
+#[tauri::command]
+pub fn get_storage_usage(app: AppHandle, request_id: String) -> DesktopStorageUsageResponse {
+    if !valid_request(&request_id) {
+        return DesktopStorageUsageResponse {
+            request_id,
+            usage: None,
+            error: Some(error("", "bridge_request_invalid", "request_id无效。")),
+        };
+    }
+    let categories = match storage_category_paths(&app) {
+        Ok(value) => value,
+        Err(value) => {
+            return DesktopStorageUsageResponse {
+                request_id,
+                usage: None,
+                error: Some(value),
+            }
+        }
+    };
+    let categories = categories
+        .into_iter()
+        .map(|(id, kind, path)| {
+            let (file_count, bytes) = measure_directory(&path);
+            StorageCategoryView {
+                id: id.to_owned(),
+                kind: kind.to_owned(),
+                file_count,
+                bytes,
+            }
+        })
+        .collect();
+    DesktopStorageUsageResponse {
+        request_id,
+        usage: Some(StorageUsageView {
+            root_label: "app_local_data".to_owned(),
+            categories,
+        }),
+        error: None,
     }
 }
 

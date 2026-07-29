@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "contam-studio"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "futures-util",
  "keyring",
@@ -544,6 +544,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

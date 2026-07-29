@@ -28,8 +28,8 @@
     {
       "id": "ai_provider_profiles",
       "path": "src-tauri/src/ai_provider/mod.rs",
-      "functions": ["profiles_path", "read_profiles", "write_profiles"],
-      "joins": ["ai", "providers", "profiles.json"]
+      "functions": ["profiles_path", "read_profiles", "write_profiles", "catalog_cache_path", "read_catalog_cache", "write_catalog_cache"],
+      "joins": ["ai", "providers", "profiles.json", "model-catalog.json"]
     },
     {
       "id": "contamx_workspace",
@@ -46,7 +46,7 @@
   ],
   "allowed_rust_literal_joins": [
     "ai", "archive.json", "bin", "codex-installer", "codex-runtime", "codex.exe", "Codex", "conversation-archive", "providers", "profiles.json",
-    "install-official-codex.ps1", "OpenAI", "powershell.exe", "Programs", "System32", "v1.0", "WindowsPowerShell",
+    "install-official-codex.ps1", "OpenAI", "powershell.exe", "Programs", "System32", "v1.0", "WindowsPowerShell", "model-catalog.json",
     ",", "evidence", "manifest.json", "project-drafts", "python/.venv/Scripts/python.exe", "result-extractions", "runs", "snapshots", "study-runs", "study-results", "study-reports"
   ]
 }

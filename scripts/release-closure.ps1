@@ -1,6 +1,7 @@
 param(
   [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-08",
   [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging",
+  [string]$ContamToolsTaskRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
   [switch]$SkipBuild,
   [switch]$ResetArtifacts,
   [switch]$RequireInstallers
@@ -11,6 +12,10 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $version = node -p "require('$($repo.Replace('\', '/'))/package.json').version"
 $commit = git -C $repo rev-parse HEAD
 $target = Join-Path $ArtifactRoot $version
+
+$approvedContamTaskRoot = Split-Path -Parent $ContamToolsTaskRoot
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $ContamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
+if ($LASTEXITCODE -ne 0) { throw "verified NIST CONTAM runtime preparation failed" }
 
 if ($ResetArtifacts -and (Test-Path -LiteralPath $target)) {
   $rootFull = (Resolve-Path $ArtifactRoot).Path
@@ -27,12 +32,19 @@ if (-not $SkipBuild) {
 if (-not (Test-Path -LiteralPath $target -PathType Container)) { throw "portable artifact directory is missing" }
 $portable = Join-Path $target "portable\CONTAM-Studio.exe"
 if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "portable executable is missing" }
+$portableContamTools = Join-Path $target "portable\runtime\contam-tools"
+$portableContamLock = Join-Path $target "portable\resources\contam-tools.lock.json"
+if (-not (Test-Path -LiteralPath $portableContamTools -PathType Container) -or
+    -not (Test-Path -LiteralPath $portableContamLock -PathType Leaf)) {
+  throw "portable artifact does not include the locked NIST CONTAM runtime"
+}
 
 $installers = Join-Path $target "installers"
 New-Item -ItemType Directory -Path $installers -Force | Out-Null
 $installerArgs = @(
   "-ArtifactRoot", $ArtifactRoot,
-  "-ToolchainRoot", $ToolchainRoot
+  "-ToolchainRoot", $ToolchainRoot,
+  "-ContamToolsTaskRoot", $ContamToolsTaskRoot
 )
 if ($SkipBuild) { $installerArgs += "-SkipTauriBuild" }
 $buildOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-installers.ps1") @installerArgs
@@ -42,6 +54,15 @@ $installerInfoPath = Join-Path $installers "installer-status.json"
 $installerInfo = Get-Content -LiteralPath $installerInfoPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $installerStatus = if ($installerInfo.status -eq "available") { "built_unsigned" } else { "blocked_environment" }
 $tools = $installerInfo.tools
+$repackageWork = Join-Path $installers "repackage-work"
+if (Test-Path -LiteralPath $repackageWork) {
+  $targetFull = [IO.Path]::GetFullPath($target).TrimEnd("\") + "\"
+  $repackageWorkFull = [IO.Path]::GetFullPath($repackageWork)
+  if (-not $repackageWorkFull.StartsWith($targetFull, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "installer repackage work directory escaped the release target"
+  }
+  Remove-Item -LiteralPath $repackageWorkFull -Recurse -Force
+}
 
 $manifestPath = Join-Path $target "manifest.json"
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
@@ -84,6 +105,7 @@ $status = [ordered]@{
   frozen_worker = "passed"
   windows_process_tree = "passed"
   official_contamx_simread = "not_tested"
+  official_contam_tools_resource = "locked_and_included"
   packager_tools = $tools
   local_repackage = $installerInfo.local_repackage
   toolchain_root = "external_toolchain_root"

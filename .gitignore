@@ -8,6 +8,11 @@ target/
 src-tauri/gen/
 src-tauri/runtime/python-worker/*
 !src-tauri/runtime/python-worker/README.md
+src-tauri/runtime/contam-tools/*
+!src-tauri/runtime/contam-tools/README.md
+
+# Phase 6C official tool acquisition (always outside the repository)
+F:/Codex_File/phase-6c-user-first-runtime/
 
 # Python
 .venv/

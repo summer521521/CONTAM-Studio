@@ -259,11 +259,12 @@ export function useAiController({
     try {
       const response = await refreshAiProviderModelsCommand(requestId, selectedProvider.profile_id);
       if (!mounted.current || response.request_id !== requestId) return;
-      if (response.error) {
+      if (response.error && response.models.length === 0) {
         dispatchAi({ type: "provider_operation_failed", issue: response.error });
         return;
       }
       dispatchAi({ type: "provider_models_loaded", profileId: response.profile_id, models: response.models, verified: response.verified });
+      if (response.error) dispatchAi({ type: "provider_operation_failed", issue: response.error });
     } catch {
       if (mounted.current) dispatchAi({ type: "provider_operation_failed", issue: { code: "ai_provider_model_catalog_failed", message: "Provider models could not be loaded." } });
     }

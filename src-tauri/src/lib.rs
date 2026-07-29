@@ -74,6 +74,7 @@ pub fn run() {
             release::select_data_directory,
             release::select_and_probe_official_tool,
             release::open_studio_directory,
+            release::get_storage_usage,
             release::clear_studio_cache,
             release::get_diagnostics_summary,
             release::export_sanitized_diagnostics,

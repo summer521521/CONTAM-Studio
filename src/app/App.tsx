@@ -35,11 +35,12 @@ import {
   selectDataDirectory,
   selectAndProbeOfficialTool,
   openStudioDirectory,
+  getStorageUsage,
   clearStudioCache,
   getDiagnosticsSummary,
   exportSanitizedDiagnostics,
 } from "./desktop-api";
-import { isSafeStudioSetup, sanitizeDiagnosticsForDisplay, type StudioSetup, type ToolKind, type ToolState } from "./release-state";
+import { isSafeStudioSetup, sanitizeDiagnosticsForDisplay, type StorageUsageView, type StudioSetup, type ToolKind, type ToolState } from "./release-state";
 import { APP_CLOSE_REQUESTED_EVENT, isSafeCloseRequest, isSafeCloseResolution, type CloseRequestView } from "./close-state";
 import {
   aiReducer,
@@ -112,6 +113,7 @@ function App() {
   const [semanticState, dispatchSemantic] = useReducer(semanticReducer, INITIAL_SEMANTIC_STATE);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const [studioSetup, setStudioSetup] = useState<StudioSetup | null>(null);
+  const [storageUsage, setStorageUsage] = useState<StorageUsageView | null>(null);
   const [studioSetupBusy, setStudioSetupBusy] = useState(false);
   const [draftGuardOpen, setDraftGuardOpen] = useState(false);
   const [draftGuardBusy, setDraftGuardBusy] = useState(false);
@@ -149,6 +151,15 @@ function App() {
     }).catch(() => undefined);
     return () => { disposed = true; };
   }, [updateWorkbench]);
+
+  useEffect(() => {
+    if (activeDestination !== "settings") return undefined;
+    let disposed = false;
+    void getStorageUsage(crypto.randomUUID()).then((response) => {
+      if (!disposed && !response.error) setStorageUsage(response.usage);
+    }).catch(() => undefined);
+    return () => { disposed = true; };
+  }, [activeDestination]);
 
   useEffect(() => {
     let disposed = false;
@@ -1007,7 +1018,7 @@ function App() {
     }
   }, [t, workbench.language, workbench.theme]);
 
-  const openStudioDirectoryAction = useCallback(async (kind: "data" | "logs" | "cache") => {
+  const openStudioDirectoryAction = useCallback(async (kind: "data" | "app-data" | "logs" | "cache") => {
     setStudioSetupBusy(true);
     try {
       const response = await openStudioDirectory(crypto.randomUUID(), kind);
@@ -1162,6 +1173,7 @@ function App() {
                   onSaveSetup={saveStudioConfiguration}
                   onOpenStudioDirectory={openStudioDirectoryAction}
                   onClearStudioCache={clearStudioCacheAction}
+                  storageUsage={storageUsage}
                   onCopyDiagnostics={copyDiagnostics}
                   onExportDiagnostics={exportDiagnostics}
                 />

@@ -62,6 +62,7 @@
     "allow-select-data-directory",
     "allow-select-and-probe-official-tool",
     "allow-open-studio-directory",
+    "allow-get-storage-usage",
     "allow-clear-studio-cache",
     "allow-get-diagnostics-summary",
     "allow-export-sanitized-diagnostics",

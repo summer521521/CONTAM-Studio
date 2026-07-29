@@ -1,8 +1,8 @@
-# Phase 6B 多 Provider 只读 AI 架构
+# Phase 6B/6C 多 Provider 只读 AI 架构
 
 ## 目标与边界
 
-Phase 6B 把 AI 后端从单一 Codex App Server 扩展为一个由 Rust 统一编排的受控 Provider 层。它仍然是只读解释助手：AI 不获得原始 PRJ、项目路径、Shell、MCP、通用文件系统、工具执行或直接写入能力；任何 Patch 仍必须经过既有结构化 Patch、Diff、确定性验证和用户确认边界。
+Phase 6B 把 AI 后端从单一 Codex App Server 扩展为一个由 Rust 统一编排的受控 Provider 层；Phase 6C 将模型目录、用户优先界面和本地工具资源接入同一边界。它仍然是只读解释助手：AI 不获得原始 PRJ、项目路径、Shell、MCP、通用文件系统、工具执行或直接写入能力；任何 Patch 仍必须经过既有结构化 Patch、Diff、确定性验证和用户确认边界。
 
 ```mermaid
 flowchart LR
@@ -28,7 +28,11 @@ flowchart LR
 - `openai_chat_completions`：`POST <base>/chat/completions`，用于兼容 OpenAI 协议的 Provider。
 - `anthropic_messages`：`POST <base>/messages`，使用 `x-api-key`、固定 `anthropic-version` 和 Messages SSE。
 
-内置 Profile 使用确定性 UUID v5；自定义 Profile 使用 UUID v4，并且只能选择 OpenAI-compatible 协议。预设包括 OpenAI、Anthropic、Gemini、OpenRouter、DeepSeek、Ollama、LM Studio 和 vLLM。模型目录只接受有界、合法、去重的 ID；失败时保留合法手动模型并显示目录未验证。
+内置 Profile 使用确定性 UUID v5；自定义 Profile 使用 UUID v4，并且只能选择 OpenAI-compatible 协议。预设包括 OpenAI、Anthropic、Gemini、OpenRouter、DeepSeek、Ollama、LM Studio 和 vLLM。Phase 6C 使用统一 `AiProviderModelView` 目录结构；内置 Provider 的模型只来自官方目录/App Server，未知能力模型只进入高级区域，手动模型 ID 仅对自定义 Profile 的高级设置开放。
+
+### 模型目录与缓存
+
+Rust 通过既有 HTTPS/回环网关获取 Provider 目录：OpenAI 使用 `/v1/models` 并筛选 Responses 文本生成模型，Anthropic 支持 `has_more`/`last_id` 分页，Gemini 使用官方 `v1beta/models` 并筛选 `generateContent`。目录缓存只保留模型元数据，TTL 为 24 小时；写入 `ai/providers/model-catalog.json` 前不包含凭据、问题、回答、Authorization Header 或原始请求日志。刷新异常会返回上次成功列表并标记 `stale`，而不是清空选择器。
 
 ## 数据与凭据
 
@@ -56,9 +60,15 @@ Codex 保持现有本地 App Server 连接路径。`start_ai_provider_login` 只
 
 每条 v2 记录增加 `provider_profile_id`、`provider_display_name`、`provider_protocol` 和 `destination_origin` 不可变快照。旧 v1 条目先按严格旧 Schema 验证，再确定性标记为 Codex Profile 并通过旧版本保护、临时文件、同步和原子写入迁移；迁移失败保留原文件。Archive 视图仍按基线 SHA-256 和稳定 Zone UUID 过滤，不自动重放到模型。
 
+## Phase 6C 工具与界面接线
+
+构建脚本先从 NIST 官方下载页下载并校验锁定 ZIP，然后把运行时同步至 Tauri Resource 输入。`src-tauri/src/release.rs` 按“开发 override → 内置资源 → 旧版诊断路径”发现 ContamX/SimRead，并在启动前验证文件级 SHA-256。普通设置只显示就绪状态和版本；工具路径、旧版探测、资源诊断进入高级区域。本轮不提交 ZIP/EXE/DLL。
+
+存储透明度命令只遍历固定 `app_local_data_dir` 白名单类别，使用 `symlink_metadata` 跳过符号链接并统计数量/字节数；不读文件正文、不扫描白名单外路径、不实现删除。
+
 ## 前端接线
 
-`ai-state.ts` 只新增 Provider 状态，不引入第二套状态管理。面板提供 Provider 下拉、自定义 Profile、内置端点只读、手动模型增删、模型目录刷新、写入型 API Key、Codex 设备码/API Key 登录、登录取消/退出、目标位置披露、预览、发送、停止和本地档案。前端永不保存或回填 Secret；Tauri Wrapper 只提交命令所需的精确字段。
+`ai-state.ts` 只新增 Provider 状态，不引入第二套状态管理。面板提供 Provider 下拉、自定义 Profile、模型目录刷新、写入型 API Key、Codex 设备码/API Key 登录、登录取消/退出、目标位置披露、预览、发送、停止和本地档案；Endpoint、手动模型、Reasoning 和诊断位于可折叠高级设置。前端永不保存或回填 Secret；Tauri Wrapper 只提交命令所需的精确字段。
 
 ## 证据边界
 

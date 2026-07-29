@@ -1,7 +1,8 @@
 param(
   [string]$RepoRoot = "",
   [string]$ArtifactInstallerRoot = "",
-  [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging"
+  [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging",
+  [string]$StageRoot = ""
 )
 
 Set-StrictMode -Version Latest
@@ -43,7 +44,8 @@ foreach ($required in @(
   if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "generated packaging input is missing: $required" }
 }
 
-$stage = Join-Path "F:\Codex_File\temp" ("contam-studio-agent-08-local-repackage-" + [Guid]::NewGuid().ToString("N"))
+$stageBase = if ([string]::IsNullOrWhiteSpace($StageRoot)) { "F:\Codex_File\temp" } else { $StageRoot }
+$stage = Join-Path $stageBase ("contam-studio-local-repackage-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 $pluginRoot = Join-Path $ToolchainRoot "nsis-tauri-plugins"
 $scriptPath = Join-Path $stage "installer.nsi"

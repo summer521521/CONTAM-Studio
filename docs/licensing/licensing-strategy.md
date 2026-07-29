@@ -5,7 +5,7 @@
 - CONTAM Studio自身源码自0.1.0起采用Apache License 2.0，完整条款见仓库根目录`LICENSE`。
 - CONTAM主体许可结论必须以NIST官方资料和实际分发包中的声明为准，研究报告中的总结不能替代发布前核验。
 - CONTAM或其分发内容中的部分组件可能带有单独版权、许可或notice要求，必须逐项识别。
-- 0.2.0不捆绑官方ContamX、SimRead或Codex CLI/App Server；随包冻结Worker包含Python运行时和contamxpy运行组件。任何进一步改变分发方式都必须重新核对来源、再分发条件、版本、哈希和notice。
+- 0.3.0捆绑未修改、来源锁定且逐文件校验的官方ContamX、SimRead、SimComp和PrjUp，以及随包冻结Worker；Codex CLI/App Server仍不随包分发。任何进一步改变分发方式都必须重新核对来源、再分发条件、版本、哈希和notice。
 - CONTAM Studio是独立社区项目，不是NIST或OpenAI官方产品，不得暗示其认可、维护或背书。
 - Phase 5C新增`echarts 6.1.0`，来源为Apache ECharts官方包，许可证为Apache-2.0。项目只使用模块化Canvas折线图组件；发布前第三方声明需包含该依赖及其许可证文本。
 - Phase 3C新增Rust `uuid 1.24.0`，只启用确定性UUID v5所需feature，来源为官方crates.io包，许可证为Apache-2.0 OR MIT。未新增前端或Python运行时依赖；发布前第三方声明需包含该crate及实际锁定的传递依赖。

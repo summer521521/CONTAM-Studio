@@ -221,8 +221,28 @@ describe("read-only AI state", () => {
       />,
     );
     expect(html).toContain("Google Gemini");
-    expect(html).toContain("Codex is a separate local App Server backend");
+    expect(html).toContain("Codex sign-in connects only to the Codex App Server");
     expect(html).not.toContain("Codex CLI 1.2.3");
+  });
+
+  it("requires a new selection when a catalog removes the previously selected model", () => {
+    const state: AiState = {
+      ...INITIAL_AI_STATE,
+      providerProfileId: geminiProvider.profile_id,
+      providerProfiles: [geminiProvider],
+      modelId: "gemini-2.5-flash",
+    };
+    const next = aiReducer(state, {
+      type: "provider_models_loaded",
+      profileId: geminiProvider.profile_id,
+      models: [{
+        id: "gemini-new-model",
+        display_name: "Gemini New Model",
+        available: true,
+      }],
+      verified: true,
+    });
+    expect(next.modelId).toBe("");
   });
 
   it("uses the server model order and default reasoning effort", () => {

@@ -7,6 +7,8 @@ export type ToolStatus =
   | "unsupported_version"
   | "architecture_mismatch"
   | "probe_failed"
+  | "resource_missing"
+  | "hash_mismatch"
   | "available";
 
 export interface ToolState {
@@ -77,6 +79,24 @@ export interface DesktopActionResponse {
   error: SetupError | null;
 }
 
+export interface StorageCategoryView {
+  id: string;
+  kind: "cache" | "user_data" | string;
+  file_count: number;
+  bytes: number;
+}
+
+export interface StorageUsageView {
+  root_label: string;
+  categories: StorageCategoryView[];
+}
+
+export interface DesktopStorageUsageResponse {
+  request_id: string;
+  usage: StorageUsageView | null;
+  error: SetupError | null;
+}
+
 export interface DesktopDiagnosticsResponse {
   request_id: string;
   summary: Record<string, unknown> | null;
@@ -126,8 +146,8 @@ function isSafeStorage(value: unknown): value is StorageLayout {
 
 export function toolStatusLabel(status: ToolStatus, language: "zh-CN" | "en"): string {
   const labels = {
-    zh: { not_configured: "未配置", path_missing: "路径不存在", access_denied: "无权限访问", not_executable: "不是合法可执行文件", unsupported_version: "版本不受支持", architecture_mismatch: "架构不匹配", probe_failed: "版本探测失败", available: "工具可用" },
-    en: { not_configured: "Not configured", path_missing: "Path missing", access_denied: "Access denied", not_executable: "Not executable", unsupported_version: "Unsupported version", architecture_mismatch: "Architecture mismatch", probe_failed: "Version probe failed", available: "Available" },
+    zh: { not_configured: "未配置", path_missing: "路径不存在", access_denied: "无权限访问", not_executable: "不是合法可执行文件", unsupported_version: "版本不受支持", architecture_mismatch: "架构不匹配", probe_failed: "版本探测失败", resource_missing: "内置工具缺失", hash_mismatch: "工具校验失败", available: "工具可用" },
+    en: { not_configured: "Not configured", path_missing: "Path missing", access_denied: "Access denied", not_executable: "Not executable", unsupported_version: "Unsupported version", architecture_mismatch: "Architecture mismatch", probe_failed: "Version probe failed", resource_missing: "Bundled tool missing", hash_mismatch: "Tool verification failed", available: "Available" },
   } as const;
   return labels[language === "en" ? "en" : "zh"][status];
 }

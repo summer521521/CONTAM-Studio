@@ -1,8 +1,8 @@
-import { CheckCircle2, Clipboard, Database, Download, FolderOpen, HardDrive, RefreshCw, Settings2, Trash2, Wrench } from "lucide-react";
+import { CheckCircle2, Clipboard, Database, Download, FolderOpen, HardDrive, Settings2, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AppLanguage, AppTheme } from "../../app/workbench-state";
 import { displayVersion } from "../../app/build-info";
-import type { StudioSetup, ToolKind } from "../../app/release-state";
+import type { StorageUsageView, StudioSetup, ToolKind, ToolState } from "../../app/release-state";
 import { toolStatusLabel } from "../../app/release-state";
 
 interface ReleaseSettingsProps {
@@ -11,19 +11,69 @@ interface ReleaseSettingsProps {
   theme: AppTheme;
   busy: boolean;
   onChooseDataDirectory: () => Promise<string | null>;
-  onProbeTool: (kind: ToolKind) => Promise<import("../../app/release-state").ToolState | null>;
+  onProbeTool: (kind: ToolKind) => Promise<ToolState | null>;
   onSave: (dataDirectory: string, contamxPath: string | null, simreadPath: string | null) => Promise<void>;
-  onOpenDirectory: (kind: "data" | "logs" | "cache") => Promise<void>;
+  onOpenDirectory: (kind: "data" | "app-data" | "logs" | "cache") => Promise<void>;
   onClearCache: () => Promise<void>;
   onCopyDiagnostics: () => Promise<void>;
   onExportDiagnostics: () => Promise<void>;
+  storageUsage?: StorageUsageView | null;
 }
 
 function text(language: AppLanguage, zh: string, en: string): string {
   return language === "en" ? en : zh;
 }
 
-export function ReleaseSettings({ setup, language, theme, busy, onChooseDataDirectory, onProbeTool, onSave, onOpenDirectory, onClearCache, onCopyDiagnostics, onExportDiagnostics }: ReleaseSettingsProps) {
+function formatBytes(bytes: number, language: AppLanguage): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = language === "en" ? ["KB", "MB", "GB"] : ["KB", "MB", "GB"];
+  let value = bytes;
+  let unit = "B";
+  for (const candidate of units) {
+    value /= 1024;
+    unit = candidate;
+    if (value < 1024) break;
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
+}
+
+function categoryLabel(id: string, language: AppLanguage): string {
+  const labels: Record<string, [string, string]> = {
+    EBWebView: ["WebView缓存", "WebView cache"],
+    "project-drafts": ["项目草稿", "Project drafts"],
+    runs: ["运行记录", "Run records"],
+    "result-extractions": ["结果提取", "Result extractions"],
+    "study-runs": ["研究任务", "Study runs"],
+    "study-reports": ["研究报告", "Study reports"],
+    logs: ["日志", "Logs"],
+  };
+  const value = labels[id];
+  return value ? text(language, value[0], value[1]) : id;
+}
+
+function toolStatus(tool: ToolState | undefined, language: AppLanguage): string {
+  if (!tool) return text(language, "检查中", "Checking");
+  if (tool.status === "available" && tool.version) {
+    return text(language, `已就绪 · ContamX ${tool.version}`, `Ready · ContamX ${tool.version}`);
+  }
+  return toolStatusLabel(tool.status, language);
+}
+
+export function ReleaseSettings({
+  setup,
+  language,
+  theme,
+  busy,
+  onChooseDataDirectory,
+  onProbeTool,
+  onSave,
+  onOpenDirectory,
+  onClearCache: _onClearCache,
+  onCopyDiagnostics,
+  onExportDiagnostics,
+  storageUsage = null,
+}: ReleaseSettingsProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dataDirectory, setDataDirectory] = useState(setup?.data_directory ?? "");
   const [contamxPath, setContamxPath] = useState(setup?.contamx.path ?? null);
   const [simreadPath, setSimreadPath] = useState(setup?.simread.path ?? null);
@@ -45,62 +95,64 @@ export function ReleaseSettings({ setup, language, theme, busy, onChooseDataDire
       if (kind === "contamx") setContamxPath(probed.path);
       else setSimreadPath(probed.path);
     }
-    setNotice(text(language, "已完成工具探测；点击保存配置后生效。", "Tool probe completed; save the configuration to apply it."));
+    setNotice(text(language, "已完成诊断探测。", "Diagnostic probe completed."));
   };
   const save = async () => {
     if (!dataDirectory.trim()) return;
     await onSave(dataDirectory.trim(), contamxPath, simreadPath);
     setNotice(text(language, "配置已保存。", "Configuration saved."));
   };
-  const tool = (kind: ToolKind) => kind === "contamx" ? setup?.contamx : setup?.simread;
-  const status = (kind: ToolKind) => {
-    const current = tool(kind);
-    return current ? toolStatusLabel(current.status, language) : text(language, "未探测", "Not probed");
-  };
 
   return (
-    <section className="release-settings" aria-label={text(language, "安装和运行配置", "Installation and runtime settings")}>
+    <section className="release-settings" aria-label={text(language, "存储与隐私", "Storage and privacy")}>
       <div className="release-callout">
         <Wrench size={20} aria-hidden="true" />
         <div>
-          <strong>{setup?.first_run_complete ? text(language, "配置中心", "Configuration center") : text(language, "首次启动向导", "First-start wizard")}</strong>
-          <p>{text(language, "选择本地数据目录并探测官方工具。未配置工具时仍可打开项目、编辑草稿和查看历史结果。", "Choose a local data directory and probe the official tools. Projects, drafts, and historical results remain available without configured tools.")}</p>
+          <strong>{text(language, "本地优先，联网增强", "Local first, online enhanced")}</strong>
+          <p>{text(language, "项目、仿真和用户文件保留在本机；联网只在你主动配置并调用 Provider 或官方服务时发生。", "Projects, simulations, and user files stay local; network access occurs only when you configure and use a Provider or official service.")}</p>
         </div>
       </div>
+
       <div className="release-grid">
+        <div className="release-card" aria-labelledby="release-tools-title">
+          <div className="release-card-heading"><HardDrive size={17} /><strong id="release-tools-title">{text(language, "仿真引擎", "Simulation engine")}</strong></div>
+          <p className="release-muted">{text(language, "软件会优先使用随应用提供并已校验的 NIST 工具。", "The app uses verified NIST tools shipped with the application first.")}</p>
+          <div className="release-tool-row"><div><strong>ContamX</strong><span>{toolStatus(setup?.contamx, language)}</span></div><span aria-label={text(language, "ContamX状态", "ContamX status")}>{setup?.contamx.status === "available" ? "✓" : "—"}</span></div>
+          <div className="release-tool-row"><div><strong>SimRead</strong><span>{setup?.simread.status === "available" && setup.simread.version ? text(language, `已就绪 · SimRead ${setup.simread.version}`, `Ready · SimRead ${setup.simread.version}`) : toolStatus(setup?.simread, language)}</span></div><span aria-label={text(language, "SimRead状态", "SimRead status")}>{setup?.simread.status === "available" ? "✓" : "—"}</span></div>
+        </div>
+
+        <div className="release-card" aria-labelledby="release-storage-title">
+          <div className="release-card-heading"><Database size={17} /><strong id="release-storage-title">{text(language, "本地存储", "Local storage")}</strong></div>
+          <p className="release-muted">{text(language, "这里显示文件数量和占用空间，不读取文件正文。", "Counts and sizes are shown without reading file contents.")}</p>
+          <div className="release-storage-list" aria-live="polite">
+            {storageUsage?.categories.map((category) => <div className="release-storage-row" key={category.id}><span>{categoryLabel(category.id, language)}</span><span>{category.file_count} · {formatBytes(category.bytes, language)}</span></div>)}
+            {!storageUsage ? <p className="release-muted">{text(language, "正在读取存储统计…", "Loading storage statistics…")}</p> : null}
+          </div>
+          <button className="secondary-action" type="button" disabled={busy} onClick={() => void onOpenDirectory("app-data")}><FolderOpen size={16} />{text(language, "打开应用数据文件夹", "Open app data folder")}</button>
+        </div>
+      </div>
+
+      <details className="release-advanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+        <summary>{text(language, "高级设置与诊断", "Advanced settings and diagnostics")}</summary>
         <div className="release-card">
-          <div className="release-card-heading"><Database size={17} /><strong>{text(language, "数据目录", "Data directory")}</strong></div>
-          <p className="release-muted">{text(language, "用户工程和已保存结果不会写入安装目录。", "Projects and saved results never go into the install directory.")}</p>
+          <div className="release-card-heading"><Settings2 size={17} /><strong>{text(language, "数据目录", "Data directory")}</strong></div>
+          <p className="release-muted">{text(language, "仅在需要迁移本地项目数据时使用；工具路径只保留给旧版诊断。", "Use this only when moving local project data; tool paths are retained only for legacy diagnostics.")}</p>
           <div className="release-path-row"><code>{dataDirectory || text(language, "尚未选择", "Not selected")}</code><button className="secondary-action" type="button" disabled={busy} onClick={() => void chooseData()}><FolderOpen size={15} />{text(language, "选择", "Choose")}</button></div>
+          <div className="release-actions"><button className="primary-action" type="button" disabled={busy || !dataDirectory.trim()} onClick={() => void save()}><CheckCircle2 size={16} />{text(language, "保存配置", "Save configuration")}</button><button className="secondary-action" type="button" disabled={busy} onClick={() => void onOpenDirectory("data")}><FolderOpen size={16} />{text(language, "打开项目数据目录", "Open project data folder")}</button></div>
         </div>
         <div className="release-card">
-          <div className="release-card-heading"><HardDrive size={17} /><strong>{text(language, "官方工具", "Official tools")}</strong></div>
-          <div className="release-tool-row"><div><strong>ContamX</strong><span>{status("contamx")}</span>{tool("contamx")?.version ? <code>{tool("contamx")?.version}</code> : null}</div><button className="secondary-action" type="button" disabled={busy} onClick={() => void probe("contamx")}>{text(language, "选择并探测", "Choose and probe")}</button></div>
-          <div className="release-tool-row"><div><strong>SimRead</strong><span>{status("simread")}</span>{tool("simread")?.version ? <code>{tool("simread")?.version}</code> : null}</div><button className="secondary-action" type="button" disabled={busy} onClick={() => void probe("simread")}>{text(language, "选择并探测", "Choose and probe")}</button></div>
-          <p className="release-muted">{text(language, "只使用固定的--version探测，不执行用户输入的命令。", "Only the fixed --version probe is used; user input is never executed as a command.")}</p>
+          <div className="release-card-heading"><HardDrive size={17} /><strong>{text(language, "旧版工具诊断", "Legacy tool diagnostics")}</strong></div>
+          <div className="release-tool-row"><span>ContamX</span><button className="secondary-action" type="button" disabled={busy} onClick={() => void probe("contamx")}>{text(language, "选择并探测", "Choose and probe")}</button></div>
+          <div className="release-tool-row"><span>SimRead</span><button className="secondary-action" type="button" disabled={busy} onClick={() => void probe("simread")}>{text(language, "选择并探测", "Choose and probe")}</button></div>
+          <div className="release-runtime-grid">
+            <span>{text(language, "版本", "Version")}</span><code>{setup ? `${setup.runtime.app_version}${setup.runtime.dirty ? "-dev" : ""}` : displayVersion()}</code>
+            <span>commit SHA</span><code>{setup?.runtime.commit_sha ?? "unknown"}</code>
+            <span>{text(language, "架构", "Architecture")}</span><code>{setup?.runtime.architecture ?? "unknown"}</code>
+            <span>{text(language, "语言/主题", "Language / theme")}</span><code>{language} / {theme}</code>
+          </div>
+          <div className="release-actions"><button className="secondary-action" type="button" disabled={busy} onClick={() => void onCopyDiagnostics()}><Clipboard size={16} />{text(language, "复制诊断摘要", "Copy diagnostics")}</button><button className="secondary-action" type="button" disabled={busy} onClick={() => void onExportDiagnostics()}><Download size={16} />{text(language, "导出脱敏诊断包", "Export sanitized diagnostics")}</button></div>
         </div>
-      </div>
-      <div className="release-actions">
-        <button className="primary-action" type="button" disabled={busy || !dataDirectory.trim()} onClick={() => void save()}><CheckCircle2 size={16} />{text(language, "保存配置", "Save configuration")}</button>
-        <button className="secondary-action" type="button" disabled={busy} onClick={() => void onOpenDirectory("data")}><FolderOpen size={16} />{text(language, "打开数据目录", "Open data directory")}</button>
-        <button className="secondary-action" type="button" disabled={busy} onClick={() => void onOpenDirectory("logs")}><FolderOpen size={16} />{text(language, "打开日志目录", "Open logs")}</button>
-        <button className="secondary-action" type="button" disabled={busy} onClick={() => void onOpenDirectory("cache")}><RefreshCw size={16} />{text(language, "打开缓存目录", "Open cache")}</button>
-        <button className="secondary-action" type="button" disabled={busy} onClick={() => void onClearCache()}><Trash2 size={16} />{text(language, "清理缓存", "Clear cache")}</button>
-      </div>
-      <div className="release-card release-about">
-        <div className="release-card-heading"><Settings2 size={17} /><strong>{text(language, "关于和诊断", "About and diagnostics")}</strong></div>
-        <div className="release-runtime-grid">
-          <span>{text(language, "版本", "Version")}</span><code>{setup ? `${setup.runtime.app_version}${setup.runtime.dirty ? "-dev" : ""}` : displayVersion()}</code>
-          <span>commit SHA</span><code>{setup?.runtime.commit_sha ?? "unknown"}</code>
-          <span>{text(language, "架构", "Architecture")}</span><code>{setup?.runtime.architecture ?? "unknown"}</code>
-          <span>{text(language, "语言/主题", "Language / theme")}</span><code>{language} / {theme}</code>
-          <span>{text(language, "数据目录", "Data directory")}</span><code>{(setup?.data_directory ?? dataDirectory) || "-"}</code>
-        </div>
-        <div className="release-actions">
-          <button className="secondary-action" type="button" disabled={busy} onClick={() => void onCopyDiagnostics()}><Clipboard size={16} />{text(language, "复制诊断摘要", "Copy diagnostics")}</button>
-          <button className="secondary-action" type="button" disabled={busy} onClick={() => void onExportDiagnostics()}><Download size={16} />{text(language, "导出脱敏诊断包", "Export sanitized diagnostics")}</button>
-        </div>
-      </div>
+      </details>
       {notice ? <p className="release-notice" role="status">{notice}</p> : null}
     </section>
   );

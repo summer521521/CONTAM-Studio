@@ -32,6 +32,15 @@ for (const file of files) {
   }
 }
 if (!files.some((file) => /manifest\.json$/i.test(file))) failures.push("artifact manifest is missing");
+if (!files.some((file) => /runtime[\\/]contam-tools[\\/]\S*contamx3\.exe$/i.test(file))) {
+  failures.push("verified bundled ContamX runtime is missing");
+}
+if (!files.some((file) => /runtime[\\/]contam-tools[\\/]\S*simread\.exe$/i.test(file))) {
+  failures.push("verified bundled SimRead runtime is missing");
+}
+if (!files.some((file) => /resources[\\/]contam-tools\.lock\.json$/i.test(file))) {
+  failures.push("Contam tool lock file is missing");
+}
 const manifest = {
   schema_version: 1,
   artifact_root: "external_artifact_root",

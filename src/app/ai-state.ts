@@ -80,7 +80,14 @@ export interface AiProviderCapabilities {
 export interface AiProviderModelView {
   id: string;
   display_name: string;
+  provider?: string;
+  source?: string;
+  capabilities?: string[];
+  availability?: "available" | "advanced_unverified" | "manual_custom" | string;
   available: boolean;
+  fetched_at?: string | null;
+  stale?: boolean;
+  verified_for_current_adapter?: boolean;
 }
 
 export interface AiProviderView {
@@ -361,9 +368,19 @@ function selectValidModel(connection: CodexConnectionView) {
 
 function selectProviderModel(profile: AiProviderView | undefined, currentModelId = "") {
   if (!profile) return currentModelId;
-  return profile.models.find((model) => model.available && model.id === currentModelId)?.id
-    ?? profile.models.find((model) => model.available)?.id
-    ?? profile.selected_model_id
+  if (currentModelId) {
+    return profile.models.find((model) => model.available && model.id === currentModelId)?.id ?? "";
+  }
+  if (profile.selected_model_id) {
+    if (profile.models.some((model) => model.available && model.id === profile.selected_model_id)) {
+      return profile.selected_model_id;
+    }
+    if (!profile.built_in && profile.manual_model_ids.includes(profile.selected_model_id)) {
+      return profile.selected_model_id;
+    }
+    return "";
+  }
+  return profile.models.find((model) => model.available)?.id
     ?? profile.manual_model_ids[0]
     ?? "";
 }

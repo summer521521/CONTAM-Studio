@@ -758,6 +758,43 @@ input:focus-visible,
   font-size: 12px;
 }
 
+.release-advanced,
+.assistant-advanced {
+  border: 1px solid var(--border);
+  background: var(--bg-surface-subtle);
+  padding: 10px 12px;
+}
+
+.release-advanced > summary,
+.assistant-advanced > summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.release-advanced[open] {
+  display: grid;
+  gap: 12px;
+}
+
+.release-storage-list {
+  display: grid;
+  gap: 5px;
+}
+
+.release-storage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.assistant-model-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
 .release-runtime-grid span {
   color: var(--text-muted);
 }

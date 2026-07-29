@@ -122,18 +122,22 @@ export function CodexAssistantPanel({
   const [customAuthKind, setCustomAuthKind] = useState<"api_key" | "none">("api_key");
   const [manualModelsInput, setManualModelsInput] = useState("");
   const [manualModelInput, setManualModelInput] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const installDialogRef = useRef<HTMLElement>(null);
   const selectedProvider = state.providerProfiles.find((profile) => profile.profile_id === state.providerProfileId) ?? null;
   const isCodexProvider = !selectedProvider || selectedProvider.protocol === "codex_app_server";
   const model = state.connection?.models.find((item) => item.id === state.modelId) ?? null;
   const cliProbe = isCodexProvider ? state.connection?.cli ?? state.cliProbe : null;
   const connected = isCodexProvider ? Boolean(state.connection) : Boolean(selectedProvider);
-  const ready = isCodexProvider ? state.status === "available" : Boolean(selectedProvider && state.modelId);
+  const ready = isCodexProvider ? state.status === "available" : Boolean(selectedProvider);
   const busy = state.status === "probing" || state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
   const providerModels = isCodexProvider
     ? state.connection?.models.filter((item) => item.available).map((item) => ({ id: item.id, display_name: item.display_name })) ?? []
     : selectedProvider?.models.filter((item) => item.available).map((item) => ({ id: item.id, display_name: item.display_name })) ?? [];
-  const manualModels = isCodexProvider ? [] : selectedProvider?.manual_model_ids ?? [];
+  const advancedModels = isCodexProvider
+    ? []
+    : selectedProvider?.models.filter((item) => !item.available) ?? [];
+  const manualModels = isCodexProvider || selectedProvider?.built_in ? [] : selectedProvider?.manual_model_ids ?? [];
   const archivedEntryIds = new Set(state.archive?.entries.map((entry) => entry.entry_id));
   const liveConversation = state.conversation.filter(
     (entry) => !entry.archive_entry_id || !archivedEntryIds.has(entry.archive_entry_id),
@@ -260,15 +264,7 @@ export function CodexAssistantPanel({
             </select>
           </label>
           <p className="assistant-safe-note">{t("assistant.providerArchitecture")}</p>
-          {selectedProvider ? (
-            <p className="assistant-safe-note">
-              {selectedProvider.network_scope === "remote_https"
-                ? t("assistant.remoteDisclosure", { origin: selectedProvider.base_url ?? "" })
-                : selectedProvider.network_scope === "loopback_http"
-                  ? t("assistant.loopbackDisclosure")
-                  : t("assistant.codexManagedDisclosure")}
-            </p>
-          ) : null}
+          {selectedProvider ? <p className="assistant-safe-note">{t("assistant.providerRequestDisclosure")}</p> : null}
           <button
             type="button"
             className="secondary-action assistant-wide-action"
@@ -304,10 +300,13 @@ export function CodexAssistantPanel({
               <option value="none">{t("assistant.noKeyAuth")}</option>
             </select>
           </label>
-          <label className="assistant-field">
-            <span>{t("assistant.manualModels")}</span>
-            <textarea rows={3} maxLength={10_000} value={manualModelsInput} autoComplete="off" onChange={(event) => setManualModelsInput(event.target.value)} placeholder={t("assistant.manualModelsHint")} />
-          </label>
+          <details className="assistant-advanced">
+            <summary>{t("assistant.advancedSettings")}</summary>
+            <label className="assistant-field">
+              <span>{t("assistant.manualModels")}</span>
+              <textarea rows={3} maxLength={10_000} value={manualModelsInput} autoComplete="off" onChange={(event) => setManualModelsInput(event.target.value)} placeholder={t("assistant.manualModelsHint")} />
+            </label>
+          </details>
           <div className="assistant-actions compact-actions">
             <button type="button" className="primary-action" onClick={createCustomProvider} disabled={busy || !customEndpoint.trim()}>{t("assistant.saveProvider")}</button>
             <button type="button" className="secondary-action" onClick={() => setCustomProfileOpen(false)} disabled={busy}>{t("assistant.cancelEdit")}</button>
@@ -337,7 +336,7 @@ export function CodexAssistantPanel({
         {cliProbe?.version ? <span>{t("assistant.cliVersion", { version: cliProbe.version })}</span> : null}
         {isCodexProvider && state.connection?.account.authenticated ? (
           <span>{t("assistant.planConnected", { plan: state.connection.account.plan_type ?? t("assistant.planUnknown") })}</span>
-        ) : isCodexProvider && connected ? <code>codex login</code> : selectedProvider ? <span>{selectedProvider.network_scope}</span> : null}
+        ) : isCodexProvider && connected ? <code>codex login</code> : selectedProvider ? <span>{t("assistant.providerConnected")}</span> : null}
       </div>
 
       <div className="assistant-actions compact-actions">
@@ -388,7 +387,7 @@ export function CodexAssistantPanel({
       ) : null}
 
       <div className="assistant-boundary">
-        <p>{isCodexProvider ? t("assistant.networkDisclosure") : selectedProvider?.network_scope === "loopback_http" ? t("assistant.loopbackDisclosure") : t("assistant.remoteDisclosure", { origin: selectedProvider?.base_url ?? "" })}</p>
+        <p>{isCodexProvider ? t("assistant.networkDisclosure") : t("assistant.providerRequestDisclosure")}</p>
         <p>{t("assistant.coreUnaffected")}</p>
       </div>
 
@@ -443,53 +442,49 @@ export function CodexAssistantPanel({
       {!isCodexProvider && selectedProvider ? (
         <section className="assistant-provider-config" aria-labelledby="assistant-provider-secret-title">
           <h3 id="assistant-provider-secret-title">{t("assistant.providerConfiguration")}</h3>
-          {selectedProvider.built_in ? (
-            <label className="assistant-field">
-              <span>{t("assistant.providerEndpoint")}</span>
-              <input type="url" value={selectedProvider.base_url ?? ""} readOnly aria-readonly="true" />
-            </label>
-          ) : null}
-          {!selectedProvider.built_in ? (
-            <>
-              <label className="assistant-field">
-                <span>{t("assistant.providerDisplayName")}</span>
-                <input type="text" value={customDisplayName} maxLength={80} autoComplete="off" onChange={(event) => setCustomDisplayName(event.target.value)} />
-              </label>
+          {selectedProvider.built_in ? <p className="assistant-safe-note">{t("assistant.officialCatalogHint")}</p> : null}
+          <details className="assistant-advanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+            <summary>{t("assistant.advancedSettings")}</summary>
+            {selectedProvider.built_in ? (
               <label className="assistant-field">
                 <span>{t("assistant.providerEndpoint")}</span>
-                <input type="url" value={customEndpoint} maxLength={2048} autoComplete="off" onChange={(event) => setCustomEndpoint(event.target.value)} />
+                <input type="url" value={selectedProvider.base_url ?? ""} readOnly aria-readonly="true" />
               </label>
-              <label className="assistant-field">
-                <span>{t("assistant.providerAuthKind")}</span>
-                <select value={customAuthKind} onChange={(event) => setCustomAuthKind(event.target.value as "api_key" | "none")}>
-                  <option value="api_key">{t("assistant.apiKeyAuth")}</option>
-                  <option value="none">{t("assistant.noKeyAuth")}</option>
-                </select>
-              </label>
-              <label className="assistant-field">
-                <span>{t("assistant.manualModels")}</span>
-                <textarea rows={3} maxLength={10_000} value={manualModelsInput} autoComplete="off" onChange={(event) => setManualModelsInput(event.target.value)} placeholder={t("assistant.manualModelsHint")} />
-              </label>
-              <button type="button" className="secondary-action assistant-wide-action" onClick={saveProviderConfiguration} disabled={busy || !customDisplayName.trim() || !customEndpoint.trim()}>{t("assistant.saveProvider")}</button>
-              <button type="button" className="secondary-action assistant-wide-action" onClick={() => { if (window.confirm(t("assistant.confirmDeleteProvider"))) onProviderDelete(); }} disabled={busy}>{t("assistant.deleteProvider")}</button>
-            </>
-          ) : null}
-          <div className="assistant-field">
-            <span>{t("assistant.manualModels")}</span>
-            {manualModels.length ? (
-              <div className="assistant-actions compact-actions">
-                {manualModels.map((modelId) => (
-                  <button key={modelId} type="button" className="secondary-action" onClick={() => removeManualModel(modelId)} disabled={busy}>
-                    {modelId}<X size={13} aria-label={t("assistant.removeManualModel")} />
-                  </button>
-                ))}
-              </div>
-            ) : <p className="assistant-safe-note">{t("assistant.noManualModels")}</p>}
-            <div className="assistant-actions compact-actions">
-              <input type="text" value={manualModelInput} maxLength={160} autoComplete="off" placeholder={t("assistant.manualModelPlaceholder")} onChange={(event) => setManualModelInput(event.target.value)} />
-              <button type="button" className="secondary-action" onClick={saveManualModel} disabled={busy || !manualModelInput.trim()}>{t("assistant.addManualModel")}</button>
-            </div>
-          </div>
+            ) : (
+              <>
+                <label className="assistant-field">
+                  <span>{t("assistant.providerDisplayName")}</span>
+                  <input type="text" value={customDisplayName} maxLength={80} autoComplete="off" onChange={(event) => setCustomDisplayName(event.target.value)} />
+                </label>
+                <label className="assistant-field">
+                  <span>{t("assistant.providerEndpoint")}</span>
+                  <input type="url" value={customEndpoint} maxLength={2048} autoComplete="off" onChange={(event) => setCustomEndpoint(event.target.value)} />
+                </label>
+                <label className="assistant-field">
+                  <span>{t("assistant.providerAuthKind")}</span>
+                  <select value={customAuthKind} onChange={(event) => setCustomAuthKind(event.target.value as "api_key" | "none")}>
+                    <option value="api_key">{t("assistant.apiKeyAuth")}</option>
+                    <option value="none">{t("assistant.noKeyAuth")}</option>
+                  </select>
+                </label>
+                <label className="assistant-field">
+                  <span>{t("assistant.manualModels")}</span>
+                  <textarea rows={3} maxLength={10_000} value={manualModelsInput} autoComplete="off" onChange={(event) => setManualModelsInput(event.target.value)} placeholder={t("assistant.manualModelsHint")} />
+                </label>
+                <button type="button" className="secondary-action assistant-wide-action" onClick={saveProviderConfiguration} disabled={busy || !customDisplayName.trim() || !customEndpoint.trim()}>{t("assistant.saveProvider")}</button>
+                <button type="button" className="secondary-action assistant-wide-action" onClick={() => { if (window.confirm(t("assistant.confirmDeleteProvider"))) onProviderDelete(); }} disabled={busy}>{t("assistant.deleteProvider")}</button>
+                <div className="assistant-field">
+                  <span>{t("assistant.manualModels")}</span>
+                  {manualModels.length ? <div className="assistant-actions compact-actions">{manualModels.map((modelId) => <button key={modelId} type="button" className="secondary-action" onClick={() => removeManualModel(modelId)} disabled={busy}>{modelId}<X size={13} aria-label={t("assistant.removeManualModel")} /></button>)}</div> : <p className="assistant-safe-note">{t("assistant.noManualModels")}</p>}
+                  <div className="assistant-actions compact-actions">
+                    <input type="text" value={manualModelInput} maxLength={160} autoComplete="off" placeholder={t("assistant.manualModelPlaceholder")} onChange={(event) => setManualModelInput(event.target.value)} />
+                    <button type="button" className="secondary-action" onClick={saveManualModel} disabled={busy || !manualModelInput.trim()}>{t("assistant.addManualModel")}</button>
+                  </div>
+                </div>
+                {advancedModels.length ? <p className="assistant-safe-note">{t("assistant.unverifiedModels", { count: advancedModels.length })}</p> : null}
+              </>
+            )}
+          </details>
           {selectedProvider.auth_kind === "api_key" ? (
             <>
               <label className="assistant-field">
@@ -518,12 +513,21 @@ export function CodexAssistantPanel({
           <label className="assistant-field">
             <span>{t("assistant.model")}</span>
             <select value={state.modelId} onChange={(event) => onModelChange(event.target.value)} disabled={!ready || busy}>
+              {!state.modelId ? <option value="">{t("assistant.selectModel")}</option> : null}
               {providerModels.map((item) => (
                 <option key={item.id} value={item.id}>{item.display_name}</option>
               ))}
               {manualModels.filter((id) => !providerModels.some((item) => item.id === id)).map((id) => <option key={id} value={id}>{id}</option>)}
             </select>
           </label>
+          {advancedModels.length ? (
+            <details className="assistant-advanced">
+              <summary>{t("assistant.unverifiedModels", { count: advancedModels.length })}</summary>
+              <ul className="assistant-model-list">
+                {advancedModels.map((item) => <li key={item.id}><code>{item.id}</code></li>)}
+              </ul>
+            </details>
+          ) : null}
           {isCodexProvider ? <label className="assistant-field">
             <span>{t("assistant.reasoningEffort")}</span>
             <select value={state.reasoningEffort} onChange={(event) => onEffortChange(event.target.value)} disabled={!ready || busy}>
@@ -551,7 +555,7 @@ export function CodexAssistantPanel({
             type="button"
             className="secondary-action assistant-wide-action"
             onClick={state.preview ? onPreviewVisibilityToggle : onPreview}
-            disabled={!state.preview && (!ready || !contextAvailable || state.scopes.length === 0 || (selectedProvider?.auth_kind === "api_key" && selectedProvider.secret_state !== "present"))}
+            disabled={!state.preview && (!ready || !state.modelId || !contextAvailable || state.scopes.length === 0 || (selectedProvider?.auth_kind === "api_key" && selectedProvider.secret_state !== "present"))}
             aria-expanded={state.preview ? state.previewExpanded : false}
             aria-controls="ai-context-preview"
           >

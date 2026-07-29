@@ -323,6 +323,7 @@ function Check-Docs {
     Invoke-Tool "Task log contract mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-task-log-contract-mutations.ps1")) $Root | Out-Null
     Invoke-Tool "Data lifecycle contract" "node" @("scripts\tests\test-data-lifecycle-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Data lifecycle mutations" "node" @("scripts\tests\test-data-lifecycle-contract-mutations.mjs", $Root) | Out-Null
+    Invoke-Tool "Phase 6C user-first runtime contract" "node" @("scripts\tests\test-phase-6c-user-first-contract.mjs", $Root) | Out-Null
 
     $markdownPaths = @(
         (Get-TrackedPaths "*.md")
@@ -489,6 +490,7 @@ function Check-Fast {
     Invoke-Tool "pnpm cache contract mutations" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-pnpm-cache-contract-mutations.ps1")) $Root | Out-Null
     Invoke-Tool "Frontend tests" "pnpm" @("test") | Out-Null
     Invoke-Tool "Rust tests" "cargo" @("test", "--locked") (Join-Path $Root "src-tauri") | Out-Null
+    Invoke-Tool "NIST CONTAM tools acquisition script" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-contam-tools-script.ps1")) $Root | Out-Null
 }
 
 function Check-Full {

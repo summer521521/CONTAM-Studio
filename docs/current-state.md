@@ -1,10 +1,10 @@
 # 当前状态
 
-记录日期：2026-07-28。
+记录日期：2026-07-29。
 
-当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.2.0桌面纵向路径包括受支持PRJ语义树、多对象草稿Patch、官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心、受审批AI仿真、多Provider只读AI和结果解释。
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.3.0桌面纵向路径包括受支持PRJ语义树、多对象草稿Patch、随包官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心、受审批AI仿真、多Provider只读AI和结果解释。
 
-0.2.0将冻结Python Worker作为Tauri资源和便携目录的一部分，不再从Release二进制使用`CARGO_MANIFEST_DIR`或仓库`.venv`。Python、ContamX、SimRead、Codex App Server和受控探测/安装命令的后代由Windows Job Object收口。便携版、NSIS、MSI、签名、独立干净机和公开发布状态以[0.2.0发布说明](release/CONTAM-Studio-0.2.0-release-notes.md)、[发布包](release/release-kit-v2.md)及本轮任务记录为准，不能从源码实现状态推断。
+0.3.0将冻结Python Worker和哈希锁定的NIST ContamX工具作为Tauri资源和便携目录的一部分，不再从Release二进制使用`CARGO_MANIFEST_DIR`或仓库`.venv`。Python、ContamX、SimRead、Codex App Server和受控探测/安装命令的后代由Windows Job Object收口。便携版、NSIS、MSI、签名、独立干净机和公开发布状态以[0.3.0发布说明](release/CONTAM-Studio-0.3.0-release-notes.md)、[发布包](release/release-kit-v2.md)及本轮任务记录为准，不能从源码实现状态推断。
 
 ## Phase 6B 多 Provider 只读 AI 助手
 
@@ -13,7 +13,16 @@
 - 已完成前端定向测试/构建、Provider Mock Server、Archive 回归、Rust/ACL/数据生命周期契约检查；修复最终门禁发现的旧 ACL 计数和 Clippy 告警后，`scripts/verify.ps1 -Mode Full` 通过，详见[Phase 6B验证记录](development/phase-6b-multi-provider-ai-verification.md)。
 - Codex 自动执行未读取真实密钥或调用真实付费 Provider；用户随后报告真实 Provider 请求、API Key 配置与使用、真实 AI 回答和本轮 GUI 验收通过，因此能力矩阵记录为 `manual_gui=passed`、`user_validated=passed`。具体 Provider/协议清单、设备码账户、费用与请求内容未逐项留存；安装包、干净机、签名和产品发布仍为 `not_run` 或未验证。本切片随当前 `main` 交付提交纳入，不能用合并状态代替发布证据。
 
-Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.2.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.2.0结论。
+## Phase 6C 用户优先官方模型目录、内置 NIST 工具与界面减负
+
+- 产品当前定位为“Windows 优先、本地优先、联网增强的 CONTAM 桌面工作台”。项目、仿真和用户文件保持本地；Provider、官方模型目录、更新检查和官方资源获取只在用户主动配置或调用时联网。
+- 内置 Codex 模型继续只显示 Codex App Server 返回的可用模型。OpenAI、Anthropic 和 Gemini 分别使用官方目录接口并在 Rust 按当前适配器能力筛选；其他 OpenAI-compatible Provider 先尝试 `/models`，仅自定义 Provider 在目录不可用时于高级设置保留手动模型。
+- 统一目录缓存只保存非敏感模型元数据，带来源、刷新时间、24小时 TTL 和 `stale` 状态；刷新失败保留上次成功列表，已选模型被移除时要求重新选择。API Key 继续只在 Windows Credential Manager 中使用，不进入 Profile、Archive、日志或前端状态。
+- 构建脚本从NIST官方页面获取 ContamX 3.4.0.3 Windows x64 包，先验证锁定 ZIP SHA-256，再验证 ContamX、SimRead、SimComp 和 PrjUp 文件哈希；二进制不进入Git，发布输入通过 Tauri Resource、Portable 和安装器资源路径接入。真实安装包、签名、发布和干净机证据仍单独记录。
+- 默认 AI 面板只展示 Provider、连接状态、模型和主要操作；Endpoint、手动模型、旧工具路径、协议和诊断移入高级设置。设置页只读统计应用数据白名单的数量和大小，不读取正文、不扫描白名单外路径、不提供删除按钮。
+- Phase 6C 的最终自动验证、GUI、真实 Provider、打包、签名、发布和用户验收状态以本轮任务日志和能力矩阵为准；不得把自动检查替代人工或真实服务证据。
+
+Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.3.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.3.0结论。
 
 ## Phase 6A Codex只读AI助手
 

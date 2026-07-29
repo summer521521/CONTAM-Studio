@@ -1,6 +1,7 @@
 param(
   [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-08",
   [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging",
+  [string]$ContamToolsTaskRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
   [switch]$SkipTauriBuild
 )
 $ErrorActionPreference = "Stop"
@@ -36,6 +37,9 @@ $nativePathMaps = @(
 )
 $env:CFLAGS = (@($env:CFLAGS) + $nativePathMaps -join " ").Trim()
 $env:CXXFLAGS = (@($env:CXXFLAGS) + $nativePathMaps -join " ").Trim()
+$approvedContamTaskRoot = Split-Path -Parent $ContamToolsTaskRoot
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $ContamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
+if ($LASTEXITCODE -ne 0) { throw "verified NIST CONTAM runtime preparation failed" }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 $resolver = Join-Path $PSScriptRoot "resolve-packaging-toolchain.ps1"
 $toolchain = $null
@@ -76,7 +80,8 @@ if ($status -eq "available") {
   if (-not (Test-Path -LiteralPath $bundleRoot -PathType Container)) { throw "Tauri bundle output is missing" }
   $bundles = @(Get-ChildItem -LiteralPath $bundleRoot -File -Recurse | Where-Object { $_.Extension -in @(".exe", ".msi") })
   if ($bundles.Count -lt 2) { throw "expected NSIS and MSI artifacts were not produced" }
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\repackage-bundles-local.ps1") -RepoRoot $repo -ArtifactInstallerRoot $target -ToolchainRoot $ToolchainRoot
+  $repackageStageRoot = Join-Path $target "repackage-work"
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\repackage-bundles-local.ps1") -RepoRoot $repo -ArtifactInstallerRoot $target -ToolchainRoot $ToolchainRoot -StageRoot $repackageStageRoot
   if ($LASTEXITCODE -ne 0) { throw "local installer repackage failed" }
   $localRepackage = [ordered]@{
     status = "local_repackaged"

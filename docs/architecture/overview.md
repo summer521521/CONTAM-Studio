@@ -2,7 +2,7 @@
 
 ## 决策状态
 
-Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Phase 6A增加用户主动启用的本地Codex App Server适配器，AI只读取Rust披露的结构化上下文。当前职责、可信身份、错误和所有权以[ADR-011](../adr/ADR-011-freeze-layer-responsibilities-and-trust-boundaries.md)为准；Python冻结、安装包路径及长期进程形式仍未定型。
+Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Phase 6A增加用户主动启用的本地Codex App Server适配器，AI只读取Rust披露的结构化上下文。Phase 6C将产品定位收敛为“Windows优先、本地优先、联网增强”，并将官方模型目录、NIST工具资源和本地数据透明度接入当前运行时。当前职责、可信身份、错误和所有权以[ADR-011](../adr/ADR-011-freeze-layer-responsibilities-and-trust-boundaries.md)和[ADR-018](../adr/ADR-018-adopt-user-first-online-enhanced-runtime.md)为准。
 
 ## 概念架构
 
@@ -31,6 +31,23 @@ Rust可信上下文快照
 ```
 
 Codex不能读取项目目录、PRJ、草稿、运行或结果文件，也不能调用工具、运行ContamX或生成可应用Patch。详见[Codex只读AI助手](codex-readonly-assistant.md)。
+
+Phase 6C 的 Provider 路径保持身份分离：
+
+```text
+React Provider 选择
+↓ 显式 Tauri 命令
+Rust Provider 网关
+├─ Codex App Server：Codex/ChatGPT 登录和 App Server 模型目录
+├─ OpenAI Responses：OpenAI 官方 /v1/models 和 Responses
+├─ Anthropic Messages：官方 /v1/models 分页和 Messages
+├─ Gemini：官方 v1beta/models + OpenAI-compatible Chat Completions
+└─ 其他兼容 Provider：受控 /models + Chat Completions
+```
+
+模型目录只向前端返回统一的非敏感模型视图。API Key 只从 Windows Credential Manager 读入请求生命周期；其他本地 Agent 的登录文件和会话不在读取范围内。模型目录缓存只保存元数据并带有 TTL、来源和过期标记，刷新失败不会清空上次成功列表。
+
+官方 CONTAM 运行时在构建期由 NIST HTTPS 下载页获取，校验 ZIP 和文件级 SHA-256 后作为 Tauri Resource 输入。安装包和 Portable 目录内包含已验证的 ContamX、SimRead、SimComp 和 PrjUp；运行时每次使用前重新验证身份。源码树不提交二进制，旧用户路径仅保留为高级诊断兼容回退。
 
 Phase 2C当前实际读取路径为：
 
@@ -110,8 +127,9 @@ GUI和AI不能各自建立文件写入路径。Phase 6A AI严格只读，只能�
 ## 平台与部署边界
 
 - Windows 10/11 64位为首要平台。
-- 默认离线运行，核心功能不得依赖AI或网络。
-- 联网AI由用户主动配置和启用，桌面能力遵循最小权限。
+- 本地优先、联网增强；核心项目、仿真和结果能力不得依赖AI或网络。
+- 联网 Provider、官方模型目录、更新检查和官方资源获取均由用户主动触发或明确启用，桌面能力遵循最小权限。
+- 设置页只统计固定应用数据白名单的文件数量和大小，不读取文件正文，不提供删除用户数据的按钮。
 - 当前不引入复杂微服务、插件系统或多求解器抽象。
 
 ## 待技术Spike验证

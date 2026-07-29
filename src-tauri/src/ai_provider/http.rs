@@ -19,6 +19,10 @@ pub(crate) const TURN_TIMEOUT: Duration = Duration::from_secs(90);
 pub(crate) enum AuthHeader {
     Bearer(Zeroizing<String>),
     Anthropic(Zeroizing<String>),
+    /// Gemini's OpenAI-compatible endpoint follows the OpenAI Bearer shape.
+    GeminiOpenAi(Zeroizing<String>),
+    /// The native Gemini model directory documents the x-goog-api-key header.
+    GeminiModels(Zeroizing<String>),
     None,
 }
 
@@ -98,6 +102,12 @@ impl ControlledHttpClient {
             AuthHeader::Anthropic(secret) => {
                 request = request.header("x-api-key", secret.as_str());
                 request = request.header("anthropic-version", "2023-06-01");
+            }
+            AuthHeader::GeminiOpenAi(secret) => {
+                request = request.bearer_auth(secret.as_str());
+            }
+            AuthHeader::GeminiModels(secret) => {
+                request = request.header("x-goog-api-key", secret.as_str());
             }
             AuthHeader::None => {}
         }

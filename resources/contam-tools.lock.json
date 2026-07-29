@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "product": "NIST CONTAM",
+  "release_version": "3.4.0.8",
+  "contamx_version": "3.4.0.3",
+  "platform": "windows",
+  "architecture": "x86_64",
+  "official_page": "https://www.nist.gov/el/beed/nist-multizone-modeling/software/contam/download-contam",
+  "download_url": "https://www.nist.gov/document/contam-x-3403-windows-64bitzip",
+  "zip_sha256": "3F11B44513F1046D378226B3D63644493B78F0E8241DC70F83E319A458A14052",
+  "acquired_at_utc": "2026-07-29T04:07:37Z",
+  "programs_used": ["contamx3.exe", "simread.exe", "simcomp.exe", "prjup.exe"],
+  "files": [
+    {
+      "file": "contam-x-3.4.0.3-Windows-64bit/contamx3.exe",
+      "sha256": "3B9A5EE9A6A3EA3CDC569DF607F4EC2A1AD4E74E53FEF8FBEC0B7E540A5D3AAD",
+      "source": "NIST official ContamX 3.4.0.3 Windows x64 ZIP"
+    },
+    {
+      "file": "contam-x-3.4.0.3-Windows-64bit/prjup.exe",
+      "sha256": "EEB0B290FD5840BA34A56DA3C4E66ABA2639648D81C983BD73201E6A5DD1F1AF",
+      "source": "NIST official ContamX 3.4.0.3 Windows x64 ZIP"
+    },
+    {
+      "file": "contam-x-3.4.0.3-Windows-64bit/simcomp.exe",
+      "sha256": "C629B3EF5C7A4080DA38E0913C3950EA98327AA466EC3C2D51223403216E1601",
+      "source": "NIST official ContamX 3.4.0.3 Windows x64 ZIP"
+    },
+    {
+      "file": "contam-x-3.4.0.3-Windows-64bit/simread.exe",
+      "sha256": "85AF9B559DEBB6ECF9BA2F73705CEF60F14D32C5F8ED9B524823FA3AC85A6958",
+      "source": "NIST official ContamX 3.4.0.3 Windows x64 ZIP"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 mod anthropic;
+mod catalog;
 mod credentials;
 mod http;
 mod openai;
@@ -26,6 +27,7 @@ use crate::codex_app_server::{
 };
 use crate::zone_bridge::AiTrustedContext;
 
+use self::catalog::{CatalogCacheFile, CatalogSnapshot};
 use self::credentials::{AiCredentialStore, CredentialError, SecretInput, SystemCredentialStore};
 use self::http::{endpoint_url, AuthHeader, ControlledHttpClient, TURN_TIMEOUT};
 
@@ -42,7 +44,7 @@ const MAX_QUESTION_CHARS: usize = 2_000;
 const MAX_REASONING_EFFORT_CHARS: usize = 80;
 const PROFILE_NAMESPACE: Uuid = Uuid::from_u128(0x7d30c7ea_9f20_5e73_8cd6_8b3e46a5c17f);
 
-type ProviderCatalogs = Arc<Mutex<HashMap<Uuid, (bool, Vec<AiProviderModelView>)>>>;
+type ProviderCatalogs = Arc<Mutex<HashMap<Uuid, CatalogSnapshot>>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct AiProviderError {
@@ -179,11 +181,18 @@ impl Default for ProfileFile {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AiProviderModelView {
     pub(crate) id: String,
     pub(crate) display_name: String,
+    pub(crate) provider: String,
+    pub(crate) source: String,
+    pub(crate) capabilities: Vec<String>,
+    pub(crate) availability: String,
     pub(crate) available: bool,
+    pub(crate) fetched_at: Option<String>,
+    pub(crate) stale: bool,
+    pub(crate) verified_for_current_adapter: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -351,9 +360,10 @@ fn is_safe_text(value: &str, maximum: usize) -> bool {
 
 fn is_safe_model_id(value: &str) -> bool {
     is_safe_text(value, MAX_MODEL_ID_CHARS)
-        && !value.contains('\\')
-        && !value.contains('/')
-        && !value.contains(':')
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/' | b':' | b'@')
+        })
+        && !value.contains("..")
 }
 
 fn safe_language(value: &str) -> bool {
@@ -665,6 +675,80 @@ fn profiles_path(app: &AppHandle) -> Result<PathBuf, AiProviderError> {
         .map_err(|_| AiProviderError::new("ai_provider_profile_store_unavailable"))
 }
 
+fn catalog_cache_path(app: &AppHandle) -> Result<PathBuf, AiProviderError> {
+    app.path()
+        .app_local_data_dir()
+        .map(|root| root.join("ai").join("providers").join("model-catalog.json"))
+        .map_err(|_| AiProviderError::new("ai_provider_profile_store_unavailable"))
+}
+
+fn read_catalog_cache(path: &Path) -> Result<CatalogCacheFile, AiProviderError> {
+    if !path.exists() {
+        return Ok(CatalogCacheFile {
+            schema_version: catalog::CATALOG_CACHE_SCHEMA_VERSION,
+            entries: HashMap::new(),
+        });
+    }
+    let metadata = fs::metadata(path)
+        .map_err(|_| AiProviderError::new("ai_provider_profile_store_unavailable"))?;
+    if metadata.len() > PROFILE_FILE_LIMIT {
+        return Err(AiProviderError::new("ai_provider_model_catalog_failed"));
+    }
+    let bytes = fs::read(path)
+        .map_err(|_| AiProviderError::new("ai_provider_profile_store_unavailable"))?;
+    let file: CatalogCacheFile = serde_json::from_slice(&bytes)
+        .map_err(|_| AiProviderError::new("ai_provider_model_catalog_failed"))?;
+    if file.schema_version != catalog::CATALOG_CACHE_SCHEMA_VERSION {
+        return Err(AiProviderError::new("ai_provider_model_catalog_failed"));
+    }
+    Ok(CatalogCacheFile {
+        schema_version: file.schema_version,
+        entries: file
+            .entries
+            .into_iter()
+            .filter_map(|(id, snapshot)| {
+                let profile_id = Uuid::parse_str(&id).ok()?;
+                let _ = profile_id;
+                Some((id, catalog::mark_stale(&snapshot)))
+            })
+            .collect(),
+    })
+}
+
+fn write_catalog_cache(
+    path: &Path,
+    entries: &HashMap<Uuid, CatalogSnapshot>,
+) -> Result<(), AiProviderError> {
+    let cache = CatalogCacheFile {
+        schema_version: catalog::CATALOG_CACHE_SCHEMA_VERSION,
+        entries: entries
+            .iter()
+            .map(|(id, snapshot)| (id.to_string(), snapshot.clone()))
+            .collect(),
+    };
+    let bytes = serde_json::to_vec_pretty(&cache)
+        .map_err(|_| AiProviderError::new("ai_provider_profile_write_failed"))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| AiProviderError::new("ai_provider_profile_write_failed"))?;
+    fs::create_dir_all(parent)
+        .map_err(|_| AiProviderError::new("ai_provider_profile_write_failed"))?;
+    let temp = parent.join(format!(".model-catalog-{}.tmp", Uuid::new_v4()));
+    if fs::write(&temp, &bytes).is_err() {
+        let _ = fs::remove_file(&temp);
+        return Err(AiProviderError::new("ai_provider_profile_write_failed"));
+    }
+    if path.exists() && fs::remove_file(path).is_err() {
+        let _ = fs::remove_file(&temp);
+        return Err(AiProviderError::new("ai_provider_profile_write_failed"));
+    }
+    if fs::rename(&temp, path).is_err() {
+        let _ = fs::remove_file(&temp);
+        return Err(AiProviderError::new("ai_provider_profile_write_failed"));
+    }
+    Ok(())
+}
+
 fn read_profiles(path: &Path) -> Result<ProfileFile, AiProviderError> {
     if !path.exists() {
         let file = ProfileFile::default();
@@ -757,10 +841,22 @@ fn find_profile_mut(
         .ok_or_else(|| AiProviderError::new("ai_provider_profile_not_found"))
 }
 
-fn model_is_allowed(profile: &AiProviderProfile, model_id: &str) -> bool {
+fn model_is_allowed(store: &AiProviderStore, profile: &AiProviderProfile, model_id: &str) -> bool {
     is_safe_model_id(model_id)
         && (profile.selected_model_id.as_deref() == Some(model_id)
-            || profile.manual_model_ids.iter().any(|item| item == model_id))
+            || profile.manual_model_ids.iter().any(|item| item == model_id)
+            || store
+                .catalogs
+                .lock()
+                .ok()
+                .and_then(|catalogs| catalogs.get(&profile.profile_id).cloned())
+                .is_some_and(|catalog| {
+                    catalog.models.iter().any(|model| {
+                        model.id == model_id
+                            && model.available
+                            && model.verified_for_current_adapter
+                    })
+                }))
 }
 
 fn credential_error(error: CredentialError, write: bool) -> AiProviderError {
@@ -797,10 +893,10 @@ fn secret_state(profile: &AiProviderProfile, credentials: &dyn AiCredentialStore
 fn profile_view(
     profile: &AiProviderProfile,
     credentials: &dyn AiCredentialStore,
-    catalog: Option<&(bool, Vec<AiProviderModelView>)>,
+    catalog: Option<&CatalogSnapshot>,
 ) -> AiProviderView {
     let (catalog_verified, models) = catalog
-        .map(|(verified, models)| (*verified, models.clone()))
+        .map(|snapshot| (snapshot.verified, snapshot.models.clone()))
         .unwrap_or((false, Vec::new()));
     AiProviderView {
         profile_id: profile.profile_id,
@@ -815,7 +911,11 @@ fn profile_view(
         connection_status: "idle".to_string(),
         catalog_verified,
         models,
-        manual_model_ids: profile.manual_model_ids.clone(),
+        manual_model_ids: if profile.built_in {
+            Vec::new()
+        } else {
+            profile.manual_model_ids.clone()
+        },
         selected_model_id: profile.selected_model_id.clone(),
         config_revision: profile.config_revision,
         capabilities: profile.capabilities.clone(),
@@ -843,6 +943,9 @@ pub struct DesktopAiProviderModelsResponse {
     pub(crate) profile_id: String,
     pub(crate) models: Vec<AiProviderModelView>,
     pub(crate) verified: bool,
+    pub(crate) stale: bool,
+    pub(crate) source: Option<String>,
+    pub(crate) fetched_at: Option<String>,
     pub(crate) error: Option<AiDiagnostic>,
 }
 
@@ -876,23 +979,102 @@ fn models_failure(
         profile_id,
         models: Vec::new(),
         verified: false,
+        stale: false,
+        source: None,
+        fetched_at: None,
         error: Some(error.diagnostic()),
     }
 }
 
+fn models_with_snapshot(
+    request_id: String,
+    profile_id: String,
+    snapshot: CatalogSnapshot,
+    error: Option<AiProviderError>,
+) -> DesktopAiProviderModelsResponse {
+    DesktopAiProviderModelsResponse {
+        request_id,
+        profile_id,
+        models: snapshot.models,
+        verified: snapshot.verified,
+        stale: snapshot.stale,
+        source: Some(snapshot.source),
+        fetched_at: Some(snapshot.fetched_at),
+        error: error.map(|value| value.diagnostic()),
+    }
+}
+
+fn store_catalog_snapshot(
+    app: &AppHandle,
+    store: &AiProviderStore,
+    profile_id: Uuid,
+    snapshot: CatalogSnapshot,
+) -> Result<CatalogSnapshot, AiProviderError> {
+    let mut catalogs = store
+        .catalogs
+        .lock()
+        .map_err(|_| AiProviderError::new("ai_provider_profile_store_unavailable"))?;
+    catalogs.insert(profile_id, snapshot.clone());
+    let entries = catalogs.clone();
+    drop(catalogs);
+    let cache_path = catalog_cache_path(app)?;
+    write_catalog_cache(&cache_path, &entries)?;
+    Ok(snapshot)
+}
+
+fn cached_catalog(store: &AiProviderStore, profile_id: Uuid) -> Option<CatalogSnapshot> {
+    store
+        .catalogs
+        .lock()
+        .ok()
+        .and_then(|catalogs| catalogs.get(&profile_id).map(catalog::mark_stale))
+}
+
+fn models_failure_with_fallback(
+    store: &AiProviderStore,
+    request_id: String,
+    profile_id: String,
+    error: AiProviderError,
+) -> DesktopAiProviderModelsResponse {
+    let Ok(uuid) = Uuid::parse_str(&profile_id) else {
+        return models_failure(request_id, profile_id, error);
+    };
+    if let Some(mut snapshot) = cached_catalog(store, uuid) {
+        snapshot.stale = true;
+        for model in &mut snapshot.models {
+            model.stale = true;
+        }
+        return models_with_snapshot(request_id, profile_id, snapshot, Some(error));
+    }
+    models_failure(request_id, profile_id, error)
+}
+
 fn read_views(
     path: &Path,
+    catalog_path: &Path,
     credentials: &dyn AiCredentialStore,
     catalogs: ProviderCatalogs,
 ) -> Result<Vec<AiProviderView>, AiProviderError> {
     let file = read_profiles(path)?;
-    let catalogs = catalogs
+    let cached = read_catalog_cache(catalog_path)?;
+    let mut catalogs_guard = catalogs
         .lock()
         .map_err(|_| AiProviderError::new("ai_provider_profile_store_unavailable"))?;
+    for profile in &file.profiles {
+        if let Some(snapshot) = cached.entries.get(&profile.profile_id.to_string()) {
+            catalogs_guard.insert(profile.profile_id, snapshot.clone());
+        }
+    }
     Ok(file
         .profiles
         .iter()
-        .map(|profile| profile_view(profile, credentials, catalogs.get(&profile.profile_id)))
+        .map(|profile| {
+            profile_view(
+                profile,
+                credentials,
+                catalogs_guard.get(&profile.profile_id),
+            )
+        })
         .collect())
 }
 
@@ -912,10 +1094,14 @@ pub async fn list_ai_provider_profiles(
         Ok(path) => path,
         Err(error) => return profiles_failure(request_id, error),
     };
+    let catalog_path = match catalog_cache_path(&app) {
+        Ok(path) => path,
+        Err(error) => return profiles_failure(request_id, error),
+    };
     let credentials = Arc::clone(&store.credentials);
     let catalogs = Arc::clone(&store.catalogs);
     match tauri::async_runtime::spawn_blocking(move || {
-        read_views(&path, credentials.as_ref(), catalogs)
+        read_views(&path, &catalog_path, credentials.as_ref(), catalogs)
     })
     .await
     {
@@ -1279,6 +1465,14 @@ fn auth_for_profile(
     profile: &AiProviderProfile,
     credentials: &dyn AiCredentialStore,
 ) -> Result<AuthHeader, AiProviderError> {
+    auth_for_profile_mode(profile, credentials, false)
+}
+
+fn auth_for_profile_mode(
+    profile: &AiProviderProfile,
+    credentials: &dyn AiCredentialStore,
+    gemini_models_catalog: bool,
+) -> Result<AuthHeader, AiProviderError> {
     match profile.auth_kind {
         AiProviderAuthKind::None => Ok(AuthHeader::None),
         AiProviderAuthKind::CodexManaged => {
@@ -1290,6 +1484,12 @@ fn auth_for_profile(
             .map(|secret| {
                 if profile.protocol == AiProviderProtocol::AnthropicMessages {
                     AuthHeader::Anthropic(secret.into_zeroizing())
+                } else if profile.preset_id.as_deref() == Some("gemini") {
+                    if gemini_models_catalog {
+                        AuthHeader::GeminiModels(secret.into_zeroizing())
+                    } else {
+                        AuthHeader::GeminiOpenAi(secret.into_zeroizing())
+                    }
                 } else {
                     AuthHeader::Bearer(secret.into_zeroizing())
                 }
@@ -1311,36 +1511,58 @@ fn profile_base_url(profile: &AiProviderProfile) -> Result<Url, AiProviderError>
 async fn list_models_for_profile(
     store: &AiProviderStore,
     profile: &AiProviderProfile,
-) -> Result<Vec<AiProviderModelView>, AiProviderError> {
-    let url = endpoint_url(&profile_base_url(profile)?, "models")?;
+) -> Result<CatalogSnapshot, AiProviderError> {
+    let fetched_at = catalog::timestamp_now();
+    if profile.preset_id.as_deref() == Some("gemini") {
+        let url = Url::parse("https://generativelanguage.googleapis.com/v1beta/models")
+            .map_err(|_| AiProviderError::new("ai_provider_endpoint_rejected"))?;
+        let value = store
+            .client
+            .get_json(
+                &url,
+                auth_for_profile_mode(profile, store.credentials.as_ref(), true)?,
+            )
+            .await?;
+        return catalog::parse_gemini_models(profile, &value, &fetched_at);
+    }
+
     let auth = auth_for_profile(profile, store.credentials.as_ref())?;
-    let value = store.client.get_json(&url, auth).await?;
-    let data = value
-        .get("data")
-        .and_then(Value::as_array)
-        .ok_or_else(|| AiProviderError::new("ai_provider_model_catalog_failed"))?;
-    if data.len() > 200 {
+    let base = profile_base_url(profile)?;
+    let mut url = endpoint_url(&base, "models")?;
+    if profile.protocol == AiProviderProtocol::AnthropicMessages {
+        let mut all_models = Vec::new();
+        let mut after_id = None;
+        for _page in 0..20 {
+            if let Some(after_id) = after_id.as_deref() {
+                url.query_pairs_mut().append_pair("after_id", after_id);
+            }
+            let value = store
+                .client
+                .get_json(&url, auth_for_profile(profile, store.credentials.as_ref())?)
+                .await?;
+            let (page, next) = catalog::parse_anthropic_models(profile, &value, &fetched_at)?;
+            all_models.extend(page.models);
+            after_id = next;
+            if after_id.is_none() {
+                return Ok(CatalogSnapshot {
+                    source: "official_api".to_string(),
+                    fetched_at,
+                    stale: false,
+                    verified: true,
+                    models: all_models,
+                });
+            }
+            url = endpoint_url(&base, "models")?;
+        }
         return Err(AiProviderError::new("ai_provider_model_catalog_failed"));
     }
-    let mut ids = Vec::new();
-    let mut models = Vec::new();
-    for item in data {
-        let id = item
-            .get("id")
-            .or_else(|| item.get("model"))
-            .and_then(Value::as_str)
-            .ok_or_else(|| AiProviderError::new("ai_provider_model_catalog_failed"))?;
-        if !is_safe_model_id(id) || ids.iter().any(|existing| existing == id) {
-            return Err(AiProviderError::new("ai_provider_model_catalog_failed"));
-        }
-        ids.push(id.to_string());
-        models.push(AiProviderModelView {
-            id: id.to_string(),
-            display_name: id.to_string(),
-            available: true,
-        });
+
+    let value = store.client.get_json(&url, auth).await?;
+    if profile.preset_id.as_deref() == Some("openai") {
+        catalog::parse_openai_models(profile, &value, &fetched_at)
+    } else {
+        catalog::parse_openai_compatible_models(profile, &value, &fetched_at)
     }
-    Ok(models)
 }
 
 #[tauri::command]
@@ -1373,6 +1595,14 @@ pub async fn test_ai_provider_connection(
             profiles: None,
             error: None,
         },
+        Err(error) if !profile.built_in && error.code == "ai_provider_model_catalog_failed" => {
+            DesktopAiProviderActionResponse {
+                request_id,
+                status: "connected_manual_catalog".to_string(),
+                profiles: None,
+                error: None,
+            }
+        }
         Err(error) => action_failure(request_id, error),
     }
 }
@@ -1403,21 +1633,20 @@ pub async fn refresh_ai_provider_models(
     };
     let store = app.state::<AiProviderStore>();
     match list_models_for_profile(&store, &profile).await {
-        Ok(models) => {
-            store
-                .catalogs
-                .lock()
-                .expect("AI provider catalog mutex poisoned")
-                .insert(profile.profile_id, (true, models.clone()));
-            DesktopAiProviderModelsResponse {
-                request_id,
-                profile_id,
-                models,
-                verified: true,
-                error: None,
+        Ok(snapshot) => match store_catalog_snapshot(&app, &store, profile.profile_id, snapshot) {
+            Ok(snapshot) => models_with_snapshot(request_id, profile_id, snapshot, None),
+            Err(error) => models_failure_with_fallback(&store, request_id, profile_id, error),
+        },
+        Err(error) if !profile.built_in && error.code == "ai_provider_model_catalog_failed" => {
+            let snapshot = catalog::manual_snapshot(&profile, &catalog::timestamp_now());
+            match store_catalog_snapshot(&app, &store, profile.profile_id, snapshot) {
+                Ok(snapshot) => models_with_snapshot(request_id, profile_id, snapshot, None),
+                Err(write_error) => {
+                    models_failure_with_fallback(&store, request_id, profile_id, write_error)
+                }
             }
         }
-        Err(error) => models_failure(request_id, profile_id, error),
+        Err(error) => models_failure_with_fallback(&store, request_id, profile_id, error),
     }
 }
 
@@ -1463,7 +1692,8 @@ pub(crate) fn preview_http_ai_context(
             return crate::codex_app_server::preview_failure(request_id, error.diagnostic())
         }
     };
-    if !model_is_allowed(&profile, &model_id) {
+    let store = app.state::<AiProviderStore>();
+    if !model_is_allowed(&store, &profile, &model_id) {
         return crate::codex_app_server::preview_failure(
             request_id,
             AiProviderError::new("ai_provider_model_unavailable").diagnostic(),
@@ -1520,7 +1750,6 @@ pub(crate) fn preview_http_ai_context(
         network_scope: network_scope(&profile),
         model_id: model_id.clone(),
     };
-    let store = app.state::<AiProviderStore>();
     *store
         .preview
         .lock()
@@ -1600,10 +1829,10 @@ pub(crate) async fn start_http_ai_turn(
         Ok(_) => return failure(AiProviderError::new("ai_provider_profile_invalid")),
         Err(error) => return failure(error),
     };
-    if !model_is_allowed(&profile, &model_id) {
+    let store = app.state::<AiProviderStore>();
+    if !model_is_allowed(&store, &profile, &model_id) {
         return failure(AiProviderError::new("ai_provider_model_unavailable"));
     }
-    let store = app.state::<AiProviderStore>();
     if app
         .state::<crate::codex_app_server::CodexAssistantStore>()
         .close_activity_active()

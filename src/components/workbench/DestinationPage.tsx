@@ -7,7 +7,7 @@ import type { ResultState } from "../../app/result-state";
 import type { ResultExportState } from "../../app/result-export-state";
 import type { AppLanguage, AppTheme, WorkbenchDestination } from "../../app/workbench-state";
 import type { SemanticSnapshot } from "../../app/semantic-state";
-import type { StudioSetup, ToolKind } from "../../app/release-state";
+import type { StorageUsageView, StudioSetup, ToolKind } from "../../app/release-state";
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { StudyWorkspace } from "./StudyWorkspace";
 import { ReleaseSettings } from "./ReleaseSettings";
@@ -37,8 +37,9 @@ interface DestinationPageProps {
   onChooseDataDirectory?: () => Promise<string | null>;
   onProbeTool?: (kind: ToolKind) => Promise<import("../../app/release-state").ToolState | null>;
   onSaveSetup?: (dataDirectory: string, contamxPath: string | null, simreadPath: string | null) => Promise<void>;
-  onOpenStudioDirectory?: (kind: "data" | "logs" | "cache") => Promise<void>;
+  onOpenStudioDirectory?: (kind: "data" | "app-data" | "logs" | "cache") => Promise<void>;
   onClearStudioCache?: () => Promise<void>;
+  storageUsage?: StorageUsageView | null;
   onCopyDiagnostics?: () => Promise<void>;
   onExportDiagnostics?: () => Promise<void>;
 }
@@ -70,6 +71,7 @@ export function DestinationPage({
   onSaveSetup = async () => undefined,
   onOpenStudioDirectory = async () => undefined,
   onClearStudioCache = async () => undefined,
+  storageUsage = null,
   onCopyDiagnostics = async () => undefined,
   onExportDiagnostics = async () => undefined,
 }: DestinationPageProps) {
@@ -157,6 +159,7 @@ export function DestinationPage({
           onSave={onSaveSetup}
           onOpenDirectory={onOpenStudioDirectory}
           onClearCache={onClearStudioCache}
+          storageUsage={storageUsage}
           onCopyDiagnostics={onCopyDiagnostics}
           onExportDiagnostics={onExportDiagnostics}
         />

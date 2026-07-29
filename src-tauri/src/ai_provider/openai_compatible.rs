@@ -16,6 +16,15 @@ pub(crate) async fn complete(
     cancel: &AtomicBool,
 ) -> Result<AiProviderCompletion, AiProviderError> {
     let url = endpoint_url(&profile_base_url(profile)?, "chat/completions")?;
+    let request_model_id = if profile.preset_id.as_deref() == Some("gemini") {
+        input
+            .model_id
+            .strip_prefix("models/")
+            .unwrap_or(&input.model_id)
+            .to_string()
+    } else {
+        input.model_id.clone()
+    };
     let mut messages = vec![json!({
         "role": "system",
         "content": system_instruction(&input.language),
@@ -33,7 +42,7 @@ pub(crate) async fn complete(
         "content": prompt_for(&input)?,
     }));
     let body = json!({
-        "model": input.model_id,
+        "model": request_model_id,
         "messages": messages,
         "stream": true,
     });

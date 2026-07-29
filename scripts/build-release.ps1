@@ -1,5 +1,6 @@
 param(
   [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-06",
+  [string]$ContamToolsTaskRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
   [switch]$SkipBuild
 )
 $ErrorActionPreference = "Stop"
@@ -21,6 +22,8 @@ $target = Join-Path $ArtifactRoot $version
 $workerRoot = Join-Path $repo "src-tauri\runtime\python-worker"
 $workerExecutable = Join-Path $workerRoot "contam-studio-python-worker.exe"
 $workerManifestPath = Join-Path $workerRoot "runtime-manifest.json"
+$contamToolsRoot = Join-Path $repo "src-tauri\runtime\contam-tools"
+$contamToolsLock = Join-Path $repo "resources\contam-tools.lock.json"
 if (-not (Test-Path $ArtifactRoot)) { New-Item -ItemType Directory -Path $ArtifactRoot -Force | Out-Null }
 $encodedSeparator = [string][char]0x1f
 $releaseRustFlags = @(
@@ -48,8 +51,12 @@ Push-Location $repo
 try {
   pnpm verify:release
   if ($LASTEXITCODE -ne 0) { throw "release metadata verification failed" }
+  $approvedContamTaskRoot = Split-Path -Parent $ContamToolsTaskRoot
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $ContamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
+  if ($LASTEXITCODE -ne 0) { throw "verified NIST CONTAM runtime preparation failed" }
   if (-not $SkipBuild) {
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-python-worker.ps1")
+    $workerBuildRoot = Join-Path $ArtifactRoot "python-worker-build"
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-python-worker.ps1") -BuildRoot $workerBuildRoot
     if ($LASTEXITCODE -ne 0) { throw "frozen Python worker build failed" }
     pnpm tauri build --no-bundle --ci --no-sign
     if ($LASTEXITCODE -ne 0) { throw "Tauri release build failed" }
@@ -72,6 +79,11 @@ try {
   $portableRuntime = Join-Path $target "portable\runtime\python-worker"
   New-Item -ItemType Directory -Path $portableRuntime -Force | Out-Null
   Copy-Item -Path (Join-Path $workerRoot "*") -Destination $portableRuntime -Recurse -Force
+  $portableContamTools = Join-Path $target "portable\runtime\contam-tools"
+  New-Item -ItemType Directory -Path $portableContamTools -Force | Out-Null
+  Copy-Item -Path (Join-Path $contamToolsRoot "*") -Destination $portableContamTools -Recurse -Force
+  New-Item -ItemType Directory -Path (Join-Path $target "portable\resources") -Force | Out-Null
+  Copy-Item -LiteralPath $contamToolsLock -Destination (Join-Path $target "portable\resources\contam-tools.lock.json") -Force
   foreach ($notice in @("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")) {
     Copy-Item -LiteralPath (Join-Path $repo $notice) -Destination (Join-Path $target "portable\$notice")
   }
@@ -102,6 +114,11 @@ try {
       detached_protocol_smoke = [string]$workerManifest.detached_protocol_smoke
       detached_project_read = [string]$workerManifest.detached_project_read
       source_tree_required = [bool]$workerManifest.source_tree_required
+    }
+    official_contam_tools = [ordered]@{
+      lock_file = "resources/contam-tools.lock.json"
+      runtime_root = "runtime/contam-tools"
+      source = "NIST official download; SHA-256 locked before extraction"
     }
     files = $manifestFiles
   }
