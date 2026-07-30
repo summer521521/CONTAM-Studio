@@ -1,7 +1,7 @@
 {
   "name": "contam-studio",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "Apache-2.0",
   "repository": "https://github.com/summer521521/CONTAM-Studio",
   "type": "module",

@@ -5,7 +5,7 @@ export type BottomTab = "problems" | "logs" | "results";
 export type WorkbenchDestination = "project" | "search" | "run" | "results" | "studies" | "settings";
 
 export interface WorkbenchState {
-  version: 1;
+  version: 2;
   language: AppLanguage;
   theme: AppTheme;
   projectSize: number;
@@ -18,10 +18,10 @@ export interface WorkbenchState {
   bottomTab: BottomTab;
 }
 
-export const WORKBENCH_STORAGE_KEY = "contam-studio:workbench:v1";
+export const WORKBENCH_STORAGE_KEY = "contam-studio:workbench:v2";
 
 export const DEFAULT_WORKBENCH_STATE: WorkbenchState = {
-  version: 1,
+  version: 2,
   language: "zh-CN",
   theme: "light",
   projectSize: 20,
@@ -29,10 +29,35 @@ export const DEFAULT_WORKBENCH_STATE: WorkbenchState = {
   bottomSize: 31,
   projectCollapsed: false,
   contextCollapsed: false,
-  bottomCollapsed: false,
+  bottomCollapsed: true,
   contextTab: "inspector",
   bottomTab: "problems",
 };
+
+export type ProjectActivityAction = "navigate" | "toggle";
+
+/**
+ * The project activity icon doubles as the project-tree toggle only while the
+ * project workspace is already active. From another destination it must
+ * navigate back to the project workspace first.
+ */
+export function projectActivityAction(
+  activeDestination: WorkbenchDestination,
+): ProjectActivityAction {
+  return activeDestination === "project" ? "toggle" : "navigate";
+}
+
+/**
+ * Reset only layout preferences. Language and theme are user preferences and
+ * must survive a layout reset.
+ */
+export function resetWorkbenchLayout(state: WorkbenchState): WorkbenchState {
+  return {
+    ...DEFAULT_WORKBENCH_STATE,
+    language: state.language,
+    theme: state.theme,
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -54,10 +79,10 @@ export function loadWorkbenchState(): WorkbenchState {
     if (!raw) return DEFAULT_WORKBENCH_STATE;
 
     const value: unknown = JSON.parse(raw);
-    if (!isRecord(value) || value.version !== 1) return DEFAULT_WORKBENCH_STATE;
+    if (!isRecord(value) || value.version !== 2) return DEFAULT_WORKBENCH_STATE;
 
     return {
-      version: 1,
+      version: 2,
       language: isOneOf(value.language, ["zh-CN", "en"])
         ? value.language
         : DEFAULT_WORKBENCH_STATE.language,

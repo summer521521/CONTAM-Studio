@@ -1,10 +1,10 @@
 # 当前状态
 
-记录日期：2026-07-29。
+记录日期：2026-07-30。
 
-当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.3.0桌面纵向路径包括受支持PRJ语义树、多对象草稿Patch、随包官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心、受审批AI仿真、多Provider只读AI和结果解释。
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.4.0桌面纵向路径以“项目、运行、结果、研究”四个用户任务入口组织，包括受支持PRJ语义树、多对象草稿Patch、随包官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心、受审批AI仿真、多Provider只读AI和结果解释。
 
-0.3.0将冻结Python Worker和哈希锁定的NIST ContamX工具作为Tauri资源和便携目录的一部分，不再从Release二进制使用`CARGO_MANIFEST_DIR`或仓库`.venv`。Python、ContamX、SimRead、Codex App Server和受控探测/安装命令的后代由Windows Job Object收口。便携版、NSIS、MSI、签名、独立干净机和公开发布状态以[0.3.0发布说明](release/CONTAM-Studio-0.3.0-release-notes.md)、[发布包](release/release-kit-v2.md)及本轮任务记录为准，不能从源码实现状态推断。
+0.4.0将冻结Python Worker和哈希锁定的NIST ContamX工具作为Tauri资源和便携目录的一部分，不再从Release二进制使用`CARGO_MANIFEST_DIR`或仓库`.venv`。Python、ContamX、SimRead、Codex App Server和受控探测/安装命令的后代由Windows Job Object收口。便携版、NSIS、MSI、签名、独立干净机和公开发布状态以[0.4.0发布说明](release/CONTAM-Studio-0.4.0-release-notes.md)、[发布包](release/release-kit-v3.md)及本轮任务记录为准，不能从源码实现状态推断。
 
 ## Phase 6B 多 Provider 只读 AI 助手
 
@@ -22,7 +22,7 @@
 - 默认 AI 面板只展示 Provider、连接状态、模型和主要操作；Endpoint、手动模型、旧工具路径、协议和诊断移入高级设置。设置页只读统计应用数据白名单的数量和大小，不读取正文、不扫描白名单外路径、不提供删除按钮。
 - Phase 6C 的最终自动验证、GUI、真实 Provider、打包、签名、发布和用户验收状态以本轮任务日志和能力矩阵为准；不得把自动检查替代人工或真实服务证据。
 
-Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.3.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.3.0结论。
+Schedule/Species参数化、任意PRJ无损编辑、图片像素远程AI协议、自动更新和macOS/Linux发行不在0.4.0承诺内。以下历史阶段章节只用于追溯当时证据，其中“当前”一词不覆盖本页顶部的0.4.0结论。
 
 ## Phase 6A Codex只读AI助手
 

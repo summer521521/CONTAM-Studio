@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-29T08:28:32Z",
+  "last_updated_utc": "2026-07-30T07:16:27Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -238,6 +238,24 @@
         "docs/development/task-log/records/phase-6c-followup-runtime-discovery-correction.md",
         "docs/release/CONTAM-Studio-0.3.0-release-notes.md",
         "resources/contam-tools.lock.json"
+      ]
+    },
+    {
+      "id": "phase-7-user-first-workbench",
+      "name": "Phase 7 用户优先工作台、布局契约与运行结果体验",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "manual_gui": "passed",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "user_validated": "passed",
+      "released": "no",
+      "evidence": [
+        "docs/development/task-log/records/phase-7a-user-first-workbench-redesign-runtime-polish.md",
+        "docs/development/task-log/records/phase-7a-gui-acceptance-computer-use.md",
+        "docs/development/task-log/records/phase-7b-ui-ux-runtime-polish.md",
+        "docs/development/task-log/records/uat-02-comprehensive-validation-case.md",
+        "docs/release/CONTAM-Studio-0.4.0-release-notes.md"
       ]
     },
     {

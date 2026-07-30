@@ -1,0 +1,11 @@
+run_id,app_version,scenario_id,step_id,status,actual_result,severity,screenshot_file,notes
+,0.4.0,startup-and-layout,START-01,not_run,,,,
+,0.4.0,editable-project-and-draft,EDIT-01,not_run,,,,
+,0.4.0,editable-project-and-draft,EDIT-02,not_run,,,,
+,0.4.0,trusted-run-results-and-export,RESULT-01,not_run,,,,
+,0.4.0,multilevel-readonly-boundary,BOUNDARY-01,not_run,,,,
+,0.4.0,study-planning-and-failure-truth,STUDY-01,not_run,,,,
+,0.4.0,attachment-disclosure,ATTACH-01,not_run,,,,
+,0.4.0,ai-disabled-and-provider-settings,AI-01,not_run,,,,
+,0.4.0,storage-theme-language-accessibility,UX-01,not_run,,,,
+,0.4.0,close-switch-and-recovery,RECOVERY-01,not_run,,,,

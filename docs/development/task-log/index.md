@@ -77,5 +77,10 @@
 | [Phase 4B-1受控桌面ContamX运行](records/phase-4b-desktop-contamx-run.md) | Phase 4B-1 | completed | live |
 | [Phase 5B-1最终收口](records/phase-5b-zone-result-summary-hardening.md) | Phase 5B-1 | completed | live |
 | [Phase 5B-1真实Zone空气状态桌面摘要](records/phase-5b-zone-result-summary.md) | Phase 5B-1 | completed | live |
+| [UAT-02 综合验收案例包](records/uat-02-comprehensive-validation-case.md) | UAT | automated_verified | live |
+| [Phase 7A User-first Workbench Redesign & Runtime Polish](records/phase-7a-user-first-workbench-redesign-runtime-polish.md) | Phase 7A | automated_verified | live |
+| [Phase 7A 真实 Tauri GUI 集中验收](records/phase-7a-gui-acceptance-computer-use.md) | Phase 7A | completed | live |
+| [Phase 7B UI/UX 与运行体验修复](records/phase-7b-ui-ux-runtime-polish.md) | Phase 7B | completed | live |
+| [Release 0.4.0：Phase 7 用户体验收口与公开发布](records/release-v0-4-0-ui-ux-closure.md) | Release 0.4.0 | in_progress | live |
 
 历史阶段回填见[`historical-backfill.md`](historical-backfill.md)。

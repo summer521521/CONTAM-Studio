@@ -128,6 +128,7 @@ describe("real project components", () => {
     );
     expect(markup).toContain("aria-label=\"搜索\"");
     expect(markup).not.toContain("placeholder");
+    expect(markup).toContain("aria-label=\"项目\"");
     const destinationMarkup = renderToStaticMarkup(
       <DestinationPage
         destination="results"
@@ -522,6 +523,34 @@ describe("real project components", () => {
     );
     expect(markup).toContain("已取消运行清单选择，未加载结果");
     expect(markup).not.toContain("<table");
+  });
+
+  it("distinguishes a successful ContamX run from a failed SimRead extraction", () => {
+    const markup = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{
+          ...INITIAL_RESULT_STATE,
+          status: "error",
+          issue: {
+            code: "zone_result_contract_invalid",
+            message: "numeric formatting",
+            source_line_number: 17,
+            context: { field: "reference_pressure_pa" },
+          },
+        }}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
+        activeRunId="run-success"
+        theme="light"
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
+        onExport={() => undefined}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: false }}
+      />,
+    );
+    expect(markup).toContain("ContamX 已成功求解，但结果读取未完成");
+    expect(markup).toContain("运行证据仍然可信");
+    expect(markup).toContain("查看结果读取详情");
+    expect(markup).toContain("zone_result_contract_invalid");
   });
 
   it("retains the result analysis and shows a safe cancellation or error notice", () => {

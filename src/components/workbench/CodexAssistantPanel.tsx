@@ -130,7 +130,10 @@ export function CodexAssistantPanel({
   const model = state.connection?.models.find((item) => item.id === state.modelId) ?? null;
   const cliProbe = isCodexProvider ? state.connection?.cli ?? state.cliProbe : null;
   const connected = isCodexProvider ? Boolean(state.connection) : Boolean(selectedProvider);
-  const ready = isCodexProvider ? state.status === "available" : Boolean(selectedProvider);
+  const providerConfigured = isCodexProvider
+    ? Boolean(state.connection)
+    : Boolean(selectedProvider && (selectedProvider.auth_kind === "none" || selectedProvider.secret_state === "present"));
+  const ready = isCodexProvider ? state.status === "available" : providerConfigured;
   const busy = state.status === "probing" || state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
   const providerModels = isCodexProvider
     ? state.connection?.models.filter((item) => item.available).map((item) => ({ id: item.id, display_name: item.display_name })) ?? []
@@ -335,7 +338,7 @@ export function CodexAssistantPanel({
       ) : <>
 
       <div className={`assistant-status assistant-status-${state.status}`} role="status" aria-live="polite">
-        <strong>{isCodexProvider ? t(`assistant.status.${state.status}`) : t("assistant.providerReady")}</strong>
+        <strong>{isCodexProvider ? t(`assistant.status.${state.status}`) : t(providerConfigured ? "assistant.providerReady" : "assistant.providerNotConfigured")}</strong>
         {cliProbe?.version ? <span>{t("assistant.cliVersion", { version: cliProbe.version })}</span> : null}
         {isCodexProvider && state.connection?.account.authenticated ? (
           <span>{t("assistant.planConnected", { plan: state.connection.account.plan_type ?? t("assistant.planUnknown") })}</span>
@@ -445,6 +448,8 @@ export function CodexAssistantPanel({
       ) : null}
 
       {!isCodexProvider && selectedProvider ? (
+        <details className="assistant-advanced assistant-provider-details">
+          <summary>{t("assistant.providerConfiguration")}</summary>
         <section className="assistant-provider-config" aria-labelledby="assistant-provider-secret-title">
           <h3 id="assistant-provider-secret-title">{t("assistant.providerConfiguration")}</h3>
           {selectedProvider.built_in ? <p className="assistant-compact-note">{t("assistant.officialCatalogShort")} <HoverHint label={t("assistant.officialCatalogHint")} /></p> : null}
@@ -511,6 +516,7 @@ export function CodexAssistantPanel({
           ) : <p className="assistant-safe-note">{t("assistant.noKeyRequired")}</p>}
           {!selectedProvider.catalog_verified ? <p className="assistant-compact-note assistant-catalog-warning">{t("assistant.catalogUnverifiedShort")} <HoverHint label={t("assistant.catalogUnverified")} /></p> : null}
         </section>
+        </details>
       ) : null}
 
       {connected ? (

@@ -1,0 +1,15 @@
+{
+  "case_id": "contam-studio-comprehensive-validation-v1",
+  "purpose": "safe_attachment_and_context_preview",
+  "selected_zone": {
+    "name": "one",
+    "baseline_volume_m3": 300,
+    "proposed_volume_m3": 350
+  },
+  "constraints": [
+    "do_not_overwrite_source",
+    "show_diff_before_apply",
+    "do_not_send_image_pixels",
+    "do_not_include_credentials"
+  ]
+}

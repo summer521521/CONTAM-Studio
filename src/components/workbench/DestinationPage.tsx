@@ -1,4 +1,4 @@
-import { BarChart3, FileSearch, Play, RotateCcw, Search, Settings2 } from "lucide-react";
+import { BarChart3, Bot, Database, FileSearch, HardDrive, Palette, Play, RotateCcw, Search, Settings2, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
@@ -11,7 +11,6 @@ import type { StorageUsageView, StudioSetup, ToolKind } from "../../app/release-
 import { ZoneAirStateResults } from "./ZoneAirStateResults";
 import { StudyWorkspace } from "./StudyWorkspace";
 import { ReleaseSettings } from "./ReleaseSettings";
-import { HoverHint } from "./HoverHint";
 
 interface DestinationPageProps {
   destination: Exclude<WorkbenchDestination, "project">;
@@ -33,6 +32,7 @@ interface DestinationPageProps {
   revisionId?: string | null;
   semanticSnapshot?: SemanticSnapshot | null;
   onNotice?: (message: string) => void;
+  onOpenAssistant?: () => void;
   setup?: StudioSetup | null;
   setupBusy?: boolean;
   onChooseDataDirectory?: () => Promise<string | null>;
@@ -65,6 +65,7 @@ export function DestinationPage({
   revisionId = null,
   semanticSnapshot = null,
   onNotice,
+  onOpenAssistant,
   setup = null,
   setupBusy = false,
   onChooseDataDirectory = async () => null,
@@ -143,13 +144,14 @@ export function DestinationPage({
   return (
     <section className="destination-page" aria-labelledby="destination-title">
       <header className="destination-header"><Settings2 size={22} aria-hidden="true" /><div><span>{t("toolbar.settings")}</span><h1 id="destination-title">{t("settings.destinationTitle")}</h1></div></header>
-      <section className="destination-section settings-list">
-        <div><strong>{t("settings.languageTitle")} <HoverHint label={t("settings.languageBody")} /></strong></div>
-        <div><strong>{t("settings.privacyTitle")} <HoverHint label={t("settings.privacyBody")} /></strong></div>
-        <div><strong>{t("settings.toolTitle")} <HoverHint label={t("settings.toolBody")} /></strong></div>
-        <div><strong>{t("settings.storageTitle")} <HoverHint label={t("settings.storageBody")} /></strong></div>
-        <div><strong>{t("settings.helpTitle")} <HoverHint label={t("settings.helpBody")} /></strong></div>
-        <div><strong>{t("settings.recoveryTitle")} <HoverHint label={t("settings.recoveryBody")} /></strong></div>
+      <section className="destination-section settings-overview" aria-label={t("settings.categoriesLabel")}>
+        <SettingsCategory icon={Palette} title={t("settings.appearanceTitle")} status={t("settings.appearanceStatus")} action={t("settings.appearanceAction")} onAction={() => onNotice?.(t("settings.appearanceActionHint"))} />
+        <SettingsCategory icon={Bot} title={t("settings.aiTitle")} status={t("settings.aiStatus")} action={t("settings.aiAction")} onAction={onOpenAssistant ?? (() => onNotice?.(t("settings.aiActionHint")))} />
+        <SettingsCategory icon={Wrench} title={t("settings.simulationTitle")} status={setup?.contamx.status === "available" ? t("settings.simulationReady") : t("settings.simulationCheck")} action={t("settings.simulationAction")} onAction={() => onNotice?.(t("settings.simulationActionHint"))} />
+        <SettingsCategory icon={Database} title={t("settings.dataTitle")} status={t("settings.dataStatus")} action={t("settings.dataAction")} onAction={() => onOpenStudioDirectory("app-data")} />
+        <SettingsCategory icon={HardDrive} title={t("settings.diagnosticsTitle")} status={t("settings.diagnosticsStatus")} action={t("settings.diagnosticsAction")} onAction={() => onNotice?.(t("settings.diagnosticsActionHint"))} />
+      </section>
+      <section className="destination-section settings-controls">
         <ReleaseSettings
           setup={setup}
           language={language}
@@ -167,6 +169,31 @@ export function DestinationPage({
         <button className="secondary-action" type="button" onClick={onSettingsReset}><RotateCcw size={16} />{t("settings.resetLayout")}</button>
       </section>
     </section>
+  );
+}
+
+function SettingsCategory({
+  icon: Icon,
+  title,
+  status,
+  action,
+  onAction,
+}: {
+  icon: typeof Palette;
+  title: string;
+  status: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <article className="settings-category">
+      <div className="settings-category-icon"><Icon size={19} aria-hidden="true" /></div>
+      <div className="settings-category-copy">
+        <h2>{title}</h2>
+        <p>{status}</p>
+      </div>
+      <button type="button" className="secondary-action compact-action" onClick={onAction}>{action}</button>
+    </article>
   );
 }
 

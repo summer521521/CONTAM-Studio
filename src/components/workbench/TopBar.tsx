@@ -67,6 +67,8 @@ export function TopBar({
             key={key}
             type="button"
             disabled={key === "openProject" ? !availability.openProject : !availability.runProject}
+            title={key === "run" && !availability.runProject ? t("toolbar.runUnavailable") : undefined}
+            aria-label={key === "run" && !availability.runProject ? `${t(`toolbar.${key}`)} · ${t("toolbar.runUnavailable")}` : t(`toolbar.${key}`)}
             onClick={onClick}
           >
             <Icon size={16} aria-hidden="true" />
@@ -75,11 +77,13 @@ export function TopBar({
         ))}
       </div>
 
-      <div className="toolbar-actions draft-toolbar-actions" role="toolbar" aria-label={t("draft.toolbarLabel")}>
-        <button className="tool-button" type="button" disabled={!availability.undoDraft} onClick={onUndoDraft} title={t("draft.undo")} aria-label={t("draft.undo")}><Undo2 size={16} /><span>{t("draft.undo")}</span></button>
-        <button className="tool-button" type="button" disabled={!availability.redoDraft} onClick={onRedoDraft} title={t("draft.redo")} aria-label={t("draft.redo")}><Redo2 size={16} /><span>{t("draft.redo")}</span></button>
-        <button className="tool-button" type="button" disabled={!availability.exportDraft} onClick={onExportDraft} title={t("draft.export")} aria-label={t("draft.export")}><Download size={16} /><span>{t("draft.export")}</span></button>
-      </div>
+      {(availability.undoDraft || availability.redoDraft || availability.exportDraft) ? (
+        <div className="toolbar-actions draft-toolbar-actions" role="toolbar" aria-label={t("draft.toolbarLabel")}>
+          <button className="tool-button" type="button" disabled={!availability.undoDraft} onClick={onUndoDraft} title={t("draft.undo")} aria-label={t("draft.undo")}><Undo2 size={16} /><span>{t("draft.undo")}</span></button>
+          <button className="tool-button" type="button" disabled={!availability.redoDraft} onClick={onRedoDraft} title={t("draft.redo")} aria-label={t("draft.redo")}><Redo2 size={16} /><span>{t("draft.redo")}</span></button>
+          <button className="tool-button" type="button" disabled={!availability.exportDraft} onClick={onExportDraft} title={t("draft.export")} aria-label={t("draft.export")}><Download size={16} /><span>{t("draft.export")}</span></button>
+        </div>
+      ) : null}
 
       <div className="toolbar-spacer" />
       <label className="language-control">

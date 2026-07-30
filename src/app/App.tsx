@@ -91,7 +91,7 @@ import {
   getMainLayout,
   loadWorkbenchState,
   saveWorkbenchState,
-  DEFAULT_WORKBENCH_STATE,
+  resetWorkbenchLayout,
   type AppLanguage,
   type WorkbenchDestination,
   type WorkbenchState,
@@ -100,6 +100,7 @@ import {
 function App() {
   const { t } = useTranslation();
   const [workbench, setWorkbench] = useState(loadWorkbenchState);
+  const [layoutRevision, setLayoutRevision] = useState(0);
   const [activeDestination, setActiveDestination] = useState<WorkbenchDestination>("project");
   const [selectedObject, setSelectedObject] = useState("navigation.classroom");
   const [projectState, dispatchProject] = useReducer(projectReducer, INITIAL_PROJECT_STATE);
@@ -941,6 +942,18 @@ function App() {
     updateWorkbench({ bottomCollapsed: !workbench.bottomCollapsed });
   };
 
+  const restoreWorkbenchLayout = useCallback(() => {
+    const next = resetWorkbenchLayout(workbench);
+    // Keep the imperative panel instances and the persisted state in lockstep.
+    projectPanelRef.current?.expand();
+    contextPanelRef.current?.expand();
+    bottomPanelRef.current?.collapse();
+    setWorkbench(next);
+    // Re-mounting the groups applies the deterministic default sizes even when
+    // a prior session resized a panel before the reset.
+    setLayoutRevision((current) => current + 1);
+  }, [bottomPanelRef, contextPanelRef, projectPanelRef, workbench]);
+
   const handleMainLayout = (layout: Layout) => {
     setWorkbench((current) => {
       const project = layout.project ?? 0;
@@ -1107,7 +1120,8 @@ function App() {
         <Group
           className="main-panels"
           orientation="horizontal"
-          defaultLayout={initialMainLayout}
+          key={`main-layout-${layoutRevision}`}
+          defaultLayout={layoutRevision === 0 ? initialMainLayout : getMainLayout(workbench)}
           onLayoutChanged={handleMainLayout}
         >
           <Panel
@@ -1138,7 +1152,8 @@ function App() {
             <Group
               className="center-panels"
               orientation="vertical"
-              defaultLayout={initialCenterLayout}
+              key={`center-layout-${layoutRevision}`}
+              defaultLayout={layoutRevision === 0 ? initialCenterLayout : getCenterLayout(workbench)}
               onLayoutChanged={handleCenterLayout}
             >
               <Panel id="editor" minSize="360px">
@@ -1152,7 +1167,7 @@ function App() {
                   onOpenProject={openProject}
                   onSelectZone={selectZoneById}
                   onRunProject={runProject}
-                  onSettingsReset={() => setWorkbench(DEFAULT_WORKBENCH_STATE)}
+                  onSettingsReset={restoreWorkbenchLayout}
                   availability={commandAvailability}
                   resultState={resultState}
                   resultExportState={resultExportState}
@@ -1166,6 +1181,10 @@ function App() {
                   revisionId={projectState.draft?.revision_id ?? null}
                   semanticSnapshot={semanticState.snapshot}
                   onNotice={setPlaceholderNotice}
+                  onOpenAssistant={() => {
+                    contextPanelRef.current?.expand();
+                    updateWorkbench({ contextCollapsed: false, contextTab: "assistant" });
+                  }}
                   setup={studioSetup}
                   setupBusy={studioSetupBusy}
                   onChooseDataDirectory={chooseStudioDataDirectory}

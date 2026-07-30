@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "case_id": "contam-studio-comprehensive-validation-v1",
+  "title": "CONTAM Studio综合验收案例v1",
+  "baseline": {
+    "application_version": "0.4.0",
+    "platform": "windows-x64",
+    "contamx_version": "3.4.0.3",
+    "simread_version": "3.4.0.3",
+    "evidence_date_utc": "2026-07-29"
+  },
+  "policy": {
+    "source_projects_are_immutable": true,
+    "prepared_cases_are_copies": true,
+    "real_credentials_required": false,
+    "real_provider_required": false,
+    "real_appdata_required": false,
+    "scientific_model_template": false
+  },
+  "projects": [
+    {
+      "id": "editable-three-zone",
+      "role": "editable_primary",
+      "repository_fixture": "fixtures/contam/official-contamxpy/valThreeZonesWthCtm-UseApi.prj",
+      "prepared_relative_path": "projects/editable/valThreeZonesWthCtm-UseApi.prj",
+      "sha256": "1cafb2f0fef511f19ef88358238a1c1175c593187691ff7545db982f5e6e75ed",
+      "size_bytes": 9932,
+      "expected_semantic_view": {
+        "header_version": "3.4.0.4",
+        "revision_state": "baseline_editable",
+        "level_count": 1,
+        "zone_count": 3,
+        "flow_path_count": 4,
+        "editable_flow_path_count": 4,
+        "species_count": 1,
+        "zones": [
+          { "contam_number": 1, "name": "one", "volume_m3": 300.0 },
+          { "contam_number": 2, "name": "two", "volume_m3": 600.0 },
+          { "contam_number": 3, "name": "three", "volume_m3": 900.0 }
+        ]
+      },
+      "expected_patch": [
+        { "operation": "set_zone_volume", "target": "Zone 1", "before": "300", "after": "350", "unit": "m3" },
+        { "operation": "set_zone_name", "target": "Zone 2", "before": "two", "after": "studio-two", "unit": null },
+        { "operation": "set_flow_path_multiplier", "target": "FlowPath 1", "before": "1", "after": "1.25", "unit": "1" }
+      ],
+      "official_tool_probe": {
+        "contamx": {
+          "expected_status": "succeeded",
+          "exit_code": 0,
+          "sim_size_bytes": 47792,
+          "sim_sha256": "f0ab739c07f0bb1e837580b473af0f7d5f9b6534a94ed0a73ed778d500299d6f"
+        },
+        "simread_zone_1": {
+          "expected_status": "known_failure",
+          "error_code": "zone_result_contract_invalid",
+          "field": "reference_pressure_pa",
+          "reason": "当前严格解析器拒绝该NFR中的数值空格格式；应用必须保留可信运行并显示可操作错误，不能伪造结果成功。"
+        }
+      }
+    },
+    {
+      "id": "results-seven-zone",
+      "role": "trusted_results_primary",
+      "repository_fixture": "fixtures/contam/official-contamxpy/test_GetPrjInfo.prj",
+      "prepared_relative_path": "projects/results/test_GetPrjInfo.prj",
+      "sha256": "ce37f7bfb7f95ac49babb117e49a22bbba5da7694491060b3166554efcccd96e",
+      "size_bytes": 10978,
+      "expected_semantic_view": {
+        "header_version": "3.4.0.4",
+        "revision_state": "baseline_readonly",
+        "read_only_reason": "volume_range_invalid",
+        "level_count": 1,
+        "zone_count": 7,
+        "flow_path_count": 18,
+        "editable_flow_path_count": 4,
+        "species_count": 1,
+        "zones": [
+          { "contam_number": 1, "name": "One", "volume_m3": 600.0 },
+          { "contam_number": 2, "name": "Two", "volume_m3": 360.0 },
+          { "contam_number": 3, "name": "Three", "volume_m3": 480.0 },
+          { "contam_number": 4, "name": "ahsOne(Ret)", "volume_m3": 0.0 },
+          { "contam_number": 5, "name": "ahsOne(Sup)", "volume_m3": 0.0 },
+          { "contam_number": 6, "name": "ahsTwo(Ret)", "volume_m3": 0.0 },
+          { "contam_number": 7, "name": "ahsTwo(Sup)", "volume_m3": 0.0 }
+        ]
+      },
+      "official_tool_probe": {
+        "contamx": {
+          "expected_status": "succeeded",
+          "exit_code": 0,
+          "sim_size_bytes": 545892,
+          "sim_sha256": "e8ccad872512dca288a9f06c95f0a9cb8d7175f2853e2b14ce16f63fa390cf39"
+        },
+        "simread_zone_results": {
+          "expected_status": "succeeded",
+          "sample_count": 577,
+          "first_sim_time_seconds": 0.0,
+          "last_sim_time_seconds": 172800.0,
+          "sample_interval_seconds": 300.0,
+          "temperature_k": 293.15,
+          "air_density_kg_m3": 1.2041,
+          "reference_pressure_pa_by_zone": {
+            "1": -1.4222,
+            "2": -3.4082,
+            "3": -2.0136
+          }
+        }
+      }
+    },
+    {
+      "id": "nist-multilevel-boundary",
+      "role": "compatibility_boundary",
+      "repository_fixture": "fixtures/contam/official-nist-tutorials/demo1c.prj",
+      "prepared_relative_path": "projects/boundary/demo1c.prj",
+      "sha256": "1e2623d8904c0d37f0eb207099782ad2c1895dba4032e0511b9c8a188748f406",
+      "size_bytes": 7668,
+      "expected_semantic_view": {
+        "header_version": "3.4.0.0",
+        "revision_state": "baseline_readonly",
+        "level_count": 3,
+        "zone_count": 7,
+        "flow_path_count": 17,
+        "editable_flow_path_count": 0,
+        "species_count": 0,
+        "zones": [
+          { "contam_number": 1, "name": "Attic", "volume_m3": 90.0 },
+          { "contam_number": 2, "name": "Bathroom", "volume_m3": 27.0 },
+          { "contam_number": 3, "name": "Bedroom2", "volume_m3": 48.0 },
+          { "contam_number": 4, "name": "Bedroom1", "volume_m3": 60.0 },
+          { "contam_number": 5, "name": "LivingDining", "volume_m3": 135.0 },
+          { "contam_number": 6, "name": "Kitchen", "volume_m3": 54.0 },
+          { "contam_number": 7, "name": "CrawlSpace", "volume_m3": 64.8 }
+        ]
+      },
+      "official_tool_probe": {
+        "contamx": {
+          "expected_status": "succeeded",
+          "exit_code": 0,
+          "sim_size_bytes": 1152,
+          "sim_sha256": "228c07db29721ebf6c8aeaa340d459c05275df570a21587a69101d003f4941d7"
+        },
+        "simread_zone_2": {
+          "expected_status": "known_failure",
+          "error_code": "simread_output_missing",
+          "reason": "该官方教程夹具不生成当前严格Zone节点结果；界面应解释缺失结果并保留运行证据。"
+        }
+      }
+    }
+  ],
+  "attachments": [
+    {
+      "relative_path": "attachments/project-brief.txt",
+      "expected_status": "ready",
+      "expected_category": "text",
+      "expected_disclosure": "bounded_text"
+    },
+    {
+      "relative_path": "attachments/zone-observations.csv",
+      "expected_status": "ready",
+      "expected_category": "spreadsheet",
+      "expected_disclosure": "bounded_text"
+    },
+    {
+      "relative_path": "attachments/expected-context.json",
+      "expected_status": "ready",
+      "expected_category": "structured",
+      "expected_disclosure": "bounded_text"
+    },
+    {
+      "relative_path": "attachments/studio-icon-reference.png",
+      "expected_status": "ready",
+      "expected_category": "image",
+      "expected_disclosure": "image_metadata_only"
+    },
+    {
+      "relative_path": "attachments/safe-reference.zip",
+      "expected_status": "ready",
+      "expected_category": "archive",
+      "expected_disclosure": "metadata_only"
+    },
+    {
+      "relative_path": "attachments/invalid-signature.png",
+      "expected_status": "blocked",
+      "expected_error": "extension_magic_mismatch"
+    }
+  ],
+  "manual_scenarios": [
+    "startup-and-layout",
+    "editable-project-and-draft",
+    "trusted-run-results-and-export",
+    "multilevel-readonly-boundary",
+    "study-planning-and-failure-truth",
+    "attachment-disclosure",
+    "ai-disabled-and-provider-settings",
+    "storage-theme-language-accessibility",
+    "close-switch-and-recovery"
+  ]
+}

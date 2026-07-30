@@ -1,0 +1,4 @@
+zone,baseline_volume_m3,target_volume_m3,review_note,formula_safety_probe
+one,300,350,Teaching-lab volume check,=1+1
+two,600,600,Rename to studio-two,+SUM(1,1)
+three,900,900,Unchanged control,@external

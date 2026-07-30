@@ -1,18 +1,8 @@
-import {
-  Activity,
-  FolderOpen,
-  HardDrive,
-  Home,
-  PanelBottomClose,
-  PanelBottomOpen,
-  PanelRightClose,
-  PanelRightOpen,
-  ShieldCheck,
-} from "lucide-react";
+import { Activity, FolderOpen, Home, PanelBottomClose, PanelBottomOpen, PanelRightClose, PanelRightOpen, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { ProjectState } from "../../app/project-state";
-import { projectFileName } from "../../app/project-state";
+import { projectFileName, selectedZone } from "../../app/project-state";
 import type { ResultState } from "../../app/result-state";
 import type { ResultExportState } from "../../app/result-export-state";
 import type { AppLanguage, AppTheme } from "../../app/workbench-state";
@@ -47,6 +37,7 @@ interface WelcomePageProps {
   revisionId?: string | null;
   semanticSnapshot?: SemanticSnapshot | null;
   onNotice?: (message: string) => void;
+  onOpenAssistant?: () => void;
   setup?: StudioSetup | null;
   setupBusy?: boolean;
   onChooseDataDirectory?: () => Promise<string | null>;
@@ -83,6 +74,7 @@ export function WelcomePage({
   revisionId = null,
   semanticSnapshot = null,
   onNotice = () => undefined,
+  onOpenAssistant = () => undefined,
   setup = null,
   setupBusy = false,
   onChooseDataDirectory = async () => null,
@@ -96,6 +88,19 @@ export function WelcomePage({
 }: WelcomePageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
+  const zone = selectedZone(projectState);
+  const statusLabel = project
+    ? t(`project.status.${projectState.status}`, { defaultValue: t("workbench.statusReady") })
+    : t("workbench.statusNoProject");
+  const nextAction = !project
+    ? t("workbench.nextOpenProject")
+    : destination === "run"
+      ? t("workbench.nextRun")
+      : destination === "results"
+        ? t("workbench.nextResults")
+        : zone
+          ? t("workbench.nextReviewZone")
+          : t("workbench.nextSelectZone");
 
   return (
     <main className="editor-surface">
@@ -126,6 +131,25 @@ export function WelcomePage({
         </div>
       </div>
 
+      <section className="workspace-context-strip" aria-label={t("workbench.contextLabel")}>
+        <div className="workspace-context-item">
+          <span>{t("workbench.currentProject")}</span>
+          <strong title={project?.source_path}>{project ? projectFileName(project.source_path) : t("workbench.noProject")}</strong>
+        </div>
+        <div className="workspace-context-item">
+          <span>{t("workbench.currentZone")}</span>
+          <strong>{zone ? t("navigation.zoneLabel", { name: zone.name, number: zone.contam_number }) : t("workbench.noZone")}</strong>
+        </div>
+        <div className="workspace-context-item workspace-context-status">
+          <span>{t("workbench.currentStatus")}</span>
+          <strong><span className={`status-dot status-dot-${projectState.status}`} aria-hidden="true" />{statusLabel}</strong>
+        </div>
+        <div className="workspace-context-next">
+          <span>{t("workbench.nextAction")}</span>
+          <strong>{nextAction}</strong>
+        </div>
+      </section>
+
       <div className="welcome-scroll">
         {destination !== "project" ? (
           <DestinationPage
@@ -148,6 +172,7 @@ export function WelcomePage({
             revisionId={revisionId}
             semanticSnapshot={semanticSnapshot}
             onNotice={onNotice}
+            onOpenAssistant={onOpenAssistant}
             setup={setup}
             setupBusy={setupBusy}
             onChooseDataDirectory={onChooseDataDirectory}
@@ -238,17 +263,6 @@ export function WelcomePage({
             </div>
           </section>
 
-          <section className="recent-section">
-            <h2>{t("welcome.recent")}</h2>
-            <div className="recent-empty">
-              <FolderOpen size={28} strokeWidth={1.5} aria-hidden="true" />
-              <div>
-                <strong>{t("welcome.recentEmpty")}</strong>
-                <p>{t("welcome.recentHint")}</p>
-              </div>
-            </div>
-          </section>
-
           {projectState.status === "selecting" || projectState.status === "loading" ? (
             <div className="loading-banner" role="status">
               <span className="loading-indicator" aria-hidden="true" />
@@ -260,22 +274,10 @@ export function WelcomePage({
             <p className="cancelled-note" role="status">{t("project.cancelledHint")}</p>
           ) : null}
 
-          <section className="safety-notes">
-            <div className="safety-note">
-              <HardDrive size={19} aria-hidden="true" />
-              <div>
-                <strong>{t("welcome.offlineTitle")}</strong>
-                <p>{t("welcome.offlineBody")}</p>
-              </div>
-            </div>
-            <div className="safety-note">
-              <ShieldCheck size={19} aria-hidden="true" />
-              <div>
-                <strong>{t("welcome.protectionTitle")}</strong>
-                <p>{t("welcome.protectionBody")}</p>
-              </div>
-            </div>
-          </section>
+          <div className="trust-chips" aria-label={t("welcome.trustLabel")}>
+            <span><ShieldCheck size={14} aria-hidden="true" />{t("welcome.protectionChip")}</span>
+            <span>{t("welcome.localChip")}</span>
+          </div>
         </div>
         )}
       </div>

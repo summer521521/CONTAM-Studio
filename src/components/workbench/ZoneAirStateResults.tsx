@@ -145,10 +145,18 @@ export function ZoneAirStateResults({
       );
     }
     if (state.status === "error") {
+      const solveSucceeded = Boolean(activeRunId);
       return (
         <section className="results-surface results-error" role="alert">
-          <strong>{t("results.errorTitle")}</strong>
-          <p>{t(`errors.codes.${state.issue?.code}`, { defaultValue: t("errors.codes.unknown") })}</p>
+          <strong>{solveSucceeded ? t("results.solveSucceededReadFailed") : t("results.errorTitle")}</strong>
+          <p>{solveSucceeded ? t("results.solveSucceededReadFailedBody") : t("results.errorTitle")}</p>
+          {state.issue ? (
+            <details className="result-evidence-details">
+              <summary>{t("results.evidenceDetails")}</summary>
+              <p>{t(`errors.codes.${state.issue.code}`, { defaultValue: t("errors.codes.unknown") })}</p>
+              <code>{t("errors.technicalCode")}: {state.issue.code}</code>
+            </details>
+          ) : null}
           {loadActions()}
         </section>
       );

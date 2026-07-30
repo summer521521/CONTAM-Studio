@@ -1,7 +1,7 @@
 import { BarChart3, FlaskConical, FolderTree, Play, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { WorkbenchDestination } from "../../app/workbench-state";
+import { projectActivityAction, type WorkbenchDestination } from "../../app/workbench-state";
 
 interface ActivityBarProps {
   projectCollapsed: boolean;
@@ -20,12 +20,18 @@ export function ActivityBar({
 }: ActivityBarProps) {
   const { t } = useTranslation();
   const items: Array<{
-    key: "projects" | "search" | "run" | "results" | "studies";
+    key: "projects" | "run" | "results" | "studies";
     icon: LucideIcon;
     onClick?: () => void;
   }> = [
-    { key: "projects", icon: FolderTree, onClick: onToggleProject },
-    { key: "search", icon: Search },
+    {
+      key: "projects",
+      icon: FolderTree,
+      onClick: () => {
+        if (projectActivityAction(activeDestination) === "navigate") onNavigate("project");
+        else onToggleProject();
+      },
+    },
     { key: "run", icon: Play },
     { key: "results", icon: BarChart3 },
     { key: "studies", icon: FlaskConical },
@@ -51,6 +57,20 @@ export function ActivityBar({
           <Icon size={21} strokeWidth={1.8} />
         </button>
       ))}
+      <div className="activity-spacer" />
+      <button
+        className="activity-button activity-utility"
+        type="button"
+        title={t("navigation.search")}
+        aria-label={t("navigation.search")}
+        disabled={!navigationAvailable}
+        onClick={() => {
+          onNavigate("project");
+          window.setTimeout(() => window.dispatchEvent(new Event("contam-studio:focus-object-search")), 0);
+        }}
+      >
+        <Search size={18} strokeWidth={1.8} />
+      </button>
     </nav>
   );
 }
