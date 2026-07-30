@@ -4,11 +4,11 @@
 task_id: release-v0-4-0-ui-ux-closure
 phase: Release 0.4.0
 title: Phase 7 User-first Workbench Release Closure
-status: in_progress
+status: completed
 record_origin: live
 started_at_utc: 2026-07-30T07:16:27.8721640Z
-ended_at_utc: null
-duration_seconds: null
+ended_at_utc: 2026-07-30T11:49:27.3573877Z
+duration_seconds: 16379.485
 base_commit: bf5287488db0dac2e9fc7164efb6dc676e41d425
 branch: main
 task_source: 用户明确授权提交、推送并发布最近完成的 Phase 7 更新
@@ -30,10 +30,17 @@ validation:
   - final Full：仅启动一次并自然结束；外层工具超时后未捕获最终退出码和 QA-01 汇总，已观察其依次执行至 Python、前端、Rust、Windows CI 变异、生产构建和 Clippy/Cargo 阶段，不将其虚构为 QA-01 passed
   - focused final gate：前端 182/182、Python 345/345、Rust 129 passed + 1 ignored、前端生产构建、cargo check --locked、综合案例合同、任务日志合同 80 条、release metadata 和 git diff --check 均通过
   - release metadata：package、Python、Cargo 与 Tauri 均为 0.4.0
-  - source commit and push：pending
-  - portable/NSIS/MSI build and audit：pending
-  - GitHub Release：pending
-delivery_status: in_progress
+  - source commit and push：passed；main 提交与发布提交均为 802070d8fd64a76857fe82180bd0de3be44f8067
+  - portable/NSIS/MSI build and audit：passed；三类资产均为本轮新构建，manifest、Worker 和安装器绑定同一提交，内容/敏感信息/本地路径审计通过
+  - portable startup：passed；在隔离 AppData、隔离 WebView2 用户目录并显式绑定系统 WebView2 Runtime 后持续运行 10 秒
+  - NSIS isolated install：passed；静默安装、同版本覆盖升级和卸载通过，用户数据哨兵保留；应用启动未在该脚本中执行以避免真实用户 AppData
+  - bundled official tools：passed；ContamX 3.4.0.3 运行 ID 20260730T114756Z-1d9e51ab，退出码 0；SimRead 提取 ID 20260730T114810Z-c45e037a，Zone 1 共 577 样本，0–172800 秒，源 PRJ、SIM 和工具均保持不变
+  - release assets：passed；Portable、NSIS、MSI、manifest、closure status 和 SHA256SUMS 共 6 个资产，GitHub 返回的 SHA-256 digest 与本地清单一致
+  - GitHub Release：passed；v0.4.0 于 2026-07-30T11:49:09Z 公开发布，非 draft、非 prerelease
+  - signature：unsigned；未进行 Authenticode 签名
+  - independent clean Windows：not_run；本机隔离安装不替代另一台全新 Windows
+  - real Provider regression：not_run；未读取或使用真实凭据
+delivery_status: released_v0.4.0
 token_usage:
   input_tokens: null
   cached_input_tokens: null
@@ -43,4 +50,6 @@ token_usage:
 notes:
   - v0.3.0 发布说明和历史证据保持不变，本任务新增 v0.4.0 发布资料。
   - Phase 7B 真实 GUI 已通过；精确显示缩放矩阵、真实 Provider、签名和独立干净机仍按真实执行状态记录。
+  - 第一次 Portable 隔离启动同时重定向 LOCALAPPDATA 且未显式指定 WebView2 Runtime，进程以代码 1 退出；补充 WEBVIEW2_BROWSER_EXECUTABLE_FOLDER 与隔离 WEBVIEW2_USER_DATA_FOLDER 后通过，未据第一次失败否定包本身，也未读取真实用户 AppData。
+  - 公开地址：https://github.com/summer521521/CONTAM-Studio/releases/tag/v0.4.0
 ```

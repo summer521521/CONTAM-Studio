@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-30T07:16:27Z",
+  "last_updated_utc": "2026-07-30T11:49:27Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -246,16 +246,22 @@
       "implemented": "complete",
       "automated_verified": "passed",
       "manual_gui": "passed",
-      "merged_to_main": "no",
-      "packaged": "not_run",
+      "merged_to_main": "yes",
+      "packaged": "yes",
       "user_validated": "passed",
-      "released": "no",
+      "released": "yes",
+      "release_version": "v0.4.0",
+      "release_url": "https://github.com/summer521521/CONTAM-Studio/releases/tag/v0.4.0",
+      "release_commit": "802070d8fd64a76857fe82180bd0de3be44f8067",
+      "released_at_utc": "2026-07-30T11:49:09Z",
       "evidence": [
         "docs/development/task-log/records/phase-7a-user-first-workbench-redesign-runtime-polish.md",
         "docs/development/task-log/records/phase-7a-gui-acceptance-computer-use.md",
         "docs/development/task-log/records/phase-7b-ui-ux-runtime-polish.md",
         "docs/development/task-log/records/uat-02-comprehensive-validation-case.md",
-        "docs/release/CONTAM-Studio-0.4.0-release-notes.md"
+        "docs/development/task-log/records/release-v0-4-0-ui-ux-closure.md",
+        "docs/release/CONTAM-Studio-0.4.0-release-notes.md",
+        "docs/release/release-kit-v3.md"
       ]
     },
     {
