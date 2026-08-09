@@ -238,3 +238,22 @@ status_at_start: implementation=complete; automated_verified=passed; github_wind
 - 允许修改范围限于本次发布说明、R1-05 任务日志、能力状态矩阵和 R1 当前事实源；未修改实现代码、版本文件、二进制或发布脚本。
 - 预发布元数据提交前，标签 `v0.5.0` 和 GitHub Release 均不存在；当前尚未发布。
 - 标签 SHA、Release URL、发布时间、最终资产哈希和远程 Windows CI 结论在对应事实产生前不预填、不推测。
+
+## v0.5.0 Release Closure
+
+release_version: v0.5.0
+release_commit: 4140c48762a8ff3f7ac426ebdb68fc1a0b3674b2
+release_tag: v0.5.0 (annotated; dereferenced target 4140c48762a8ff3f7ac426ebdb68fc1a0b3674b2)
+release_url: https://github.com/summer521521/CONTAM-Studio/releases/tag/v0.5.0
+released_at_utc: 2026-08-09T06:46:34Z
+release_published: true
+
+- 预发布元数据提交 `4140c48762a8ff3f7ac426ebdb68fc1a0b3674b2` 已推送到 `origin/main`；其对应 Windows CI run `31298380805`（[Windows CI](https://github.com/summer521521/CONTAM-Studio/actions/runs/31298380805)）head SHA 完全一致，`Full verification` job 通过。
+- 最终资产从上述精确提交重建并完成 Portable、NSIS 和 MSI 静态审计；最终资产位于 `F:\Codex_File\r1-05-v0.5.0-final-4140c48\0.5.0\release-assets`。远端 Release 资产下载到 `F:\Codex_File\r1-05-v0.5.0-download-verify-4140c48` 后，六项文件大小和 SHA-256 与本地清单一致，`SHA256SUMS.txt` 的五项校验通过。
+- 最终资产：Portable ZIP 17,802,365 bytes / `B02BC9DFC711DE09B1EC6C033A9A8ABAFC83547A7992CB72D204768EBEFAE40A`；NSIS 13,364,427 bytes / `EAB331E5E4A59EEDBCA1D4DA0AD82418AB1E5F22016AAD260B8CAD99858826E2`；MSI 17,956,864 bytes / `27745518DB1823BC298B059044BFDEE41350ABFB2F2C3475AC41ECE4C1013DAC`。此外发布了 `manifest.json`、`release-closure-status.json` 和 `SHA256SUMS.txt` 校验证据。
+- 隔离当前用户 NSIS 首次安装、同版本覆盖安装和卸载均通过；卸载后安装目录清除，测试创建的用户数据哨兵保留。未执行 MSI 安装、管理员安装或独立干净机验收；`clean_machine=not_run`。
+- NIST 工具仍按锁定事实交付：发布页产品版本 3.4.0.8，官方 Windows ZIP 与包内 ContamX/SimRead 等工具版本 3.4.0.3；ZIP 和逐文件 SHA-256 均匹配锁定清单。发布构建未签名，`signed=unsigned`。
+
+status_at_end: implementation=complete; automated_verified=passed; github_windows_ci=passed; manual_gui=partial; real_tools=passed; real_provider=failed; packaged=yes; clean_machine=not_run; signed=unsigned; released=yes; user_validated=not_run; merged_to_main=yes
+
+本次发布未读取真实凭据、Credential Manager、Cookie、WebView 数据库、真实 AppData 或用户唯一工程；未发起真实 Provider 请求。历史真实 DeepSeek 回归仍为 failed，GUI 验收仍为 partial，用户验收仍为 not_run。发布后证据提交及其对应 Windows CI 需继续单独记录，不能与本地 Full 或预发布 CI 混同。

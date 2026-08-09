@@ -26,7 +26,7 @@ NIST 官方页面当前标记产品发布版本为 CONTAM 3.4.0.8，但该页面
 
 ## 发布边界
 
-- 本说明对应 v0.5.0 正式发布流程；最终资产、标签和 Release 状态以 GitHub 发布页及校验清单为准。
+- v0.5.0 已正式发布；最终资产、标签和校验清单可在 [GitHub Release](https://github.com/summer521521/CONTAM-Studio/releases/tag/v0.5.0) 查看。
 - 本轮不读取真实 Provider 凭据，也不发起真实 Provider 回归请求。
 - 历史真实 DeepSeek 回归仍为 failed；本版本不宣称真实 Provider 已通过。
 - CONTAM Studio 不是 NIST、OpenAI 或其他 Provider 的官方产品。
