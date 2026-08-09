@@ -26,7 +26,7 @@ R1 将现有 CONTAM 桌面程序收敛为面向学生、教师、研究人员和
 | R1-02 Workbench & Task Journeys | 固定项目、运行、结果、研究主路径，完成任务入口和状态/错误反馈的行为回归。 | director_review_passed |
 | R1-03 Visual Model Workspace | 在有领域证据的前提下交付首个二维空间/楼层只读切片；未验证对象保持只读。 | director_review_passed |
 | R1-04 Results, Evidence & AI Experience | 将结果、证据、AI 上下文和可审查 Patch 体验连接到同一工作区。 | completed |
-| R1-05 Final UAT & Release Readiness | 统一 GUI 截图矩阵、目标用户验收、干净 Windows 安装、签名和发布准备。 | completed（等待总监审查） |
+| R1-05 Final UAT & Release Readiness | 统一 GUI 截图矩阵、目标用户验收、干净 Windows 安装、签名和发布准备。 | completed（预发布闭环中） |
 
 每个工作包必须有一份主任务日志；不得为同一工作包的微小检查创建平行编号或重复日志。
 
@@ -53,7 +53,7 @@ R1 将现有 CONTAM 桌面程序收敛为面向学生、教师、研究人员和
 
 ## 当前事实
 
-- 候选产品版本：`0.5.0`；产品 SemVer 与 R1 研发编号完全分离。当前产物来自未提交工作树，只是本地候选，不是正式发布资产。
+- 候选产品版本：`0.5.0`；产品 SemVer 与 R1 研发编号完全分离。预发布元数据已准备，正式资产必须从精确预发布提交重建；标签和 GitHub Release 以真实远程证据为准。
 - `R1-05 Final UAT & Release Readiness` 的本轮 blocker closure 已完成本地实现和自动验证，DeepSeek 结构化输出与三项 GUI 缺陷已有代码/测试证据；当前隔离 GUI 证据为 partial，因 fixture 运行仍返回 `contamx_solver_not_configured`，没有把空结果或历史候选包截图写成多 Zone 成功结果。等待总监最终审查；R1-03 已获总监审查通过，R1-04 已由独立 closure Full 以退出码 0、67 项检查通过完成自动验证收口。
 - R1-01 已通过总监审查；其未提交修改是 R1-02 不可回退的工作树基线。
 - 当前任务日志：[r1-05-final-uat-release-readiness.md](../../development/task-log/records/r1-05-final-uat-release-readiness.md)。

@@ -1,4 +1,4 @@
-# CONTAM Studio v0.5.0 候选发布说明
+# CONTAM Studio v0.5.0
 
 CONTAM Studio v0.5.0 Renewal R1 将项目、只读可视化模型、官方工具运行、多 Zone 结果、证据链与 AI 上下文整合为面向教学和科研的连续工作流。
 
@@ -16,9 +16,17 @@ CONTAM Studio v0.5.0 Renewal R1 将项目、只读可视化模型、官方工具
 
 NIST 官方页面当前标记产品发布版本为 CONTAM 3.4.0.8，但该页面提供的 Windows x64 下载为 `contam-x-3.4.0.3-win64.zip`。包内 ContamX、SimRead、SimComp 和 PrjUp 的 Windows 文件版本均为 3.4.0.3。CONTAM Studio 按工具实际版本显示“ContamX 3.4.0.3”，ZIP 与逐文件 SHA-256 由 `resources/contam-tools.lock.json` 锁定。
 
+## Windows 发行资产
+
+- Windows x64 Portable ZIP；
+- Windows x64 NSIS 安装程序；
+- Windows x64 MSI 安装程序。
+
+本版本构建未进行 Authenticode 签名，可能触发 SmartScreen 或未知发布者提示。MSI 仅完成构建和静态审计，没有执行管理员安装。独立干净机验收未执行；GUI 验收为 partial，125%/200% 系统缩放未执行。
+
 ## 发布边界
 
-- 当前文件描述本地候选状态；正式提交、远程 Windows CI、最终重建、标签和 GitHub Release 尚未执行。
-- Windows 构建未进行 Authenticode 签名，可能触发未知发布者或 SmartScreen 提示。
+- 本说明对应 v0.5.0 正式发布流程；最终资产、标签和 Release 状态以 GitHub 发布页及校验清单为准。
 - 本轮不读取真实 Provider 凭据，也不发起真实 Provider 回归请求。
+- 历史真实 DeepSeek 回归仍为 failed；本版本不宣称真实 Provider 已通过。
 - CONTAM Studio 不是 NIST、OpenAI 或其他 Provider 的官方产品。

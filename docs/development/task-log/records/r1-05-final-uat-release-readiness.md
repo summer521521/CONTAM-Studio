@@ -225,3 +225,16 @@ Final Full counts: frontend 31 test files and 261 tests passed; Python 374 tests
 Final status: `implementation=complete; automated_verified=passed; github_windows_ci=pending_push; manual_gui=partial; real_tools=passed; real_provider=failed; packaged=no; clean_machine=not_run; signed=unsigned; released=no; user_validated=not_run; merged_to_main=no`. Correction 2 did not rerun real ContamX/SimRead; `real_tools=passed` is inherited from correction 1's isolated fixture evidence. Correction 2 did not rerun a real Provider; the historical DeepSeek request remains failed. No new GUI screenshot matrix was created because the user requested stopping screenshot/UAT work; this does not create user-validation evidence. The user-authorized local commit amend is workflow authorization only.
 
 No credentials, Credential Manager, Cookie, WebView database, real AppData or unique user project were read; no real Provider request, system scaling change, package, signature, push, tag or release was performed.
+
+## v0.5.0 Pre-release Metadata Preparation
+
+pre_release_metadata_started_at_utc: 2026-08-09T06:09:13Z
+pre_release_parent_commit: 01d1a95e0d9cae5e30c1d4a3c813fe20dbb5029a
+pre_release_branch: main
+status_at_start: implementation=complete; automated_verified=passed; github_windows_ci=pending_push; manual_gui=partial; real_tools=passed; real_provider=failed; packaged=no; clean_machine=not_run; signed=unsigned; released=no; user_validated=not_run; merged_to_main=yes
+
+- 用户已明确授权隔离 NSIS 首次安装、同版本覆盖安装和卸载测试，并接受 unsigned 发布；本轮仍不执行 MSI 安装、不请求管理员权限、不执行独立干净机验收。
+- 父提交候选包已完成静态审计；最终发布资产必须从本次预发布元数据提交重新构建，不直接上传父提交候选包。
+- 允许修改范围限于本次发布说明、R1-05 任务日志、能力状态矩阵和 R1 当前事实源；未修改实现代码、版本文件、二进制或发布脚本。
+- 预发布元数据提交前，标签 `v0.5.0` 和 GitHub Release 均不存在；当前尚未发布。
+- 标签 SHA、Release URL、发布时间、最终资产哈希和远程 Windows CI 结论在对应事实产生前不预填、不推测。

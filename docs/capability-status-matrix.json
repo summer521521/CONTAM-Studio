@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-08-02T06:03:41Z",
+  "last_updated_utc": "2026-08-09T06:09:13Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -115,7 +115,7 @@
       "manual_gui": "partial",
       "real_tools": "passed",
       "real_provider": "failed",
-      "merged_to_main": "no",
+      "merged_to_main": "yes",
       "packaged": "no",
       "clean_machine": "not_run",
       "signed": "unsigned",
@@ -123,7 +123,8 @@
       "user_validated": "not_run",
       "evidence": [
         "docs/initiatives/R1-visual-workbench/README.md",
-        "docs/development/task-log/records/r1-05-final-uat-release-readiness.md"
+        "docs/development/task-log/records/r1-05-final-uat-release-readiness.md",
+        "docs/release/CONTAM-Studio-0.5.0-release-notes.md"
       ]
     },
     {
