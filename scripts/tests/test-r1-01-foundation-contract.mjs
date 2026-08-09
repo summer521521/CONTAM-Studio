@@ -45,7 +45,12 @@ assert("historical execution plan is explicitly marked", read("docs/roadmap/next
 assert("AGENTS forbids parallel phase numbering", agents.includes("禁止继续创建新的 Phase、QA、Batch"));
 assert("R1-01 matrix row exists", matrix.capabilities.some((row) => row.id === "r1-01-foundation-reset"));
 const r1 = matrix.capabilities.find((row) => row.id === "r1-01-foundation-reset");
-assert("R1-01 keeps GitHub CI separate from local verification", r1?.github_windows_ci === "pending_push");
+assert(
+  "R1-01 records local verification and remote GitHub CI as separate passed evidence",
+  r1?.automated_verified === "passed" &&
+    r1?.github_windows_ci === "passed" &&
+    r1?.merged_to_main === "yes"
+);
 assert("R1-01 keeps GUI validation separate", r1?.manual_gui === "not_run" && r1?.user_validated === "not_run");
 
 for (const layer of ["foundation", "shell", "components", "features", "compatibility"]) {

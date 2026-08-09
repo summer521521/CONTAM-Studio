@@ -257,3 +257,20 @@ release_published: true
 status_at_end: implementation=complete; automated_verified=passed; github_windows_ci=passed; manual_gui=partial; real_tools=passed; real_provider=failed; packaged=yes; clean_machine=not_run; signed=unsigned; released=yes; user_validated=not_run; merged_to_main=yes
 
 本次发布未读取真实凭据、Credential Manager、Cookie、WebView 数据库、真实 AppData 或用户唯一工程；未发起真实 Provider 请求。历史真实 DeepSeek 回归仍为 failed，GUI 验收仍为 partial，用户验收仍为 not_run。发布后证据提交及其对应 Windows CI 需继续单独记录，不能与本地 Full 或预发布 CI 混同。
+
+## v0.5.0 Release Evidence Commit Fact-Source Alignment
+
+fact_source_alignment_at_utc: 2026-08-09T07:09:13Z
+release_evidence_commit: 2c0c85886120ada9dd6da95bb7ad46614bb2fa84
+release_evidence_commit_ci_run_url: https://github.com/summer521521/CONTAM-Studio/actions/runs/31300018416
+release_evidence_commit_ci_head_sha: 2c0c85886120ada9dd6da95bb7ad46614bb2fa84
+release_evidence_commit_ci_status: passed
+release_evidence_commit_ci_job: Full verification
+release_evidence_commit_ci_conclusion: success
+current_main_before_fact_source_commit: 2c0c85886120ada9dd6da95bb7ad46614bb2fa84
+current_origin_main_before_fact_source_commit: 2c0c85886120ada9dd6da95bb7ad46614bb2fa84
+
+- 发布证据提交 CI 的 head SHA 与 `release_evidence_commit` 完全匹配，`Full verification=success`；该 docs-only 提交没有修改代码、版本、标签或 Release。
+- 发布资产没有在 `release_evidence_commit` 之后重新构建、重新上传或修改；`v0.5.0` 标签仍指向 `4140c48762a8ff3f7ac426ebdb68fc1a0b3674b2`，Release URL 保持不变。
+- 本次只修正能力矩阵和既有任务日志中的事实源状态，不改变 v0.5.0 标签、GitHub Release 或发布资产。
+- R1-01 合同原先固化了发布前的 `pending_push` 快照；本次同步为发布后的真实状态。合同仍将 `automated_verified` 与 `github_windows_ci` 作为两个独立字段，不把本地自动检查冒充远程 CI；远程 CI 证据仍为 run `31298380805` 和 `31300018416`。
