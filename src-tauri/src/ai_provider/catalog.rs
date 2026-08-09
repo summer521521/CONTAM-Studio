@@ -9,6 +9,31 @@ pub(crate) const CATALOG_CACHE_SCHEMA_VERSION: u32 = 1;
 pub(crate) const CATALOG_TTL_SECONDS: u64 = 24 * 60 * 60;
 const MAX_MODELS_PER_RESPONSE: usize = 200;
 
+/// Versioned, default-deny policy for the OpenAI Responses adapter.
+///
+/// `/v1/models` is an account-availability endpoint, not a capability
+/// endpoint.  Keep this exact-ID intersection deliberately small and update
+/// it only after checking the official model pages for Responses, streaming,
+/// and Structured Outputs support.  A new model must not become selectable
+/// merely because its name resembles an older GPT or o-series model.
+pub(crate) const OPENAI_MODEL_CAPABILITY_POLICY_VERSION: &str =
+    "openai.responses.structured_outputs.v1";
+const OPENAI_DOCUMENTED_RESPONSES_STRUCTURED_STREAMING_MODELS: &[&str] = &[
+    "gpt-5.6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.2",
+    "gpt-5.2-2025-12-11",
+    "gpt-4.1",
+    "gpt-4.1-2025-04-14",
+    "gpt-4o",
+    "gpt-4o-2024-08-06",
+    "gpt-4o-2024-11-20",
+    "gpt-4o-mini",
+    "gpt-4o-mini-2024-07-18",
+];
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct CatalogSnapshot {
     pub(crate) source: String,
@@ -121,12 +146,9 @@ fn openai_model_verification(id: &str) -> Option<bool> {
         return None;
     }
     Some(
-        lower.starts_with("gpt-")
-            || lower.starts_with("o1")
-            || lower.starts_with("o3")
-            || lower.starts_with("o4")
-            || lower.starts_with("chatgpt")
-            || lower.starts_with("codex"),
+        OPENAI_DOCUMENTED_RESPONSES_STRUCTURED_STREAMING_MODELS
+            .iter()
+            .any(|candidate| *candidate == lower),
     )
 }
 
@@ -155,9 +177,14 @@ pub(crate) fn parse_openai_models(
             profile,
             id.to_string(),
             id.to_string(),
-            "official_api",
+            &format!("official_api+{OPENAI_MODEL_CAPABILITY_POLICY_VERSION}"),
             if verified {
-                vec!["text_generation", "responses"]
+                vec![
+                    "text_generation",
+                    "responses",
+                    "streaming",
+                    "structured_outputs",
+                ]
             } else {
                 vec!["unknown"]
             },
@@ -172,7 +199,7 @@ pub(crate) fn parse_openai_models(
         dedupe_push(&mut models, &mut ids, model)?;
     }
     Ok(CatalogSnapshot {
-        source: "official_api".to_string(),
+        source: format!("official_api+{OPENAI_MODEL_CAPABILITY_POLICY_VERSION}"),
         fetched_at: fetched_at.to_string(),
         stale: false,
         verified: models
@@ -398,13 +425,17 @@ mod tests {
     }
 
     #[test]
-    fn openai_catalog_filters_non_text_models_and_marks_unknown_advanced() {
+    fn openai_catalog_intersects_account_models_with_documented_capabilities() {
         let value = serde_json::json!({
             "data": [
-                {"id": "gpt-5"},
+                {"id": "gpt-5.2"},
+                {"id": "gpt-5.2-pro"},
+                {"id": "gpt-5.2-pro-2025-12-11"},
+                {"id": "gpt-9-future"},
                 {"id": "text-embedding-3-large"},
                 {"id": "dall-e-3"},
-                {"id": "new-future-model"}
+                {"id": "gpt-realtime"},
+                {"id": "gpt-4o-mini"}
             ]
         });
         let snapshot = parse_openai_models(
@@ -413,11 +444,60 @@ mod tests {
             "100",
         )
         .unwrap();
-        assert_eq!(snapshot.models.len(), 2);
-        assert_eq!(snapshot.models[0].id, "gpt-5");
+        assert_eq!(snapshot.models.len(), 5);
+        assert_eq!(snapshot.models[0].id, "gpt-5.2");
         assert!(snapshot.models[0].verified_for_current_adapter);
+        assert_eq!(snapshot.models[1].id, "gpt-5.2-pro");
         assert_eq!(snapshot.models[1].availability, "advanced_unverified");
         assert!(!snapshot.models[1].available);
+        assert_eq!(snapshot.models[2].id, "gpt-5.2-pro-2025-12-11");
+        assert!(!snapshot.models[2].verified_for_current_adapter);
+        assert_eq!(snapshot.models[3].id, "gpt-9-future");
+        assert!(!snapshot.models[3].available);
+        assert_eq!(snapshot.models[4].id, "gpt-4o-mini");
+        assert!(snapshot.models[4].available);
+        assert_eq!(
+            snapshot.source,
+            format!("official_api+{OPENAI_MODEL_CAPABILITY_POLICY_VERSION}")
+        );
+    }
+
+    #[test]
+    fn openai_documented_policy_is_exact_and_does_not_invent_missing_models() {
+        assert_eq!(openai_model_verification("gpt-5.2"), Some(true));
+        assert_eq!(openai_model_verification("gpt-5.2-pro"), Some(false));
+        assert_eq!(
+            openai_model_verification("gpt-5.2-pro-2025-12-11"),
+            Some(false)
+        );
+        assert_eq!(openai_model_verification("gpt-7-new"), Some(false));
+        assert_eq!(openai_model_verification("gpt-4o-2024-05-13"), Some(false));
+        assert_eq!(openai_model_verification("gpt-4o-2024-08-06"), Some(true));
+        assert_eq!(openai_model_verification("gpt-4o-2024-11-20"), Some(true));
+        assert_eq!(
+            openai_model_verification("gpt-4o-mini-2024-07-18"),
+            Some(true)
+        );
+        assert_eq!(openai_model_verification("text-embedding-3-large"), None);
+        assert_eq!(openai_model_verification("gpt-image-1"), None);
+        assert_eq!(openai_model_verification("gpt-audio-1"), None);
+        assert_eq!(openai_model_verification("gpt-realtime"), None);
+
+        let value = serde_json::json!({"data": [{"id": "gpt-5.6-sol"}]});
+        let snapshot = parse_openai_models(
+            &profile(Some("openai"), AiProviderProtocol::OpenAiResponses),
+            &value,
+            "101",
+        )
+        .unwrap();
+        assert_eq!(
+            snapshot
+                .models
+                .iter()
+                .map(|model| model.id.as_str())
+                .collect::<Vec<_>>(),
+            ["gpt-5.6-sol"]
+        );
     }
 
     #[test]

@@ -31,6 +31,7 @@ import {
   isSafeAiPreview,
   isStructuredAiAnswer,
   type AiAction,
+  type AiAnalysisSelection,
   type AiContextScope,
   type AiProviderProfile,
   type AiState,
@@ -45,6 +46,7 @@ interface AiControllerOptions {
   patchLocked: boolean;
   mounted: MutableRefObject<boolean>;
   dispatchAi: Dispatch<AiAction>;
+  analysisSelection: AiAnalysisSelection;
 }
 
 export function useAiController({
@@ -55,6 +57,7 @@ export function useAiController({
   patchLocked,
   mounted,
   dispatchAi,
+  analysisSelection,
 }: AiControllerOptions) {
   const aiSequence = useRef(0);
   const aiArchiveSequence = useRef(0);
@@ -439,9 +442,9 @@ export function useAiController({
     const requestId = crypto.randomUUID();
     dispatchAi({ type: "preview_started", requestId });
     try {
-      const response = await previewAiContext(requestId, selectedProvider.profile_id, projectState.projectSessionId, projectState.draft.revision_id, currentZone.zone_id, aiState.scopes, language, aiState.modelId, isCodexProvider ? aiState.reasoningEffort : "medium");
+      const response = await previewAiContext(requestId, selectedProvider.profile_id, projectState.projectSessionId, projectState.draft.revision_id, currentZone.zone_id, aiState.scopes, language, aiState.modelId, isCodexProvider ? aiState.reasoningEffort : "medium", analysisSelection);
       if (!mounted.current || sequence !== aiSequence.current) return;
-      if (response.request_id !== requestId || response.error || !response.preview || response.preview.project_session_id !== projectState.projectSessionId || response.preview.revision_id !== projectState.draft.revision_id || response.preview.zone_id !== currentZone.zone_id || !isSafeAiPreview(response.preview)) {
+      if (response.request_id !== requestId || response.error || !response.preview || response.preview.project_session_id !== projectState.projectSessionId || response.preview.revision_id !== projectState.draft.revision_id || response.preview.zone_id !== currentZone.zone_id || response.preview.analysis_selection.intent !== analysisSelection.intent || response.preview.analysis_selection.result_dataset_fingerprint !== analysisSelection.result_dataset_fingerprint || response.preview.analysis_selection.metric !== analysisSelection.metric || response.preview.analysis_selection.selected_time_seconds !== analysisSelection.selected_time_seconds || !isSafeAiPreview(response.preview)) {
         dispatchAi({ type: "operation_failed", requestId, issue: response.error ?? { code: "ai_context_unavailable", message: "AI context preview invalid." } });
         return;
       }
@@ -450,7 +453,7 @@ export function useAiController({
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "ai_context_unavailable", message: "AI context preview failed." } });
     }
-  }, [aiState.modelId, aiState.reasoningEffort, aiState.scopes, currentZone, dispatchAi, isCodexProvider, language, mounted, patchLocked, projectState.draft, projectState.projectSessionId, selectedProvider]);
+  }, [aiState.modelId, aiState.reasoningEffort, aiState.scopes, analysisSelection, currentZone, dispatchAi, isCodexProvider, language, mounted, patchLocked, projectState.draft, projectState.projectSessionId, selectedProvider]);
 
   const sendAiQuestion = useCallback(async () => {
     if (patchLocked || !selectedProvider || !projectState.projectSessionId || !projectState.draft || !currentZone || !aiState.preview || !aiState.question.trim()) return;
@@ -459,7 +462,7 @@ export function useAiController({
     const question = aiState.question.trim();
     dispatchAi({ type: "turn_started", requestId, question });
     try {
-      const response = await startReadonlyAiTurn(requestId, selectedProvider?.profile_id ?? "", projectState.projectSessionId, projectState.draft.revision_id, currentZone.zone_id, aiState.preview.preview_id, question, aiState.scopes, language, aiState.modelId, isCodexProvider ? aiState.reasoningEffort : "medium");
+      const response = await startReadonlyAiTurn(requestId, selectedProvider?.profile_id ?? "", projectState.projectSessionId, projectState.draft.revision_id, currentZone.zone_id, aiState.preview.preview_id, question, aiState.scopes, language, aiState.modelId, isCodexProvider ? aiState.reasoningEffort : "medium", analysisSelection);
       if (!mounted.current || sequence !== aiSequence.current) return;
       if (response.request_id === requestId && response.error?.code === "ai_turn_interrupted") {
         dispatchAi({ type: "turn_interrupted" });
@@ -475,7 +478,7 @@ export function useAiController({
       if (!mounted.current || sequence !== aiSequence.current) return;
       dispatchAi({ type: "operation_failed", requestId, issue: { code: "codex_app_server_disconnected", message: "AI turn failed." } });
     }
-  }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, currentZone, dispatchAi, isCodexProvider, language, mounted, patchLocked, projectState.draft, projectState.projectSessionId, refreshAiArchive, selectedProvider]);
+  }, [aiState.modelId, aiState.preview, aiState.question, aiState.reasoningEffort, aiState.scopes, analysisSelection, currentZone, dispatchAi, isCodexProvider, language, mounted, patchLocked, projectState.draft, projectState.projectSessionId, refreshAiArchive, selectedProvider]);
 
   const stopAiTurn = useCallback(async () => {
     if (patchLocked) return;

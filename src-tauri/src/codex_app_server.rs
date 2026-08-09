@@ -1,5 +1,5 @@
 use crate::zone_bridge::{
-    attachment_center::AttachmentCenterStore, sha256_file, AiTrustedContext,
+    attachment_center::AttachmentCenterStore, sha256_file, AiAnalysisSelection, AiTrustedContext,
     DesktopProjectSessionStore,
 };
 use serde::{Deserialize, Serialize};
@@ -189,6 +189,7 @@ pub struct AiContextDisclosureView {
     pub(crate) destination_origin: Option<String>,
     pub(crate) network_scope: String,
     pub(crate) model_id: String,
+    pub(crate) analysis_selection: AiAnalysisSelection,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1900,28 +1901,49 @@ pub(crate) fn context_fingerprint_for_provider(
     Ok(Uuid::new_v5(&CONTEXT_FINGERPRINT_NAMESPACE, &bytes).to_string())
 }
 
+pub(crate) struct TrustedContextRequest<'a> {
+    pub(crate) project_session_id: &'a str,
+    pub(crate) revision_id: &'a str,
+    pub(crate) zone_id: &'a str,
+    pub(crate) scopes: &'a [String],
+    pub(crate) language: &'a str,
+    pub(crate) model_id: &'a str,
+    pub(crate) analysis_selection: &'a AiAnalysisSelection,
+}
+
 pub(crate) fn build_trusted_context_with_attachments(
     app: &AppHandle,
-    project_session_id: &str,
-    revision_id: &str,
-    zone_id: &str,
-    scopes: &[String],
-    language: &str,
-    model_id: &str,
+    request: TrustedContextRequest<'_>,
 ) -> Result<AiTrustedContext, AiDiagnostic> {
-    let project_scopes = scopes
+    let project_scopes = request
+        .scopes
         .iter()
         .filter(|scope| scope.as_str() != "attachment_evidence")
         .cloned()
         .collect::<Vec<_>>();
     let project_store = app.state::<DesktopProjectSessionStore>();
     let mut trusted = project_store
-        .build_ai_context(project_session_id, revision_id, zone_id, &project_scopes)
+        .build_ai_context_for_analysis(
+            request.project_session_id,
+            request.revision_id,
+            request.zone_id,
+            &project_scopes,
+            Some(request.analysis_selection),
+        )
         .map_err(|error| AiDiagnostic::new(&error.code, &error.message))?;
-    if scopes.iter().any(|scope| scope == "attachment_evidence") {
+    if request
+        .scopes
+        .iter()
+        .any(|scope| scope == "attachment_evidence")
+    {
         let evidence = app
             .state::<AttachmentCenterStore>()
-            .evidence_payload(project_session_id, revision_id, language, model_id)
+            .evidence_payload(
+                request.project_session_id,
+                request.revision_id,
+                request.language,
+                request.model_id,
+            )
             .map_err(|error| AiDiagnostic::new(&error.code, &error.message))?;
         let payload = trusted.payload.as_object_mut().ok_or_else(|| {
             AiDiagnostic::new("ai_context_unavailable", "AI context payload was invalid.")
@@ -2545,6 +2567,7 @@ fn preview_matches_turn(
     language: &str,
     model_id: &str,
     reasoning_effort: &str,
+    analysis_selection: &AiAnalysisSelection,
 ) -> bool {
     preview.view.preview_id == preview_id
         && preview.view.project_session_id == project_session_id
@@ -2554,6 +2577,7 @@ fn preview_matches_turn(
         && preview.language == language
         && preview.model_id == model_id
         && preview.reasoning_effort == reasoning_effort
+        && preview.view.analysis_selection == *analysis_selection
 }
 
 fn connection_view(state: &AssistantState) -> Option<CodexConnectionView> {
@@ -2687,12 +2711,18 @@ fn turn_start_params(
         "effort": reasoning_effort,
         "summary": "none",
         "personality": "none",
-        "outputSchema": answer_schema()
+        "outputSchema": structured_ai_answer_schema()
     })
 }
 
-fn answer_schema() -> Value {
-    json!({
+/// Build the response contract used by the App Server and JSON-mode adapters.
+///
+/// OpenAI Responses strict schemas have one additional structural requirement:
+/// every top-level property must be required. Keep that transport constraint
+/// in a derived schema instead of changing the runtime contract consumed by
+/// Codex App Server and DeepSeek JSON object mode.
+fn structured_ai_answer_schema_with_required_patch(require_semantic_patch: bool) -> Value {
+    let mut schema = json!({
         "type": "object",
         "properties": {
             "deterministic_facts": {
@@ -2741,7 +2771,47 @@ fn answer_schema() -> Value {
         },
         "required": ["deterministic_facts", "interpretation", "limitations", "suggested_questions"],
         "additionalProperties": false
+    });
+    if require_semantic_patch {
+        schema["properties"]["semantic_patch"]["type"] = json!(["object", "null"]);
+        schema["required"] = json!([
+            "deterministic_facts",
+            "interpretation",
+            "limitations",
+            "suggested_questions",
+            "semantic_patch"
+        ]);
+    }
+    schema
+}
+
+pub(crate) fn structured_ai_answer_schema() -> Value {
+    structured_ai_answer_schema_with_required_patch(false)
+}
+
+/// OpenAI Responses `strict: true` requires all properties to be present.
+/// `semantic_patch` is nullable so a normal explanation can still explicitly
+/// return `null` without weakening the nested Patch contract.
+pub(crate) fn openai_strict_structured_ai_answer_schema() -> Value {
+    structured_ai_answer_schema_with_required_patch(true)
+}
+
+/// A minimal example shared by HTTP adapters when a provider needs explicit
+/// JSON-mode instructions. Keeping this next to the deserialization schema
+/// prevents provider-specific prompts from silently inventing a second answer
+/// contract.
+pub(crate) fn structured_ai_answer_json_example() -> Value {
+    json!({
+        "deterministic_facts": ["A fact from the disclosed context."],
+        "interpretation": "A non-empty explanation grounded in that context.",
+        "limitations": ["The answer does not include undisclosed project data."],
+        "suggested_questions": ["What should be checked next?"]
     })
+}
+
+#[cfg(test)]
+fn answer_schema() -> Value {
+    structured_ai_answer_schema()
 }
 
 fn validate_semantic_patch_suggestion(
@@ -4038,6 +4108,7 @@ pub async fn preview_ai_context(
     language: String,
     model_id: String,
     reasoning_effort: String,
+    analysis_selection: AiAnalysisSelection,
 ) -> DesktopAiContextPreviewResponse {
     if !safe_request_id(&request_id)
         || !safe_request_id(&project_session_id)
@@ -4073,6 +4144,7 @@ pub async fn preview_ai_context(
             language,
             model_id,
             reasoning_effort,
+            analysis_selection,
         );
     }
     if provider_profile_id != crate::ai_provider::codex_profile_id().to_string() {
@@ -4156,12 +4228,15 @@ pub async fn preview_ai_context(
     };
     let trusted = match build_trusted_context_with_attachments(
         &app,
-        &project_session_id,
-        &revision_id,
-        &zone_id,
-        &scopes,
-        &language,
-        &model_id,
+        TrustedContextRequest {
+            project_session_id: &project_session_id,
+            revision_id: &revision_id,
+            zone_id: &zone_id,
+            scopes: &scopes,
+            language: &language,
+            model_id: &model_id,
+            analysis_selection: &analysis_selection,
+        },
     ) {
         Ok(context) => context,
         Err(error) => {
@@ -4206,6 +4281,7 @@ pub async fn preview_ai_context(
         destination_origin: None,
         network_scope: "codex_managed".to_string(),
         model_id: model_id.clone(),
+        analysis_selection,
     };
     let mut state = assistant
         .state
@@ -4249,6 +4325,7 @@ pub async fn start_readonly_ai_turn(
     language: String,
     model_id: String,
     reasoning_effort: String,
+    analysis_selection: AiAnalysisSelection,
 ) -> DesktopAiTurnResponse {
     if !safe_request_id(&request_id)
         || !safe_request_id(&project_session_id)
@@ -4286,6 +4363,7 @@ pub async fn start_readonly_ai_turn(
             language,
             model_id,
             reasoning_effort,
+            analysis_selection,
         )
         .await;
     }
@@ -4405,6 +4483,7 @@ pub async fn start_readonly_ai_turn(
         &language,
         &model_id,
         &reasoning_effort,
+        &analysis_selection,
     ) {
         return turn_failure(
             request_id,
@@ -4421,12 +4500,15 @@ pub async fn start_readonly_ai_turn(
     }
     let current = match build_trusted_context_with_attachments(
         &app,
-        &project_session_id,
-        &revision_id,
-        &zone_id,
-        &scopes,
-        &language,
-        &model_id,
+        TrustedContextRequest {
+            project_session_id: &project_session_id,
+            revision_id: &revision_id,
+            zone_id: &zone_id,
+            scopes: &scopes,
+            language: &language,
+            model_id: &model_id,
+            analysis_selection: &analysis_selection,
+        },
     ) {
         Ok(context) => context,
         Err(error) => {

@@ -1,0 +1,27 @@
+.ui-inline-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  padding: var(--space-3);
+  color: var(--text-supporting);
+  background: var(--surface-subtle);
+}
+
+.ui-inline-notice[data-tone="error"] {
+  border-color: var(--error);
+}
+
+.ui-inline-notice[data-tone="warning"] {
+  border-color: var(--warning);
+}
+
+.ui-empty-state {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  padding: var(--space-6);
+  color: var(--text-secondary-muted);
+  text-align: center;
+}

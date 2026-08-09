@@ -1,0 +1,268 @@
+.app-shell {
+  color: var(--text-default);
+  background: var(--surface-app);
+}
+
+.top-bar,
+.status-bar {
+  border-color: var(--border-subtle);
+}
+
+.workbench-body {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Migrated from the R1 compatibility sheet; ownership: shell. */
+.app-shell {
+  display: grid;
+  grid-template-rows: var(--toolbar-height) minmax(0, 1fr) var(--status-height);
+  width: 100%;
+  height: 100vh;
+  background: var(--bg-app);
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.tool-button,
+.icon-button,
+.panel-icon-button,
+.activity-button,
+.tree-row,
+.context-tabs button,
+.bottom-tabs button,
+.primary-action,
+.secondary-action {
+  cursor: pointer;
+}
+
+.workbench-body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.activity-bar {
+  display: flex;
+  flex: 0 0 var(--activity-width);
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--bg-activity);
+  border-right: 1px solid var(--border);
+}
+
+.activity-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 46px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.activity-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-muted);
+}
+
+.activity-button.is-active {
+  color: var(--accent);
+  background: var(--bg-surface);
+}
+
+.activity-button.is-active::before {
+  position: absolute;
+  inset: 7px auto 7px 0;
+  width: 3px;
+  content: "";
+  background: var(--accent);
+}
+
+.main-panels,
+.center-panels {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.resize-handle {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 4px;
+  background: var(--border);
+  transition: background-color 100ms ease;
+}
+
+.resize-handle:hover,
+.resize-handle[data-resize-handle-active] {
+  background: var(--accent);
+}
+
+.resize-handle-horizontal {
+  cursor: col-resize;
+}
+
+.resize-handle-vertical {
+  cursor: row-resize;
+}
+
+.project-sidebar,
+.context-sidebar,
+.bottom-panel,
+.editor-surface {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-surface);
+}
+
+.project-sidebar,
+.context-sidebar,
+.bottom-panel,
+.editor-surface {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.project-sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 27px;
+  padding: 0 10px;
+  color: var(--text-muted);
+  background: var(--bg-surface-subtle);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.editor-tabs,
+.context-tabs,
+.bottom-tabs {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 36px;
+  min-width: 0;
+  background: var(--bg-surface-subtle);
+  border-bottom: 1px solid var(--border);
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 7px;
+  color: #f5f8fb;
+  background: #155b91;
+  user-select: none;
+}
+
+.placeholder-toast {
+  position: fixed;
+  right: 14px;
+  bottom: calc(var(--status-height) + 12px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(480px, calc(100vw - 28px));
+  padding: 10px 8px 10px 12px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+}
+
+.placeholder-toast span {
+  line-height: 1.45;
+}
+
+.top-bar {
+  gap: 10px;
+  padding-inline: 14px;
+  box-shadow: 0 1px 0 rgb(20 34 48 / 3%);
+}
+
+.activity-bar {
+  flex-basis: var(--activity-width);
+  padding: 10px 8px;
+  gap: 6px;
+  background: var(--bg-activity);
+}
+
+.activity-button {
+  height: 44px;
+  border-radius: var(--radius-sm);
+}
+
+.activity-button.is-active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.activity-button.is-active::before {
+  inset: 11px auto 11px 0;
+  width: 3px;
+  border-radius: 4px;
+}
+
+.project-sidebar-footer {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.editor-tabs {
+  min-height: 44px;
+}
+
+.bottom-panel {
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 720px) {
+  .top-bar {
+      padding-inline: 8px;
+    }
+}
+
+@media (max-width: 1279px) {
+  .top-bar {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .status-item {
+    max-width: 34vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .activity-bar {
+    padding-inline: 5px;
+  }
+
+  .resize-handle-horizontal {
+    flex-basis: 2px;
+  }
+}

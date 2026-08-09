@@ -6,6 +6,12 @@ CONTAM Studio may distribute unchanged Windows x64 ContamX 3.4.0.3, SimRead,
 SimComp and PrjUp executables from the official NIST CONTAM download page:
 https://www.nist.gov/el/beed/nist-multizone-modeling/software/contam/download-contam
 
+NIST labels the containing product release as CONTAM 3.4.0.8. The Windows x64
+archive offered by that release is `contam-x-3.4.0.3-win64.zip`, and the Windows
+file version of ContamX, SimRead, SimComp and PrjUp in that archive is 3.4.0.3.
+CONTAM Studio therefore reports the packaged runtime as 3.4.0.3 and does not
+describe it as ContamX 3.4.0.8.
+
 The source, version, ZIP digest and per-file digests are recorded in
 `resources/contam-tools.lock.json`. NIST provides CONTAM as a public-domain
 federal-government work without warranties or guarantees. CONTAM Studio is not
@@ -24,6 +30,16 @@ CONTAM Studio自身源码采用Apache License 2.0。以下名称、软件和资�
 
 ## 软件依赖
 
+R1-03 adds the following direct visual workspace dependencies, both MIT licensed
+and locked to the exact versions in `package.json` and `pnpm-lock.yaml`:
+
+- `konva 10.3.0` — https://github.com/konvajs/konva
+- `react-konva 19.2.5` — https://github.com/konvajs/react-konva
+
+`react-konva 19.2.5` declares compatibility with React and React DOM 19.2.x;
+the project currently uses React 19.2.7. Konva is lazy-loaded only by the
+ProjectPage visual workspace and is not part of the initial application entry.
+
 JavaScript、Rust、Python测试和冻结Worker构建依赖的精确版本分别由`pnpm-lock.yaml`、`src-tauri/Cargo.lock`、`python/requirements-ci.lock`和`python/requirements-worker.lock`锁定。依赖保留各自许可证。主要直接依赖包括Apache ECharts、React、Tauri、i18next及其生态组件；完整依赖树应在每次发布前由锁文件重新审计。
 
 Phase 6B新增或显式启用的主要Rust依赖及其许可证为：`reqwest 0.13.4`（MIT OR Apache-2.0）、`rustls 0.23.42`（Apache-2.0 OR ISC OR MIT）、`ring 0.17.14`（Apache-2.0 AND ISC）、`keyring 4.1.5`（MIT OR Apache-2.0）、`zeroize 1.9.0`（Apache-2.0 OR MIT）、`futures-util 0.3.32`（MIT OR Apache-2.0）、`url 2.5.8`（MIT OR Apache-2.0）、`tokio 1.52.4`（MIT）和`uuid 1.24.0`（Apache-2.0 OR MIT）。实际传递依赖和版本以`src-tauri/Cargo.lock`为准。
@@ -33,5 +49,11 @@ Phase 6B新增或显式启用的主要Rust依赖及其许可证为：`reqwest 0.
 EXPERT-FIX-01将`windows-sys 0.61.2`作为Windows Job Object API的直接Rust依赖；该crate采用MIT OR Apache-2.0。它不引入外部进程管理服务或系统级安装项。
 
 Cherry Studio社区版采用AGPL-3.0；本项目只借鉴Provider分层思想，不复制其代码、注释、协议包装或界面。OpenAI、Anthropic、Google Gemini、OpenRouter和DeepSeek的API文档以及Codex App Server是外部规范/服务来源，不随应用捆绑，也不改变本项目与各服务自身的条款关系。
+
+R1-03 icon classification uses a minimal independent mapping cross-checked
+against NIST CONTAM documentation and OpenStudio's public `PrjDefines.hpp` and
+`IconImpl` reader. No OpenStudio source code or dependency is copied or linked;
+OpenStudio remains an attribution/reference source under its BSD-style terms:
+https://github.com/NatLabRockies/OpenStudio/blob/03150b3539f27b244bac75e249ab6b6a9583cc8d/LICENSE.md
 
 本文件用于归属和边界说明，不替代任何第三方许可证原文。

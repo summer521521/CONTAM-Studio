@@ -16,6 +16,9 @@ ADR用于记录具有长期影响的项目决策、理由、后果和待验证�
 - [ADR-010：首个AI后端使用Codex App Server](ADR-010-use-codex-app-server-for-readonly-ai.md)
 - [ADR-011：冻结三层职责与可信边界](ADR-011-freeze-layer-responsibilities-and-trust-boundaries.md)
 - [ADR-016：采用受控多 Provider 只读 AI Gateway](ADR-016-use-bounded-multi-provider-ai-gateway.md)
+- [ADR-018：采用用户优先、本地优先且联网增强的运行时](ADR-018-adopt-user-first-online-enhanced-runtime.md)
+- [ADR-019：在可信语义快照上提供只读可视化模型工作区](ADR-019-read-only-visual-model-workspace.md)
+- [ADR-020：将结果、证据和 AI 上下文绑定到同一可信身份](ADR-020-bind-results-evidence-and-ai-context.md)
 
 ## 统一格式
 

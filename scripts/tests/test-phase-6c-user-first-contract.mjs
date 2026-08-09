@@ -16,6 +16,7 @@ function check(condition, message) {
 }
 
 const lock = JSON.parse(read("resources/contam-tools.lock.json"));
+const tempHelper = read("scripts/lib/contam-temp-root.ps1");
 const toolScript = read("scripts/build-contam-tools.ps1");
 const prepareScript = read("scripts/prepare-contam-tools-runtime.ps1");
 const releaseScript = read("scripts/build-release.ps1");
@@ -23,6 +24,7 @@ const installerScript = read("scripts/build-installers.ps1");
 const closureScript = read("scripts/release-closure.ps1");
 const releaseAudit = read("scripts/audit-release.mjs");
 const panel = read("src/components/workbench/CodexAssistantPanel.tsx");
+const providerSettings = read("src/components/workbench/assistant/AiProviderSettings.tsx");
 const releaseSettings = read("src/components/workbench/ReleaseSettings.tsx");
 const rustRelease = read("src-tauri/src/release.rs");
 const rustCatalog = read("src-tauri/src/ai_provider/catalog.rs");
@@ -43,13 +45,15 @@ for (const file of lock.files ?? []) {
   check(/^[0-9A-F]{64}$/.test(file.sha256), `lock file digest must be SHA-256: ${file.file}`);
 }
 
-const hashCheck = toolScript.indexOf("$actualZipSha256 = Get-Sha256Hex $ZipPath");
+const hashCheck = toolScript.indexOf("$actualZipSha256 = Get-ContamSha256Hex $ZipPath");
 const expand = toolScript.indexOf("Expand-Archive -LiteralPath");
 check(hashCheck >= 0 && expand > hashCheck, "ZIP hash must be checked before extraction");
 check(toolScript.includes("SHA-256 mismatch") && toolScript.includes("throw"), "hash mismatch must fail closed");
 check(toolScript.includes("www.nist.gov") && toolScript.includes("https"), "acquisition script must pin official NIST HTTPS");
-check(toolScript.includes("phase-6c-user-first-runtime"), "acquisition script must use the Phase 6C temp root");
-check(prepareScript.includes("resources\\contam-tools.lock.json") && prepareScript.includes("Get-FileHash"), "runtime preparation must verify the lock before sync");
+check(tempHelper.includes("Resolve-ContamTempRoot") && tempHelper.includes("RUNNER_TEMP"), "acquisition scripts must use the portable temp-root resolver");
+check(toolScript.includes("ApprovedTempRoot") && toolScript.includes("Test-ContamPathWithinRoot"), "acquisition script must preserve the approved temp-root boundary");
+check(![toolScript, prepareScript, releaseScript, installerScript, closureScript].some((source) => source.includes("phase-6c-user-first-runtime")), "current acquisition and release scripts must not reference the historical Phase 6C temp root");
+check(prepareScript.includes("resources\\contam-tools.lock.json") && prepareScript.includes("contam-integrity.ps1") && prepareScript.includes("Get-ContamSha256Hex"), "runtime preparation must verify the lock before sync");
 check(prepareScript.includes("src-tauri\\runtime\\contam-tools") && prepareScript.includes("Remove-Item"), "runtime preparation must refresh only the owned runtime tree");
 check(releaseScript.includes("prepare-contam-tools-runtime.ps1") && releaseScript.includes("runtime\\contam-tools"), "portable release build must prepare and copy NIST tools");
 check(installerScript.includes("prepare-contam-tools-runtime.ps1"), "installer build must prepare NIST tools");
@@ -61,7 +65,7 @@ check(Object.keys(resources).some((source) => source.includes("contam-tools")), 
 check(Object.keys(resources).some((source) => source.includes("contam-tools.lock.json")), "Tauri resources must include the tool lock");
 
 check(panel.includes("selectedProvider?.built_in ? []") && panel.includes("manualModels ="), "built-in Providers must not expose legacy manual model IDs");
-check(panel.includes("<details className=\"assistant-advanced\">") && panel.includes("manualModelsInput"), "custom manual model input must be under Advanced settings");
+check(providerSettings.includes("<Disclosure label={t(\"assistant.advancedSettings\")}") && providerSettings.includes("manualModels") && providerSettings.includes("!selected.built_in"), "custom manual model input must be under Advanced settings");
 check(panel.includes("selectedProvider?.models.filter((item) => item.available)"), "the default model picker must use available catalog entries");
 check(panel.includes("advancedModels"), "unverified catalog entries must have a separate advanced area");
 check(!releaseSettings.includes("clear_studio_cache") && !releaseSettings.includes("onClearCache()"), "storage settings must not render a deletion action");

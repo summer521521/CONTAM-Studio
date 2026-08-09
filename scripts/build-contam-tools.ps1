@@ -1,25 +1,24 @@
 [CmdletBinding()]
 param(
-    [string]$DestinationRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
+    [string]$DestinationRoot = "",
     [string]$DownloadUri = "https://www.nist.gov/document/contam-x-3403-windows-64bitzip",
     [string]$ExpectedZipSha256 = "3F11B44513F1046D378226B3D63644493B78F0E8241DC70F83E319A458A14052",
     [string]$ZipPath = "",
-    [string]$ApprovedTempRoot = "F:\Codex_File\phase-6c-user-first-runtime",
+    [string]$ApprovedTempRoot = "",
     [switch]$SkipDownload
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "lib\contam-temp-root.ps1")
+. (Join-Path $PSScriptRoot "lib\contam-integrity.ps1")
+
 function Assert-NistDownloadUri([string]$Uri) {
     $parsed = [Uri]$Uri
     if ($parsed.Scheme -ne "https" -or $parsed.Host -notin @("www.nist.gov", "nist.gov")) {
         throw "Contam tools must be downloaded from the official NIST HTTPS host."
     }
-}
-
-function Get-Sha256Hex([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
 }
 
 function Get-SafeRelativePath([string]$Root, [string]$Candidate) {
@@ -32,9 +31,17 @@ function Get-SafeRelativePath([string]$Root, [string]$Candidate) {
 }
 
 Assert-NistDownloadUri $DownloadUri
-$destinationFull = [IO.Path]::GetFullPath($DestinationRoot)
-$approvedTempRoot = [IO.Path]::GetFullPath($ApprovedTempRoot).TrimEnd("\")
-if (-not $destinationFull.StartsWith("${approvedTempRoot}\", [StringComparison]::OrdinalIgnoreCase) -and $destinationFull -ne $approvedTempRoot) {
+$destinationFull = if ([string]::IsNullOrWhiteSpace($DestinationRoot)) {
+    Resolve-ContamToolsTaskRoot
+} else {
+    Resolve-ContamAbsolutePath $DestinationRoot
+}
+$approvedTempRoot = if ([string]::IsNullOrWhiteSpace($ApprovedTempRoot)) {
+    if ([string]::IsNullOrWhiteSpace($DestinationRoot)) { Resolve-ContamTempRoot } else { $destinationFull }
+} else {
+    Resolve-ContamAbsolutePath $ApprovedTempRoot
+}
+if (-not (Test-ContamPathWithinRoot $destinationFull $approvedTempRoot)) {
     throw "Contam tool download and extraction must stay under the approved task temporary directory."
 }
 New-Item -ItemType Directory -Force -Path $destinationFull | Out-Null
@@ -43,15 +50,23 @@ $extractDirectory = Join-Path $destinationFull "extracted"
 $runtimeDirectory = Join-Path $destinationFull "runtime"
 New-Item -ItemType Directory -Force -Path $downloadDirectory, $extractDirectory, $runtimeDirectory | Out-Null
 
+# These two directories are generated exclusively from the verified archive.
+# Clear stale solver outputs (for example simread.log) before extraction so a
+# previous smoke run can never leak into a portable or installer payload.
+foreach ($generatedDirectory in @($extractDirectory, $runtimeDirectory)) {
+    Get-ChildItem -LiteralPath $generatedDirectory -Force |
+        Remove-Item -Recurse -Force
+}
+
 if ([string]::IsNullOrWhiteSpace($ZipPath)) {
     $ZipPath = Join-Path $downloadDirectory "contam-x-3.4.0.3-win64.zip"
 }
 $ZipPath = [IO.Path]::GetFullPath($ZipPath)
-if (-not $ZipPath.StartsWith("${approvedTempRoot}\", [StringComparison]::OrdinalIgnoreCase) -and $ZipPath -ne $approvedTempRoot) {
+if (-not (Test-ContamPathWithinRoot $ZipPath $approvedTempRoot)) {
     throw "NIST ZIP must stay under the approved task temporary directory."
 }
 if (-not $SkipDownload) {
-    if (-not $ZipPath.StartsWith(([IO.Path]::GetFullPath($downloadDirectory).TrimEnd("\") + "\"), [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not (Test-ContamPathWithinRoot $ZipPath $downloadDirectory)) {
         throw "Downloaded ZIP must stay under the task temporary directory."
     }
     Invoke-WebRequest -Uri $DownloadUri -OutFile $ZipPath -UseBasicParsing
@@ -62,7 +77,7 @@ if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
 
 # Check the digest before Expand-Archive so an untrusted or partial ZIP never
 # creates a runtime tree.
-$actualZipSha256 = Get-Sha256Hex $ZipPath
+$actualZipSha256 = Get-ContamSha256Hex $ZipPath
 if ($actualZipSha256 -ne $ExpectedZipSha256.ToUpperInvariant()) {
     throw "NIST ZIP SHA-256 mismatch. Expected $ExpectedZipSha256, got $actualZipSha256."
 }
@@ -89,7 +104,7 @@ foreach ($file in $files) {
 $entries = @($files | ForEach-Object {
     [ordered]@{
         file = Get-SafeRelativePath $extractDirectory $_.FullName
-        sha256 = Get-Sha256Hex $_.FullName
+        sha256 = Get-ContamSha256Hex $_.FullName
         source = "NIST official ContamX 3.4.0.3 Windows x64 ZIP"
     }
 })

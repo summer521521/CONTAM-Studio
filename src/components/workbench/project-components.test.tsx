@@ -9,7 +9,7 @@ import { ProjectSidebar } from "./ProjectSidebar";
 import { StatusBar } from "./StatusBar";
 import { ZoneVolumePatchDialog } from "./ZoneVolumePatchDialog";
 import { ActivityBar } from "./ActivityBar";
-import { DestinationPage } from "./DestinationPage";
+import { ResultsPage } from "./pages/ResultsPage";
 import { DraftSwitchDialog } from "./DraftSwitchDialog";
 import { ZoneAirStateDataTable, ZoneAirStateResults } from "./ZoneAirStateResults";
 import { TopBar } from "./TopBar";
@@ -109,9 +109,7 @@ describe("real project components", () => {
     const markup = renderToStaticMarkup(
       <ProjectSidebar
         projectState={{ ...state, status: "idle", project: null, projectSessionId: null, draft: null, selectedZoneKey: null }}
-        selectedObject="navigation.classroom"
         selectedZoneKey={null}
-        onSelectObject={() => undefined}
         onSelectZone={() => undefined}
         onCollapse={() => undefined}
       />,
@@ -126,28 +124,26 @@ describe("real project components", () => {
     const markup = renderToStaticMarkup(
       <ActivityBar projectCollapsed={false} onToggleProject={() => destinations.push("project")} onNavigate={(destination) => destinations.push(destination)} />,
     );
-    expect(markup).toContain("aria-label=\"搜索\"");
+    expect(markup).not.toContain("aria-label=\"搜索\"");
     expect(markup).not.toContain("placeholder");
     expect(markup).toContain("aria-label=\"项目\"");
     const destinationMarkup = renderToStaticMarkup(
-      <DestinationPage
-        destination="results"
+      <ResultsPage
         projectState={INITIAL_PROJECT_STATE}
+        runState={INITIAL_RUN_STATE}
         resultState={INITIAL_RESULT_STATE}
         resultExportState={INITIAL_RESULT_EXPORT_STATE}
         activeRunId={null}
         theme="light"
         availability={{ openProject: true, loadActiveResult: false, selectManifest: false, exportResult: false }}
         onOpenProject={() => undefined}
-        onRunProject={() => undefined}
-        onSelectZone={() => undefined}
         onLoadLatestResults={() => undefined}
         onSelectManifestResults={() => undefined}
         onExportResults={() => undefined}
-        onSettingsReset={() => undefined}
+        onNavigate={() => undefined}
       />,
     );
-    expect(destinationMarkup).toContain("尚未打开项目");
+    expect(destinationMarkup).toContain("打开项目后才能读取结果");
   });
 
   it("exposes all explicit draft switch choices", () => {
@@ -209,9 +205,7 @@ describe("real project components", () => {
     const markup = renderToStaticMarkup(
       <ProjectSidebar
         projectState={state}
-        selectedObject="navigation.classroom"
         selectedZoneKey={state.selectedZoneKey}
-        onSelectObject={() => undefined}
         onSelectZone={() => undefined}
         onCollapse={() => undefined}
       />,
@@ -228,9 +222,7 @@ describe("real project components", () => {
     const markup = renderToStaticMarkup(
       <ProjectSidebar
         projectState={{ ...state, project: emptyProject, selectedZoneKey: null }}
-        selectedObject="navigation.classroom"
         selectedZoneKey={null}
-        onSelectObject={() => undefined}
         onSelectZone={() => undefined}
         onCollapse={() => undefined}
       />,
@@ -244,7 +236,6 @@ describe("real project components", () => {
         activeTab="inspector"
         project={project}
         selectedZone={project.zones[0]}
-        selectedObject="navigation.classroom"
         patchState={{
           status: "idle",
           newVolumeToken: "",
@@ -277,7 +268,6 @@ describe("real project components", () => {
         activeTab="inspector"
         project={project}
         selectedZone={project.zones[0]}
-        selectedObject="navigation.classroom"
         patchState={{
           status: "editing",
           newVolumeToken: "6.5e2",
@@ -392,14 +382,13 @@ describe("real project components", () => {
 
   it("reports ContamX status from verified run evidence instead of a permanent placeholder", () => {
     const pending = renderToStaticMarkup(
-      <StatusBar theme="light" projectState={state} runState={INITIAL_RUN_STATE} />,
+      <StatusBar projectState={state} runState={INITIAL_RUN_STATE} />,
     );
     expect(pending).toContain("ContamX状态待验证");
     expect(pending).not.toContain("ContamX未配置");
 
     const verified = renderToStaticMarkup(
       <StatusBar
-        theme="light"
         projectState={state}
         runState={{
           ...INITIAL_RUN_STATE,
@@ -424,7 +413,6 @@ describe("real project components", () => {
 
     const notConfigured = renderToStaticMarkup(
       <StatusBar
-        theme="light"
         projectState={state}
         runState={{
           ...INITIAL_RUN_STATE,
@@ -442,10 +430,9 @@ describe("real project components", () => {
     expect(notConfigured).not.toContain("internal detail");
   });
 
-  it("reports the selected Provider without exposing Codex CLI wording", () => {
+  it("reports a generic AI status without centering the status bar on a Provider runtime", () => {
     const markup = renderToStaticMarkup(
       <StatusBar
-        theme="light"
         projectState={state}
         runState={INITIAL_RUN_STATE}
         aiState={{
@@ -457,7 +444,8 @@ describe("real project components", () => {
         }}
       />,
     );
-    expect(markup).toContain("AI：Google Gemini · 未连接");
+    expect(markup).toContain("AI · 未连接");
+    expect(markup).not.toContain("Google Gemini");
     expect(markup).not.toContain("Codex CLI");
   });
 

@@ -25,7 +25,7 @@ use crate::codex_app_server::{
     AiArchiveSaveView, AiContextDisclosureView, AiDiagnostic, AiDisclosureBoundary,
     AiTokenUsageView, DesktopAiContextPreviewResponse, DesktopAiTurnResponse, StructuredAiAnswer,
 };
-use crate::zone_bridge::AiTrustedContext;
+use crate::zone_bridge::{AiAnalysisSelection, AiTrustedContext};
 
 use self::catalog::{CatalogCacheFile, CatalogSnapshot};
 use self::credentials::{AiCredentialStore, CredentialError, SecretInput, SystemCredentialStore};
@@ -85,6 +85,12 @@ fn provider_error_message(code: &str) -> &'static str {
         "ai_provider_rate_limited" => "The provider rate limit was reached.",
         "ai_provider_unavailable" => "The provider is temporarily unavailable.",
         "ai_provider_stream_invalid" => "The provider stream was invalid or exceeded its bounds.",
+        "ai_provider_stream_incomplete" => "The provider response stream ended before completion. Retry the request.",
+        "ai_provider_response_empty" => "The provider returned an empty answer. Retry or choose another model.",
+        "ai_provider_response_truncated" => "The provider stopped at its output limit. Retry or choose a model with a larger output limit.",
+        "ai_provider_response_not_json" => "The provider answer was not a single valid JSON object. Retry or choose another model.",
+        "ai_provider_response_contract_invalid" => "The provider JSON did not match the safe answer contract. Retry or choose another model.",
+        "ai_provider_remote_error" => "The provider returned an error. Check the Provider status and retry.",
         "ai_provider_response_invalid" => "The provider response did not match the safe contract.",
         "ai_provider_timeout" => "The provider request timed out.",
         "ai_provider_cancelled" => "The provider request was cancelled.",
@@ -1662,6 +1668,7 @@ pub(crate) fn preview_http_ai_context(
     language: String,
     model_id: String,
     reasoning_effort: String,
+    analysis_selection: AiAnalysisSelection,
 ) -> DesktopAiContextPreviewResponse {
     if !is_safe_request_id(&request_id)
         || !is_safe_request_id(&project_session_id)
@@ -1701,12 +1708,15 @@ pub(crate) fn preview_http_ai_context(
     }
     let context = match crate::codex_app_server::build_trusted_context_with_attachments(
         app,
-        &project_session_id,
-        &revision_id,
-        &zone_id,
-        &scopes,
-        &language,
-        &model_id,
+        crate::codex_app_server::TrustedContextRequest {
+            project_session_id: &project_session_id,
+            revision_id: &revision_id,
+            zone_id: &zone_id,
+            scopes: &scopes,
+            language: &language,
+            model_id: &model_id,
+            analysis_selection: &analysis_selection,
+        },
     ) {
         Ok(context) => context,
         Err(error) => return crate::codex_app_server::preview_failure(request_id, error),
@@ -1749,6 +1759,7 @@ pub(crate) fn preview_http_ai_context(
         destination_origin: normalized_origin(&profile),
         network_scope: network_scope(&profile),
         model_id: model_id.clone(),
+        analysis_selection,
     };
     *store
         .preview
@@ -1791,6 +1802,7 @@ pub(crate) async fn start_http_ai_turn(
     language: String,
     model_id: String,
     reasoning_effort: String,
+    analysis_selection: AiAnalysisSelection,
 ) -> DesktopAiTurnResponse {
     let failure = |error: AiProviderError| DesktopAiTurnResponse {
         request_id: request_id.clone(),
@@ -1858,17 +1870,21 @@ pub(crate) async fn start_http_ai_turn(
         || preview.language != language
         || preview.model_id != model_id
         || preview.reasoning_effort != reasoning_effort
+        || preview.view.analysis_selection != analysis_selection
     {
         return failure(AiProviderError::new("ai_context_stale"));
     }
     let current = match crate::codex_app_server::build_trusted_context_with_attachments(
         app,
-        &project_session_id,
-        &revision_id,
-        &zone_id,
-        &scopes,
-        &language,
-        &model_id,
+        crate::codex_app_server::TrustedContextRequest {
+            project_session_id: &project_session_id,
+            revision_id: &revision_id,
+            zone_id: &zone_id,
+            scopes: &scopes,
+            language: &language,
+            model_id: &model_id,
+            analysis_selection: &analysis_selection,
+        },
     ) {
         Ok(context) => context,
         Err(error) => {

@@ -9,10 +9,8 @@ import { SemanticProjectTree } from "./SemanticProjectTree";
 
 interface ProjectSidebarProps {
   projectState: ProjectState;
-  selectedObject: string;
   selectedZoneKey: string | null;
   availability?: Pick<CommandAvailability, "zoneSelect"> & { navigation?: boolean };
-  onSelectObject: (translationKey: string) => void;
   onSelectZone: (zone: ZoneRecord) => void;
   onCollapse: () => void;
   semanticState?: SemanticState;
@@ -26,6 +24,11 @@ interface TreeRowProps {
   selected?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+}
+
+export function filterProjectZones(zones: ZoneRecord[], query: string): ZoneRecord[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  return zones.filter((zone) => !normalized || `${zone.name} ${zone.contam_number}`.toLocaleLowerCase().includes(normalized));
 }
 
 function TreeRow({ icon: Icon, label, level = 0, selected, disabled = false, onClick }: TreeRowProps) {
@@ -58,10 +61,7 @@ export function ProjectSidebar({
   const project = projectState.project;
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
-  const filteredZones = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return project?.zones.filter((zone) => !normalized || `${zone.name} ${zone.contam_number}`.toLocaleLowerCase().includes(normalized)) ?? [];
-  }, [project, query]);
+  const filteredZones = useMemo(() => filterProjectZones(project?.zones ?? [], query), [project, query]);
 
   useEffect(() => {
     const focusSearch = () => searchRef.current?.focus();
@@ -165,7 +165,7 @@ export function ProjectSidebar({
       </div>
       <div className="project-sidebar-footer">
         <Clock3 size={14} aria-hidden="true" />
-        <span>{t(project ? "project.strictSubset" : "navigation.noProjectFooter")}</span>
+        <span>{project ? t("navigation.zoneCount", { count: project.zones.length }) : t("navigation.noProjectFooter")}</span>
       </div>
     </aside>
   );

@@ -6,6 +6,7 @@ import type {
 import type { DesktopOpenResponse, ReaderDiagnostic } from "./project-state";
 import type { DesktopDraftExportResponse, DesktopDraftTransitionResponse } from "./project-state";
 import type { DesktopZoneAirStateResponse } from "./result-state";
+import type { DesktopZoneResultDatasetResponse } from "./result-dataset-state";
 import type { DesktopZoneAirStateCsvExportResponse } from "./result-export-state";
 import type { DesktopRunResponse } from "./run-state";
 import type { CloseResolution } from "./close-state";
@@ -14,6 +15,7 @@ import type { AttachmentEvidenceBundleView, AttachmentView } from "./attachment-
 import type { SemanticOperationRequest, DesktopSemanticPatchPlanResponse, DesktopSemanticApplyResponse, DesktopSemanticSnapshotResponse } from "./semantic-state";
 import type { DesktopStudyResponse, StudyPlan, StudySampleResult } from "./study-state";
 import type {
+  AiAnalysisSelection,
   AiContextScope,
   DesktopAiConversationArchiveResponse,
   DesktopAiActionResponse,
@@ -253,16 +255,12 @@ export async function runStudy(
   projectSessionId: string,
   revisionId: string,
   plan: StudyPlan,
-  solverPath: string | null,
-  simreadPath: string | null,
 ): Promise<DesktopStudyResponse> {
   return invoke<DesktopStudyResponse>("run_study", {
     requestId,
     projectSessionId,
     revisionId,
     plan,
-    solverPath,
-    simreadPath,
   });
 }
 
@@ -361,6 +359,30 @@ export async function removeStudioAttachment(requestId: string, attachmentId: st
   return invoke<DesktopAttachmentActionResponse>("remove_studio_attachment", { requestId, attachmentId });
 }
 
+export async function extractActiveRunZoneAirStateDataset(
+  requestId: string,
+  projectSessionId: string,
+  zoneIds: string[],
+): Promise<DesktopZoneResultDatasetResponse> {
+  return invoke<DesktopZoneResultDatasetResponse>("extract_active_run_zone_air_state_dataset", {
+    requestId,
+    projectSessionId,
+    zoneIds,
+  });
+}
+
+export async function cancelZoneResultDataset(
+  requestId: string,
+  projectSessionId: string,
+  extractionBatchId: string,
+): Promise<DesktopZoneResultDatasetResponse> {
+  return invoke<DesktopZoneResultDatasetResponse>("cancel_zone_result_dataset", {
+    requestId,
+    projectSessionId,
+    extractionBatchId,
+  });
+}
+
 export async function listAiProviderProfiles(requestId: string): Promise<DesktopAiProviderProfilesResponse> {
   return invoke<DesktopAiProviderProfilesResponse>("list_ai_provider_profiles", { requestId });
 }
@@ -439,6 +461,7 @@ export async function previewAiContext(
   language: string,
   modelId: string,
   reasoningEffort: string,
+  analysisSelection: AiAnalysisSelection,
 ): Promise<DesktopAiContextPreviewResponse> {
   return invoke<DesktopAiContextPreviewResponse>("preview_ai_context", {
     requestId,
@@ -450,6 +473,7 @@ export async function previewAiContext(
     language,
     modelId,
     reasoningEffort,
+    analysisSelection,
   });
 }
 
@@ -465,6 +489,7 @@ export async function startReadonlyAiTurn(
   language: string,
   modelId: string,
   reasoningEffort: string,
+  analysisSelection: AiAnalysisSelection,
 ): Promise<DesktopAiTurnResponse> {
   return invoke<DesktopAiTurnResponse>("start_readonly_ai_turn", {
     requestId,
@@ -478,6 +503,7 @@ export async function startReadonlyAiTurn(
     language,
     modelId,
     reasoningEffort,
+    analysisSelection,
   });
 }
 
@@ -559,15 +585,13 @@ export async function getStudioSetup(requestId: string): Promise<DesktopSetupRes
   return invoke<DesktopSetupResponse>("get_studio_setup", { requestId });
 }
 
-export async function saveStudioSetup(
+export async function saveStudioPreferences(
   requestId: string,
   language: string,
   theme: string,
   dataDirectory: string,
-  contamxPath: string | null,
-  simreadPath: string | null,
 ): Promise<DesktopSetupResponse> {
-  return invoke<DesktopSetupResponse>("save_studio_setup", { requestId, language, theme, dataDirectory, contamxPath, simreadPath });
+  return invoke<DesktopSetupResponse>("save_studio_setup", { requestId, language, theme, dataDirectory });
 }
 
 export async function selectDataDirectory(requestId: string): Promise<DesktopDirectoryResponse> {

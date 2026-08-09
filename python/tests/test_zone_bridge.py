@@ -212,6 +212,7 @@ def test_zone_air_state_operation_passes_bound_project_and_returns_envelope(monk
         source_sha256="a" * 64,
         result_root=str(tmp_path / "results"),
         zone_number=1,
+        simread_path=str(tmp_path / "simread.exe"),
     )
     envelope = handle_request(request)
 
@@ -236,6 +237,7 @@ def test_zone_air_state_operation_maps_phase5_failure(monkeypatch, tmp_path: Pat
             source_sha256="a" * 64,
             result_root=str(tmp_path / "results"),
             zone_number=1,
+            simread_path=str(tmp_path / "simread.exe"),
         )
     )
     assert envelope["ok"] is False
@@ -261,6 +263,7 @@ def test_run_active_project_operation_binds_source_and_returns_internal_run(monk
             operation="run_active_project",
             source_sha256="a" * 64,
             run_root=str(tmp_path / "runs"),
+            solver_path=str(tmp_path / "contamx3.exe"),
         )
     )
     assert envelope["ok"] is True
@@ -268,6 +271,7 @@ def test_run_active_project_operation_binds_source_and_returns_internal_run(monk
     assert captured == {
         "source_path": OFFICIAL_PRJ,
         "run_root": tmp_path / "runs",
+        "solver": tmp_path / "contamx3.exe",
         "expected_source_path": OFFICIAL_PRJ,
         "expected_source_sha256": "a" * 64,
     }
@@ -284,6 +288,7 @@ def test_run_active_project_operation_maps_structured_runner_failure(monkeypatch
             operation="run_active_project",
             source_sha256="0" * 64,
             run_root=str(tmp_path / "runs"),
+            solver_path=str(tmp_path / "contamx3.exe"),
         )
     )
     assert envelope["ok"] is False

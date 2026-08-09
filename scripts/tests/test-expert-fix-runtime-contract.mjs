@@ -33,6 +33,13 @@ const packageJson = JSON.parse(read("package.json"));
 const pyprojectVersion = read("python/pyproject.toml").match(/^version\s*=\s*"([^"]+)"/m)?.[1];
 const cargoVersion = read("src-tauri/Cargo.toml").match(/^version\s*=\s*"([^"]+)"/m)?.[1];
 const tauri = JSON.parse(read("src-tauri/tauri.conf.json"));
+const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const versionsAgree = (versions) => new Set(Object.values(versions)).size === 1 && semverPattern.test(String(versions.package));
+const currentVersions = { package: packageJson.version, python: pyprojectVersion, cargo: cargoVersion, tauri: tauri.version };
+if (!semverPattern.test(String(packageJson.version))) failures.push(`package version ${packageJson.version} is not valid SemVer`);
+if (!versionsAgree(currentVersions)) failures.push("package/Python/Cargo/Tauri versions must agree and be valid SemVer");
+if (!versionsAgree({ package: "0.4.1", python: "0.4.1", cargo: "0.4.1", tauri: "0.4.1" })) failures.push("a normal version change must remain valid without a historical version constant");
+if (versionsAgree({ package: "0.4.1", python: "0.4.2", cargo: "0.4.1", tauri: "0.4.1" })) failures.push("version drift fixture was not rejected");
 for (const [label, version] of [
   ["Python", pyprojectVersion],
   ["Cargo", cargoVersion],
@@ -40,7 +47,6 @@ for (const [label, version] of [
 ]) {
   if (version !== packageJson.version) failures.push(`${label} version ${version} does not match package ${packageJson.version}`);
 }
-if (packageJson.version !== "0.3.0") failures.push("current release version must be 0.3.0");
 
 const cargo = read("src-tauri/Cargo.toml");
 for (const marker of [
@@ -127,6 +133,7 @@ for (const marker of [
   "--hidden-import contamxpy",
   "detached_protocol_smoke",
   "detached_project_read",
+  "detached_semantic_project_read",
   "source_fixture_unchanged",
   "runtime-manifest.json",
   "PYINSTALLER-COPYING.txt",

@@ -1,4 +1,4 @@
-import { BarChart3, FlaskConical, FolderTree, Play, Search } from "lucide-react";
+import { BarChart3, FlaskConical, FolderTree, Play, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { projectActivityAction, type WorkbenchDestination } from "../../app/workbench-state";
@@ -8,7 +8,7 @@ interface ActivityBarProps {
   activeDestination?: WorkbenchDestination;
   navigationAvailable?: boolean;
   onToggleProject: () => void;
-  onNavigate: (destination: Exclude<WorkbenchDestination, "settings">) => void;
+  onNavigate: (destination: WorkbenchDestination) => void;
 }
 
 export function ActivityBar({
@@ -51,7 +51,7 @@ export function ActivityBar({
           disabled={!navigationAvailable}
           title={t(`navigation.${key}`)}
           aria-label={t(`navigation.${key}`)}
-          aria-pressed={key === "projects" ? !projectCollapsed : undefined}
+          aria-current={activeDestination === (key === "projects" ? "project" : key) ? "page" : undefined}
           onClick={onClick ?? (() => onNavigate(key === "projects" ? "project" : key))}
         >
           <Icon size={21} strokeWidth={1.8} />
@@ -61,15 +61,13 @@ export function ActivityBar({
       <button
         className="activity-button activity-utility"
         type="button"
-        title={t("navigation.search")}
-        aria-label={t("navigation.search")}
+        title={t("navigation.settings")}
+        aria-label={t("navigation.settings")}
+        aria-current={activeDestination === "settings" ? "page" : undefined}
         disabled={!navigationAvailable}
-        onClick={() => {
-          onNavigate("project");
-          window.setTimeout(() => window.dispatchEvent(new Event("contam-studio:focus-object-search")), 0);
-        }}
+        onClick={() => onNavigate("settings")}
       >
-        <Search size={18} strokeWidth={1.8} />
+        <Settings size={19} strokeWidth={1.8} />
       </button>
     </nav>
   );

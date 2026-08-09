@@ -1,5 +1,7 @@
 # CONTAM Studio下一阶段执行任务书
 
+> **历史归档。** 本文件保留旧任务卡、角色和阶段门禁，不能作为当前执行计划或新任务编号来源。当前研发计划唯一入口是 [CONTAM Studio Renewal R1](../initiatives/R1-visual-workbench/README.md)。
+
 制定日期：2026-07-22
 
 适用基线：`07312f31c780a9e44fcc19c640962348663739c7`

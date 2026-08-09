@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, Bot, CircleStop, Download, Eye, Link2, RefreshCw, Send, ShieldCheck, Trash2, Unplug, X } from "lucide-react";
+import { Archive, CircleStop, Download, Eye, Link2, RefreshCw, Send, ShieldCheck, Trash2, Unplug, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { AiContextScope, AiProviderProfile, AiProviderView, AiSemanticPatchSuggestion, AiState } from "../../app/ai-state";
+import type { AiContextScope, AiIntent, AiProviderProfile, AiSemanticPatchSuggestion, AiState } from "../../app/ai-state";
+import type { AssistantContextReceipt } from "../../app/assistant-context";
+import type { SemanticSnapshot } from "../../app/semantic-state";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
 import { SimulationPlanPanel } from "./SimulationPlanPanel";
 import { AttachmentCenterPanel } from "./AttachmentCenterPanel";
 import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
 import { HoverHint } from "./HoverHint";
+import { AssistantContextReceiptView } from "./assistant/AssistantContextReceipt";
+import { AssistantConversation } from "./assistant/AssistantConversation";
+import { AssistantHeader } from "./assistant/AssistantHeader";
+import { AssistantIntentSelector } from "./assistant/AssistantIntentSelector";
 
 const SCOPES: AiContextScope[] = [
   "project_summary",
@@ -40,6 +46,10 @@ interface CodexAssistantPanelProps {
   onProviderSecret?: (secret: string) => void;
   onProviderClearSecret?: () => void;
   onScopeToggle: (scope: AiContextScope) => void;
+  receipt?: AssistantContextReceipt | null;
+  semanticSnapshot?: SemanticSnapshot | null;
+  onIntentChange?: (intent: AiIntent) => void;
+  onOpenSettings?: () => void;
   onModelChange: (modelId: string) => void;
   onEffortChange: (effort: string) => void;
   onPreview: () => void;
@@ -77,15 +87,11 @@ export function CodexAssistantPanel({
   onProviderSelect = () => undefined,
   onProviderTest = () => undefined,
   onProviderRefreshModels = () => undefined,
-  onProviderSave = () => undefined,
-  onProviderDelete = () => undefined,
-  onCodexDeviceLogin = () => undefined,
-  onCodexApiKeyLogin = () => undefined,
-  onCodexCancelLogin = () => undefined,
-  onCodexLogout = () => undefined,
-  onProviderSecret = () => undefined,
-  onProviderClearSecret = () => undefined,
   onScopeToggle,
+  receipt = null,
+  semanticSnapshot = null,
+  onIntentChange = () => undefined,
+  onOpenSettings = () => undefined,
   onModelChange,
   onEffortChange,
   onPreview,
@@ -115,25 +121,16 @@ export function CodexAssistantPanel({
   const { t } = useTranslation();
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
   const [archiveConfirmation, setArchiveConfirmation] = useState<"zone" | "all" | null>(null);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [providerSecretInput, setProviderSecretInput] = useState("");
-  const [customProfileOpen, setCustomProfileOpen] = useState(false);
-  const [customDisplayName, setCustomDisplayName] = useState("");
-  const [customEndpoint, setCustomEndpoint] = useState("");
-  const [customAuthKind, setCustomAuthKind] = useState<"api_key" | "none">("api_key");
-  const [manualModelsInput, setManualModelsInput] = useState("");
-  const [manualModelInput, setManualModelInput] = useState("");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const installDialogRef = useRef<HTMLElement>(null);
   const selectedProvider = state.providerProfiles.find((profile) => profile.profile_id === state.providerProfileId) ?? null;
   const isCodexProvider = !selectedProvider || selectedProvider.protocol === "codex_app_server";
   const model = state.connection?.models.find((item) => item.id === state.modelId) ?? null;
-  const cliProbe = isCodexProvider ? state.connection?.cli ?? state.cliProbe : null;
-  const connected = isCodexProvider ? Boolean(state.connection) : Boolean(selectedProvider);
   const providerConfigured = isCodexProvider
     ? Boolean(state.connection)
     : Boolean(selectedProvider && (selectedProvider.auth_kind === "none" || selectedProvider.secret_state === "present"));
-  const ready = isCodexProvider ? state.status === "available" : providerConfigured;
+  const providerConnectionFailed = !isCodexProvider && Boolean(state.providerIssue);
+  const connected = isCodexProvider ? Boolean(state.connection) : providerConfigured;
+  const ready = isCodexProvider ? state.status === "available" : providerConfigured && !providerConnectionFailed;
   const busy = state.status === "probing" || state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
   const providerModels = isCodexProvider
     ? state.connection?.models.filter((item) => item.available).map((item) => ({ id: item.id, display_name: item.display_name })) ?? []
@@ -146,91 +143,6 @@ export function CodexAssistantPanel({
   const liveConversation = state.conversation.filter(
     (entry) => !entry.archive_entry_id || !archivedEntryIds.has(entry.archive_entry_id),
   );
-  const providerOptionLabel = (profile: AiProviderProfile | AiProviderView) => {
-    if (profile.preset_id === "codex") return t("assistant.codexProviderLabel");
-    if (profile.preset_id === "openai") return t("assistant.openaiProviderLabel");
-    return profile.display_name;
-  };
-
-  useEffect(() => {
-    if (!selectedProvider || selectedProvider.built_in) return;
-    setCustomDisplayName(selectedProvider.display_name);
-    setCustomEndpoint(selectedProvider.base_url ?? "");
-    setCustomAuthKind(selectedProvider.auth_kind === "none" ? "none" : "api_key");
-    setManualModelsInput(selectedProvider.manual_model_ids.join("\n"));
-  }, [selectedProvider?.profile_id]);
-
-  const profilePayload = (profile: typeof selectedProvider, overrides: Partial<AiProviderProfile> = {}): AiProviderProfile | null => {
-    if (!profile) return null;
-    return {
-      profile_id: profile.profile_id,
-      preset_id: profile.preset_id,
-      display_name: profile.display_name,
-      protocol: profile.protocol,
-      base_url: profile.base_url,
-      auth_kind: profile.auth_kind,
-      built_in: profile.built_in,
-      manual_model_ids: profile.manual_model_ids,
-      selected_model_id: profile.selected_model_id,
-      capabilities: profile.capabilities,
-      config_revision: profile.config_revision,
-      ...overrides,
-    };
-  };
-
-  const saveProviderConfiguration = () => {
-    const manualModelIds = Array.from(new Set(manualModelsInput.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean)));
-    const profile = selectedProvider && !selectedProvider.built_in
-      ? profilePayload(selectedProvider, {
-          display_name: customDisplayName.trim(),
-          base_url: customEndpoint.trim() || null,
-          auth_kind: customAuthKind,
-          manual_model_ids: manualModelIds,
-          selected_model_id: manualModelIds.includes(state.modelId) ? state.modelId : manualModelIds[0] ?? null,
-        })
-      : null;
-    if (profile) onProviderSave(profile);
-  };
-
-  const createCustomProvider = () => {
-    const profile: AiProviderProfile = {
-      profile_id: crypto.randomUUID(),
-      preset_id: null,
-      display_name: customDisplayName.trim() || t("assistant.customProfile"),
-      protocol: "openai_chat_completions",
-      base_url: customEndpoint.trim() || null,
-      auth_kind: customAuthKind,
-      built_in: false,
-      manual_model_ids: Array.from(new Set(manualModelsInput.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean))),
-      selected_model_id: null,
-      capabilities: { model_catalog: true, streaming: true, token_usage: false, structured_json_schema: false },
-      config_revision: 1,
-    };
-    onProviderSave(profile);
-    setCustomProfileOpen(false);
-  };
-
-  const saveManualModel = () => {
-    const modelId = manualModelInput.trim();
-    if (!selectedProvider || !modelId) return;
-    const profile = profilePayload(selectedProvider, {
-      manual_model_ids: Array.from(new Set([...selectedProvider.manual_model_ids, modelId])),
-      selected_model_id: state.modelId || modelId,
-    });
-    if (profile) onProviderSave(profile);
-    setManualModelInput("");
-  };
-
-  const removeManualModel = (modelId: string) => {
-    if (!selectedProvider) return;
-    const manualModelIds = selectedProvider.manual_model_ids.filter((item) => item !== modelId);
-    const profile = profilePayload(selectedProvider, {
-      manual_model_ids: manualModelIds,
-      selected_model_id: selectedProvider.selected_model_id === modelId ? manualModelIds[0] ?? null : selectedProvider.selected_model_id,
-    });
-    if (profile) onProviderSave(profile);
-  };
-
   useEffect(() => {
     if (!installDialogOpen) return undefined;
     installDialogRef.current?.focus();
@@ -249,13 +161,7 @@ export function CodexAssistantPanel({
 
   return (
     <div className="context-content codex-assistant" role="tabpanel">
-      <div className="assistant-heading">
-        <Bot size={22} aria-hidden="true" />
-        <div>
-          <h2>{t("assistant.title")}</h2>
-          <p className="assistant-compact-note">{t("assistant.localClientOnlineShort")} <HoverHint label={t("assistant.localClientOnlineModel")} /></p>
-        </div>
-      </div>
+      <AssistantHeader state={state} provider={selectedProvider} onOpenSettings={onOpenSettings} />
 
       {state.providerProfiles.length ? (
         <section className="assistant-provider-config" aria-labelledby="assistant-provider-title">
@@ -263,60 +169,10 @@ export function CodexAssistantPanel({
             <span id="assistant-provider-title">{t("assistant.provider")}</span>
             <select value={state.providerProfileId} onChange={(event) => onProviderSelect(event.target.value)} disabled={busy}>
               {state.providerProfiles.map((profile) => (
-                <option key={profile.profile_id} value={profile.profile_id}>{providerOptionLabel(profile)}</option>
+                <option key={profile.profile_id} value={profile.profile_id}>{profile.preset_id === "codex" ? t("assistant.codexProviderLabel") : profile.preset_id === "openai" ? t("assistant.openaiProviderLabel") : profile.display_name}</option>
               ))}
             </select>
           </label>
-          <p className="assistant-compact-note">
-            {t("assistant.providerArchitectureShort")} · {t("assistant.providerRequestDisclosureShort")}
-            <HoverHint label={selectedProvider ? `${t("assistant.providerArchitecture")} ${t("assistant.providerRequestDisclosure")}` : t("assistant.providerArchitecture")} />
-          </p>
-          <button
-            type="button"
-            className="secondary-action assistant-wide-action"
-            onClick={() => {
-              setCustomDisplayName("");
-              setCustomEndpoint("");
-              setCustomAuthKind("api_key");
-              setManualModelsInput("");
-              setCustomProfileOpen(true);
-            }}
-            disabled={busy}
-          >
-            {t("assistant.newCustomProvider")}
-          </button>
-        </section>
-      ) : null}
-
-      {customProfileOpen ? (
-        <section className="assistant-provider-config" aria-labelledby="assistant-custom-provider-title">
-          <h3 id="assistant-custom-provider-title">{t("assistant.customProfile")}</h3>
-          <label className="assistant-field">
-            <span>{t("assistant.providerDisplayName")}</span>
-            <input type="text" value={customDisplayName} maxLength={80} autoComplete="off" onChange={(event) => setCustomDisplayName(event.target.value)} />
-          </label>
-          <label className="assistant-field">
-            <span>{t("assistant.providerEndpoint")}</span>
-            <input type="url" value={customEndpoint} maxLength={2048} autoComplete="off" placeholder="https://provider.example/v1/" onChange={(event) => setCustomEndpoint(event.target.value)} />
-          </label>
-          <label className="assistant-field">
-            <span>{t("assistant.providerAuthKind")}</span>
-            <select value={customAuthKind} onChange={(event) => setCustomAuthKind(event.target.value as "api_key" | "none")}>
-              <option value="api_key">{t("assistant.apiKeyAuth")}</option>
-              <option value="none">{t("assistant.noKeyAuth")}</option>
-            </select>
-          </label>
-          <details className="assistant-advanced">
-            <summary>{t("assistant.advancedSettings")}</summary>
-            <label className="assistant-field">
-              <span>{t("assistant.manualModels")}</span>
-              <textarea rows={3} maxLength={10_000} value={manualModelsInput} autoComplete="off" onChange={(event) => setManualModelsInput(event.target.value)} placeholder={t("assistant.manualModelsHint")} />
-            </label>
-          </details>
-          <div className="assistant-actions compact-actions">
-            <button type="button" className="primary-action" onClick={createCustomProvider} disabled={busy || !customEndpoint.trim()}>{t("assistant.saveProvider")}</button>
-            <button type="button" className="secondary-action" onClick={() => setCustomProfileOpen(false)} disabled={busy}>{t("assistant.cancelEdit")}</button>
-          </div>
         </section>
       ) : null}
 
@@ -337,12 +193,13 @@ export function CodexAssistantPanel({
         />
       ) : <>
 
+      <AssistantIntentSelector value={state.intent} disabled={busy} onChange={onIntentChange} />
+
       <div className={`assistant-status assistant-status-${state.status}`} role="status" aria-live="polite">
-        <strong>{isCodexProvider ? t(`assistant.status.${state.status}`) : t(providerConfigured ? "assistant.providerReady" : "assistant.providerNotConfigured")}</strong>
-        {cliProbe?.version ? <span>{t("assistant.cliVersion", { version: cliProbe.version })}</span> : null}
+        <strong>{isCodexProvider ? t(`assistant.status.${state.status}`) : t(providerConnectionFailed ? "journeys.settings.providerConnectionFailed" : providerConfigured ? "assistant.providerReady" : "assistant.providerNotConfigured")}</strong>
         {isCodexProvider && state.connection?.account.authenticated ? (
           <span>{t("assistant.planConnected", { plan: state.connection.account.plan_type ?? t("assistant.planUnknown") })}</span>
-        ) : isCodexProvider && connected ? <code>codex login</code> : selectedProvider ? <span>{t("assistant.providerConnected")}</span> : null}
+        ) : isCodexProvider && connected ? <code>codex login</code> : selectedProvider && providerConfigured && !providerConnectionFailed ? <span>{t("assistant.providerConnected")}</span> : null}
       </div>
 
       <div className="assistant-actions compact-actions">
@@ -368,10 +225,10 @@ export function CodexAssistantPanel({
           </>
         ) : (
           <>
-            <button type="button" className="secondary-action" onClick={onProviderTest} disabled={busy}>
+            <button type="button" className="secondary-action" onClick={onProviderTest} disabled={busy || !providerConfigured}>
               <Link2 size={15} />{t("assistant.testProvider")}
             </button>
-            <button type="button" className="secondary-action" onClick={onProviderRefreshModels} disabled={busy}>
+            <button type="button" className="secondary-action" onClick={onProviderRefreshModels} disabled={busy || !providerConfigured}>
               <RefreshCw size={15} />{t("assistant.refreshModels")}
             </button>
           </>
@@ -411,114 +268,6 @@ export function CodexAssistantPanel({
         </p>
       ) : null}
 
-      {isCodexProvider && connected ? (
-        <section className="assistant-provider-config" aria-labelledby="assistant-codex-auth-title">
-          <h3 id="assistant-codex-auth-title">{t("assistant.codexAuthentication")}</h3>
-          <div className="assistant-actions compact-actions">
-            <button type="button" className="secondary-action" onClick={onCodexDeviceLogin} disabled={busy || Boolean(state.providerLogin)}>
-              {t("assistant.deviceLogin")}
-            </button>
-            <button type="button" className="secondary-action" onClick={onCodexLogout} disabled={busy}>
-              {t("assistant.logout")}
-            </button>
-          </div>
-          <label className="assistant-field">
-            <span>{t("assistant.codexApiKey")}</span>
-            <input
-              type="password"
-              value={apiKeyInput}
-              autoComplete="off"
-              onChange={(event) => setApiKeyInput(event.target.value)}
-              placeholder={t("assistant.writeOnlyKey")}
-              disabled={busy || Boolean(state.providerLogin)}
-            />
-          </label>
-          <button type="button" className="secondary-action assistant-wide-action" onClick={() => { onCodexApiKeyLogin(apiKeyInput); setApiKeyInput(""); }} disabled={busy || !apiKeyInput || Boolean(state.providerLogin)}>
-            {t("assistant.apiKeyLogin")}
-          </button>
-          {state.providerLogin ? (
-            <div className="assistant-login-note" role="status">
-              <p>{t("assistant.deviceLoginPending")}</p>
-              {state.providerLogin.verification_url ? <p><code>{state.providerLogin.verification_url}</code></p> : null}
-              {state.providerLogin.user_code ? <p><strong>{state.providerLogin.user_code}</strong></p> : null}
-              <button type="button" className="secondary-action" onClick={onCodexCancelLogin} disabled={busy}>{t("assistant.cancelLogin")}</button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {!isCodexProvider && selectedProvider ? (
-        <details className="assistant-advanced assistant-provider-details">
-          <summary>{t("assistant.providerConfiguration")}</summary>
-        <section className="assistant-provider-config" aria-labelledby="assistant-provider-secret-title">
-          <h3 id="assistant-provider-secret-title">{t("assistant.providerConfiguration")}</h3>
-          {selectedProvider.built_in ? <p className="assistant-compact-note">{t("assistant.officialCatalogShort")} <HoverHint label={t("assistant.officialCatalogHint")} /></p> : null}
-          <details className="assistant-advanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
-            <summary>{t("assistant.advancedSettings")}</summary>
-            {selectedProvider.built_in ? (
-              <label className="assistant-field">
-                <span>{t("assistant.providerEndpoint")}</span>
-                <input type="url" value={selectedProvider.base_url ?? ""} readOnly aria-readonly="true" />
-              </label>
-            ) : (
-              <>
-                <label className="assistant-field">
-                  <span>{t("assistant.providerDisplayName")}</span>
-                  <input type="text" value={customDisplayName} maxLength={80} autoComplete="off" onChange={(event) => setCustomDisplayName(event.target.value)} />
-                </label>
-                <label className="assistant-field">
-                  <span>{t("assistant.providerEndpoint")}</span>
-                  <input type="url" value={customEndpoint} maxLength={2048} autoComplete="off" onChange={(event) => setCustomEndpoint(event.target.value)} />
-                </label>
-                <label className="assistant-field">
-                  <span>{t("assistant.providerAuthKind")}</span>
-                  <select value={customAuthKind} onChange={(event) => setCustomAuthKind(event.target.value as "api_key" | "none")}>
-                    <option value="api_key">{t("assistant.apiKeyAuth")}</option>
-                    <option value="none">{t("assistant.noKeyAuth")}</option>
-                  </select>
-                </label>
-                <label className="assistant-field">
-                  <span>{t("assistant.manualModels")}</span>
-                  <textarea rows={3} maxLength={10_000} value={manualModelsInput} autoComplete="off" onChange={(event) => setManualModelsInput(event.target.value)} placeholder={t("assistant.manualModelsHint")} />
-                </label>
-                <button type="button" className="secondary-action assistant-wide-action" onClick={saveProviderConfiguration} disabled={busy || !customDisplayName.trim() || !customEndpoint.trim()}>{t("assistant.saveProvider")}</button>
-                <button type="button" className="secondary-action assistant-wide-action" onClick={() => { if (window.confirm(t("assistant.confirmDeleteProvider"))) onProviderDelete(); }} disabled={busy}>{t("assistant.deleteProvider")}</button>
-                <div className="assistant-field">
-                  <span>{t("assistant.manualModels")}</span>
-                  {manualModels.length ? <div className="assistant-actions compact-actions">{manualModels.map((modelId) => <button key={modelId} type="button" className="secondary-action" onClick={() => removeManualModel(modelId)} disabled={busy}>{modelId}<X size={13} aria-label={t("assistant.removeManualModel")} /></button>)}</div> : <p className="assistant-safe-note">{t("assistant.noManualModels")}</p>}
-                  <div className="assistant-actions compact-actions">
-                    <input type="text" value={manualModelInput} maxLength={160} autoComplete="off" placeholder={t("assistant.manualModelPlaceholder")} onChange={(event) => setManualModelInput(event.target.value)} />
-                    <button type="button" className="secondary-action" onClick={saveManualModel} disabled={busy || !manualModelInput.trim()}>{t("assistant.addManualModel")}</button>
-                  </div>
-                </div>
-                {advancedModels.length ? <p className="assistant-safe-note">{t("assistant.unverifiedModels", { count: advancedModels.length })}</p> : null}
-              </>
-            )}
-          </details>
-          {selectedProvider.auth_kind === "api_key" ? (
-            <>
-              <label className="assistant-field">
-                <span>{t("assistant.providerApiKey")}</span>
-                <input
-                  type="password"
-                  value={providerSecretInput}
-                  autoComplete="off"
-                  onChange={(event) => setProviderSecretInput(event.target.value)}
-                  placeholder={selectedProvider.secret_state === "present" ? t("assistant.keyAlreadyConfigured") : t("assistant.writeOnlyKey")}
-                  disabled={busy}
-                />
-              </label>
-              <div className="assistant-actions compact-actions">
-                <button type="button" className="secondary-action" onClick={() => { onProviderSecret(providerSecretInput); setProviderSecretInput(""); }} disabled={busy || !providerSecretInput}>{t("assistant.saveProviderKey")}</button>
-                <button type="button" className="secondary-action" onClick={() => { if (window.confirm(t("assistant.confirmClearProviderKey"))) onProviderClearSecret(); }} disabled={busy || selectedProvider.secret_state !== "present"}>{t("assistant.clearProviderKey")}</button>
-              </div>
-            </>
-          ) : <p className="assistant-safe-note">{t("assistant.noKeyRequired")}</p>}
-          {!selectedProvider.catalog_verified ? <p className="assistant-compact-note assistant-catalog-warning">{t("assistant.catalogUnverifiedShort")} <HoverHint label={t("assistant.catalogUnverified")} /></p> : null}
-        </section>
-        </details>
-      ) : null}
-
       {connected ? (
         <>
           <label className="assistant-field">
@@ -548,19 +297,24 @@ export function CodexAssistantPanel({
             </select>
           </label> : null}
 
-          <fieldset className="assistant-scopes" disabled={!ready || busy}>
-            <legend>{t("assistant.contextScopes")}</legend>
-            {SCOPES.map((scope) => (
-              <label key={scope}>
-                <input
-                  type="checkbox"
-                  checked={state.scopes.includes(scope)}
-                  onChange={() => onScopeToggle(scope)}
-                />
-                <span>{t(`assistant.scopes.${scope}`)}</span>
-              </label>
-            ))}
-          </fieldset>
+          <details className="assistant-advanced">
+            <summary>{t("assistant.contextScopes")}</summary>
+            <fieldset className="assistant-scopes" disabled={!ready || busy}>
+              <legend className="sr-only">{t("assistant.contextScopes")}</legend>
+              {SCOPES.map((scope) => (
+                <label key={scope}>
+                  <input
+                    type="checkbox"
+                    checked={state.scopes.includes(scope)}
+                    onChange={() => onScopeToggle(scope)}
+                  />
+                  <span>{t(`assistant.scopes.${scope}`)}</span>
+                </label>
+              ))}
+            </fieldset>
+          </details>
+
+          <AssistantContextReceiptView receipt={receipt} preview={state.previewExpanded ? state.preview : null} />
 
           <button
             type="button"
@@ -576,19 +330,7 @@ export function CodexAssistantPanel({
             {state.preview ? t("assistant.previewConfirmed") : t("assistant.previewRequired")}
           </p>
 
-          {state.preview && state.previewExpanded ? (
-            <section id="ai-context-preview" className="assistant-preview" aria-labelledby="ai-context-preview-title">
-              <h3 id="ai-context-preview-title">{t("assistant.previewTitle")}</h3>
-              <dl>
-                <div><dt>{t("assistant.boundRevision")}</dt><dd>{state.preview.revision_number}</dd></div>
-                <div><dt>{t("assistant.boundZone")}</dt><dd>{state.preview.zone_name}</dd></div>
-              </dl>
-              <p>{t("assistant.includedScopes")}: {state.preview.included_scopes.map((scope) => t(`assistant.scopes.${scope}`)).join(", ")}</p>
-              <p>{t("assistant.excludedScopes")}: {state.preview.excluded_scopes.map((scope) => t(`assistant.scopes.${scope}`)).join(", ")}</p>
-              <pre>{JSON.stringify(state.preview.payload, null, 2)}</pre>
-              <p className="assistant-safe-note">{t("assistant.previewBoundary")}</p>
-            </section>
-          ) : null}
+          {state.preview && state.previewExpanded ? <p id="ai-context-preview" className="assistant-safe-note">{t("assistant.previewBoundary")}</p> : null}
 
           {contextAvailable ? (
             <section className="assistant-archive" aria-labelledby="ai-archive-title">
@@ -749,34 +491,7 @@ export function CodexAssistantPanel({
           </div>
 
           {state.status === "generating" ? <p className="assistant-progress" role="status">{t("assistant.generating")}</p> : null}
-          {liveConversation.length > 0 ? (
-            <section className="assistant-conversation" aria-labelledby="ai-conversation-title">
-              <h3 id="ai-conversation-title">{t("assistant.conversation")}</h3>
-              {liveConversation.map((entry, index) => (
-                <article className="assistant-answer" key={entry.turn_id}>
-                  <h4>{t("assistant.turn", { number: index + 1 })}</h4>
-                  <section>
-                    <h5>{t("assistant.completedQuestion")}</h5>
-                    <p>{entry.question}</p>
-                  </section>
-                  <section><h5>{t("assistant.facts")}</h5><ul>{entry.answer.deterministic_facts.map((item) => <li key={item}>{item}</li>)}</ul></section>
-                  <section><h5>{t("assistant.interpretation")}</h5><p>{entry.answer.interpretation}</p></section>
-                  <section><h5>{t("assistant.limitations")}</h5><ul>{entry.answer.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>
-                  {entry.answer.suggested_questions.length > 0 ? (
-                    <section><h5>{t("assistant.suggestedQuestions")}</h5><ul>{entry.answer.suggested_questions.map((item) => <li key={item}>{item}</li>)}</ul></section>
-                  ) : null}
-                  {entry.answer.semantic_patch ? (
-                    <section className="assistant-semantic-patch">
-                      <h5>{t("assistant.semanticPatchTitle")}</h5>
-                      <p>{t("assistant.semanticPatchSummary", { count: entry.answer.semantic_patch.operations.length })}</p>
-                      <button type="button" className="secondary-action" onClick={() => onUseSemanticPatch(entry.answer.semantic_patch!)}>{t("assistant.reviewSemanticPatch")}</button>
-                    </section>
-                  ) : null}
-                  <p className="assistant-safe-note">{t("assistant.factsCaveat")}</p>
-                </article>
-              ))}
-            </section>
-          ) : null}
+          <AssistantConversation entries={liveConversation} snapshot={semanticSnapshot} onReviewPatch={onUseSemanticPatch} />
         </>
       ) : null}
 

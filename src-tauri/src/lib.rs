@@ -30,6 +30,8 @@ pub fn run() {
             zone_bridge::export_active_project_draft_copy,
             zone_bridge::select_and_extract_zone_air_state,
             zone_bridge::extract_active_run_zone_air_state,
+            zone_bridge::extract_active_run_zone_air_state_dataset,
+            zone_bridge::cancel_zone_result_dataset,
             zone_bridge::export_active_zone_air_state_csv,
             zone_bridge::run_active_contam_project,
             zone_bridge::attachment_center::select_and_import_attachments,

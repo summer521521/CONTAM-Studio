@@ -2,7 +2,10 @@ use std::sync::atomic::AtomicBool;
 
 use serde_json::{json, Value};
 
-use crate::codex_app_server::{validate_answer, AiTokenUsageView, StructuredAiAnswer};
+use crate::codex_app_server::{
+    openai_strict_structured_ai_answer_schema, validate_answer, AiTokenUsageView,
+    StructuredAiAnswer,
+};
 
 use super::{
     auth_for_profile, endpoint_url, profile_base_url, AiProviderCompletion, AiProviderError,
@@ -35,7 +38,7 @@ pub(crate) async fn complete(
                 "type": "json_schema",
                 "name": "contam_studio_structured_answer",
                 "strict": true,
-                "schema": answer_schema()
+                 "schema": openai_strict_structured_ai_answer_schema()
             }
         }
     });
@@ -77,21 +80,6 @@ fn history_json(entry: &AiProviderHistoryItem) -> Value {
     json!({
         "question": entry.question,
         "answer": entry.answer,
-    })
-}
-
-fn answer_schema() -> Value {
-    json!({
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-            "deterministic_facts": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
-            "interpretation": {"type": "string", "maxLength": 4000},
-            "limitations": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
-            "suggested_questions": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
-            "semantic_patch": {"type": ["object", "null"]}
-        },
-        "required": ["deterministic_facts", "interpretation", "limitations", "suggested_questions", "semantic_patch"]
     })
 }
 

@@ -17,6 +17,11 @@ from .prj_sections import read_prj_sections
 from .contamx_runner import ContamXRunnerError, run_contamx
 from .prj_zone_models import ReaderDiagnostic
 from .prj_zone_reader import PrjZoneReaderError, read_simple_zones
+from .spatial_projection import (
+    SpatialProjectionError,
+    project_spatial,
+    unavailable_spatial_projection,
+)
 from .zone_patch_models import (
     PatchPreconditions,
     PatchPreview,
@@ -755,11 +760,27 @@ def handle_request(payload: object) -> dict[str, object]:
             if not isinstance(request, dict) or set(request) not in (
                 {"protocol_version", "request_id", "operation", "source_path"},
                 {"protocol_version", "request_id", "operation", "source_path", "baseline_sha256"},
+                {"protocol_version", "request_id", "operation", "source_path", "revision_id"},
+                {
+                    "protocol_version",
+                    "request_id",
+                    "operation",
+                    "source_path",
+                    "baseline_sha256",
+                    "revision_id",
+                },
             ):
                 _fail_request("bridge_request_invalid", "request结构无效。", request_id)
             source_path = Path(_require_string(request["source_path"], "source_path", request_id))
             document = read_simple_zones(source_path)
             identity_sha256 = _semantic_identity(request, document.source_sha256, request_id)
+            revision_id = _require_string(
+                request.get("revision_id", "baseline"),
+                "revision_id",
+                request_id,
+                max_length=64,
+                ascii_only=True,
+            )
             projection = None
             try:
                 projection = project_levels_and_zones(document)
@@ -867,6 +888,67 @@ def handle_request(payload: object) -> dict[str, object]:
                     }
                     for number, identifiers in sorted(by_level.items())
                 ]
+            flow_path_views = (
+                []
+                if compatibility.airflow is None
+                else [
+                    {
+                        **item.to_dict(),
+                        "object_id": _semantic_object_id(
+                            identity_sha256,
+                            "flow-path",
+                            f"{item.contam_number}:{item.source_line_number}",
+                        ),
+                        "path_id": _semantic_object_id(
+                            identity_sha256,
+                            "flow-path",
+                            f"{item.contam_number}:{item.source_line_number}",
+                        ),
+                        "object_kind": "FlowPath",
+                        "section": "Flow Paths",
+                        "source_sha256": document.source_sha256,
+                        "source_span": source_span(item.source_line_number),
+                        "editable": item.capability == "inspect",
+                        "fields": {
+                            "multiplier": item.multiplier,
+                            "flags": item.flags,
+                            "direction": item.direction,
+                        },
+                        "capabilities": {
+                            "multiplier": {
+                                "state": "editable_via_patch"
+                                if item.capability == "inspect"
+                                else "read_only",
+                                "unit": "1",
+                            },
+                            "flags": {"state": "read_only", "unit": None},
+                            "direction": {"state": "read_only", "unit": None},
+                        },
+                    }
+                    for item in compatibility.airflow.paths
+                ]
+            )
+            try:
+                spatial_projection = project_spatial(
+                    sections,
+                    identity_sha256=identity_sha256,
+                    revision_id=revision_id,
+                    zone_semantic_ids={
+                        int(item["contam_number"]): str(item["object_id"])
+                        for item in zone_views
+                    },
+                    flow_path_semantic_ids={
+                        int(item["contam_number"]): str(item["object_id"])
+                        for item in flow_path_views
+                    },
+                )
+            except SpatialProjectionError as error:
+                spatial_projection = unavailable_spatial_projection(
+                    identity_sha256,
+                    document.source_sha256,
+                    revision_id,
+                    error.code,
+                )
             return _success_envelope(
                 request_id,
                 {
@@ -890,44 +972,8 @@ def handle_request(payload: object) -> dict[str, object]:
                     "levels": level_views,
                     "zones": zone_views,
                     "read_only_reason": projection_reason,
-                    "flow_paths": []
-                    if compatibility.airflow is None
-                    else [
-                        {
-                            **item.to_dict(),
-                            "object_id": _semantic_object_id(
-                                identity_sha256,
-                                "flow-path",
-                                f"{item.contam_number}:{item.source_line_number}",
-                            ),
-                            "path_id": _semantic_object_id(
-                                identity_sha256,
-                                "flow-path",
-                                f"{item.contam_number}:{item.source_line_number}",
-                            ),
-                            "object_kind": "FlowPath",
-                            "section": "Flow Paths",
-                            "source_sha256": document.source_sha256,
-                            "source_span": source_span(item.source_line_number),
-                            "editable": item.capability == "inspect",
-                            "fields": {
-                                "multiplier": item.multiplier,
-                                "flags": item.flags,
-                                "direction": item.direction,
-                            },
-                            "capabilities": {
-                                "multiplier": {
-                                    "state": "editable_via_patch"
-                                    if item.capability == "inspect"
-                                    else "read_only",
-                                    "unit": "1",
-                                },
-                                "flags": {"state": "read_only", "unit": None},
-                                "direction": {"state": "read_only", "unit": None},
-                            },
-                        }
-                        for item in compatibility.airflow.paths
-                    ],
+                    "flow_paths": flow_path_views,
+                    "spatial_projection": spatial_projection.to_dict(),
                     "flow_elements": []
                     if compatibility.airflow is None
                     else [item.to_dict() for item in compatibility.airflow.components],
@@ -1540,6 +1586,7 @@ def handle_request(payload: object) -> dict[str, object]:
                     "source_sha256",
                     "result_root",
                     "zone_number",
+                    "simread_path",
                 },
                 request_id,
             )
@@ -1556,9 +1603,10 @@ def handle_request(payload: object) -> dict[str, object]:
             )
             result_root = Path(_require_string(request["result_root"], "result_root", request_id))
             zone_number = _require_int(request["zone_number"], "zone_number", request_id)
+            simread_path = Path(_require_string(request["simread_path"], "simread_path", request_id))
             result = extract_zone_air_state(
                 manifest_path,
-                simread_path=None,
+                simread_path=simread_path,
                 result_root=result_root,
                 zone_number=zone_number,
                 expected_source_path=source_path,
@@ -1580,6 +1628,7 @@ def handle_request(payload: object) -> dict[str, object]:
                     "source_path",
                     "source_sha256",
                     "run_root",
+                    "solver_path",
                 },
                 request_id,
             )
@@ -1592,8 +1641,10 @@ def handle_request(payload: object) -> dict[str, object]:
                 ascii_only=True,
             )
             run_root = Path(_require_string(request["run_root"], "run_root", request_id))
+            solver_path = Path(_require_string(request["solver_path"], "solver_path", request_id))
             run = run_contamx(
                 source_path,
+                solver=solver_path,
                 run_root=run_root,
                 expected_source_path=source_path,
                 expected_source_sha256=source_sha256,

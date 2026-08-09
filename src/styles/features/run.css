@@ -1,0 +1,126 @@
+/* Run controls and solver status belong to this layer. */
+
+.run-object,
+.run-current-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.run-object {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  margin-top: 10px;
+}
+
+.run-object > span,
+.run-object > small,
+.run-current-status span {
+  color: var(--text-supporting);
+}
+
+.run-preflight {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-top: 22px;
+  padding: 18px 20px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.run-preflight > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.run-preflight > div > div {
+  display: grid;
+  gap: 3px;
+}
+
+.run-preflight .is-ready > svg {
+  color: var(--success);
+}
+
+.run-preflight .is-blocked > svg {
+  color: var(--warning);
+}
+
+@media (max-width: 720px) {
+  .run-object {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .run-preflight,
+  .run-current-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+/* Migrated from the R1 compatibility sheet; ownership: run. */
+.run-summary {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px;
+  min-width: 0;
+}
+
+.run-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.run-summary-heading p,
+.run-next-note {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+}
+
+.run-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.run-summary-grid div {
+  min-width: 0;
+}
+
+.run-summary-grid dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.run-summary-grid dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.run-notice {
+  padding: 7px 9px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-surface-subtle);
+}
+
+.run-notice.is-error {
+  border-left-color: var(--error);
+}
+
+.spin {
+  animation: run-spin 1s linear infinite;
+}
+
+@keyframes run-spin {
+  to { transform: rotate(360deg); }
+}

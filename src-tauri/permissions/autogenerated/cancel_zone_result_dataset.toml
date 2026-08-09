@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cancel-zone-result-dataset"
+description = "Enables the cancel_zone_result_dataset command without any pre-configured scope."
+commands.allow = ["cancel_zone_result_dataset"]
+
+[[permission]]
+identifier = "deny-cancel-zone-result-dataset"
+description = "Denies the cancel_zone_result_dataset command without any pre-configured scope."
+commands.deny = ["cancel_zone_result_dataset"]

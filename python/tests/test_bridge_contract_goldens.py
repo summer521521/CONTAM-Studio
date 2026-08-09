@@ -164,6 +164,7 @@ def test_run_bridge_envelope_matches_deterministic_dataclass_golden(tmp_path: Pa
             "run_root": str(run_root),
             "source_path": str(TRACKED_PRJ),
             "source_sha256": "a" * 64,
+            "solver_path": str(tmp_path / "contamx3.exe"),
         }
     )
     _assert_golden(
@@ -231,6 +232,7 @@ def test_extract_bridge_envelope_matches_deterministic_result_golden(tmp_path: P
             "source_path": str(TRACKED_PRJ),
             "source_sha256": "e" * 64,
             "zone_number": 1,
+            "simread_path": str(tmp_path / "simread.exe"),
         }
     )
     _assert_golden(

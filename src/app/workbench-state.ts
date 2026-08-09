@@ -1,11 +1,13 @@
+import { DEFAULT_VISUAL_PREFERENCES, type VisualWorkspacePreferences } from "./spatial-model";
+
 export type AppLanguage = "zh-CN" | "en";
 export type AppTheme = "light" | "dark";
 export type ContextTab = "inspector" | "assistant";
 export type BottomTab = "problems" | "logs" | "results";
-export type WorkbenchDestination = "project" | "search" | "run" | "results" | "studies" | "settings";
+export type WorkbenchDestination = "project" | "run" | "results" | "studies" | "settings";
 
 export interface WorkbenchState {
-  version: 2;
+  version: 4;
   language: AppLanguage;
   theme: AppTheme;
   projectSize: number;
@@ -16,22 +18,26 @@ export interface WorkbenchState {
   bottomCollapsed: boolean;
   contextTab: ContextTab;
   bottomTab: BottomTab;
+  visualWorkspace: VisualWorkspacePreferences;
 }
 
-export const WORKBENCH_STORAGE_KEY = "contam-studio:workbench:v2";
+export const WORKBENCH_STORAGE_KEY = "contam-studio:workbench:v4";
+export const PREVIOUS_WORKBENCH_STORAGE_KEY = "contam-studio:workbench:v3";
+export const LEGACY_WORKBENCH_STORAGE_KEY = "contam-studio:workbench:v2";
 
 export const DEFAULT_WORKBENCH_STATE: WorkbenchState = {
-  version: 2,
+  version: 4,
   language: "zh-CN",
   theme: "light",
-  projectSize: 20,
-  contextSize: 23,
-  bottomSize: 31,
+  projectSize: 21,
+  contextSize: 24,
+  bottomSize: 30,
   projectCollapsed: false,
   contextCollapsed: false,
   bottomCollapsed: true,
   contextTab: "inspector",
   bottomTab: "problems",
+  visualWorkspace: DEFAULT_VISUAL_PREFERENCES,
 };
 
 export type ProjectActivityAction = "navigate" | "toggle";
@@ -73,25 +79,65 @@ function safeSize(value: unknown, fallback: number, min: number, max: number): n
     : fallback;
 }
 
-export function loadWorkbenchState(): WorkbenchState {
-  try {
-    const raw = localStorage.getItem(WORKBENCH_STORAGE_KEY);
-    if (!raw) return DEFAULT_WORKBENCH_STATE;
+function loadVisualPreferences(value: unknown): VisualWorkspacePreferences {
+  if (!isRecord(value) || !isRecord(value.layers)) return DEFAULT_VISUAL_PREFERENCES;
+  const layers = value.layers;
+  const booleanLayer = (key: keyof VisualWorkspacePreferences["layers"]) => (
+    typeof layers[key] === "boolean" ? layers[key] : DEFAULT_VISUAL_PREFERENCES.layers[key]
+  );
+  return {
+    mode: isOneOf(value.mode, ["sketchpad", "topology"])
+      ? value.mode
+      : DEFAULT_VISUAL_PREFERENCES.mode,
+    layers: {
+      walls: booleanLayer("walls"),
+      zones: booleanLayer("zones"),
+      flowPaths: booleanLayer("flowPaths"),
+      labels: booleanLayer("labels"),
+      grid: booleanLayer("grid"),
+      otherIcons: booleanLayer("otherIcons"),
+      lowerLevelReference: booleanLayer("lowerLevelReference"),
+    },
+  };
+}
 
-    const value: unknown = JSON.parse(raw);
-    if (!isRecord(value) || value.version !== 2) return DEFAULT_WORKBENCH_STATE;
+type WorkbenchStorage = Pick<Storage, "getItem" | "setItem">;
+
+export function loadWorkbenchState(storageOverride?: WorkbenchStorage): WorkbenchState {
+  try {
+    const storage = storageOverride ?? (typeof localStorage === "undefined" ? null : localStorage);
+    if (!storage) return DEFAULT_WORKBENCH_STATE;
+    const raw = storage.getItem(WORKBENCH_STORAGE_KEY);
+    const previousRaw = raw ? null : storage.getItem(PREVIOUS_WORKBENCH_STORAGE_KEY);
+    const legacyRaw = raw || previousRaw ? null : storage.getItem(LEGACY_WORKBENCH_STORAGE_KEY);
+    const serialized = raw ?? previousRaw ?? legacyRaw;
+    if (!serialized) return DEFAULT_WORKBENCH_STATE;
+
+    const value: unknown = JSON.parse(serialized);
+    if (!isRecord(value) || ![2, 3, 4].includes(value.version as number)) {
+      return DEFAULT_WORKBENCH_STATE;
+    }
+    const migratedPanelGeometry = value.version === 2;
 
     return {
-      version: 2,
+      version: 4,
       language: isOneOf(value.language, ["zh-CN", "en"])
         ? value.language
         : DEFAULT_WORKBENCH_STATE.language,
       theme: isOneOf(value.theme, ["light", "dark"])
         ? value.theme
         : DEFAULT_WORKBENCH_STATE.theme,
-      projectSize: safeSize(value.projectSize, DEFAULT_WORKBENCH_STATE.projectSize, 14, 32),
-      contextSize: safeSize(value.contextSize, DEFAULT_WORKBENCH_STATE.contextSize, 18, 34),
-      bottomSize: safeSize(value.bottomSize, DEFAULT_WORKBENCH_STATE.bottomSize, 18, 45),
+      // R1-02 changes the shell geometry. Old panel percentages are deliberately
+      // reset while durable preferences and valid collapsed/tab choices migrate.
+      projectSize: migratedPanelGeometry
+        ? DEFAULT_WORKBENCH_STATE.projectSize
+        : safeSize(value.projectSize, DEFAULT_WORKBENCH_STATE.projectSize, 16, 32),
+      contextSize: migratedPanelGeometry
+        ? DEFAULT_WORKBENCH_STATE.contextSize
+        : safeSize(value.contextSize, DEFAULT_WORKBENCH_STATE.contextSize, 19, 34),
+      bottomSize: migratedPanelGeometry
+        ? DEFAULT_WORKBENCH_STATE.bottomSize
+        : safeSize(value.bottomSize, DEFAULT_WORKBENCH_STATE.bottomSize, 18, 44),
       projectCollapsed:
         typeof value.projectCollapsed === "boolean"
           ? value.projectCollapsed
@@ -110,15 +156,19 @@ export function loadWorkbenchState(): WorkbenchState {
       bottomTab: isOneOf(value.bottomTab, ["problems", "logs", "results"])
         ? value.bottomTab
         : DEFAULT_WORKBENCH_STATE.bottomTab,
+      visualWorkspace: value.version === 4
+        ? loadVisualPreferences(value.visualWorkspace)
+        : DEFAULT_VISUAL_PREFERENCES,
     };
   } catch {
     return DEFAULT_WORKBENCH_STATE;
   }
 }
 
-export function saveWorkbenchState(state: WorkbenchState): void {
+export function saveWorkbenchState(state: WorkbenchState, storageOverride?: WorkbenchStorage): void {
   try {
-    localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify(state));
+    const storage = storageOverride ?? (typeof localStorage === "undefined" ? null : localStorage);
+    storage?.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // The shell remains usable when local storage is unavailable.
   }

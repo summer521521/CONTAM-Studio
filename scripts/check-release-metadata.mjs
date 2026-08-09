@@ -8,9 +8,13 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const packageJson = JSON.parse(read("package.json"));
 const tauri = JSON.parse(read("src-tauri/tauri.conf.json"));
 const cargo = read("src-tauri/Cargo.toml");
+const python = read("python/pyproject.toml");
 const cargoVersion = cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
-if (!packageJson.version || !cargoVersion || !tauri.version) failures.push("missing version source");
-for (const [label, value] of [["Cargo", cargoVersion], ["Tauri", tauri.version]]) {
+const pythonVersion = python.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+if (!packageJson.version || !pythonVersion || !cargoVersion || !tauri.version) failures.push("missing version source");
+if (!semverPattern.test(String(packageJson.version))) failures.push(`package version ${packageJson.version} is not valid SemVer`);
+for (const [label, value] of [["Python", pythonVersion], ["Cargo", cargoVersion], ["Tauri", tauri.version]]) {
   if (value !== packageJson.version) failures.push(`${label} version ${value} does not match package ${packageJson.version}`);
 }
 if (tauri.productName !== "CONTAM Studio") failures.push("tauri productName must be CONTAM Studio");

@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
   font-family:
-    "Segoe UI", "Microsoft YaHei UI", "Noto Sans CJK SC", Arial, sans-serif;
+    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --bg-app: #eef2f5;
@@ -26,11 +26,20 @@
   --chart-pressure: #008b83;
   --chart-density: #b96700;
   --focus: #2684ff;
-  --toolbar-height: 56px;
-  --activity-width: 64px;
-  --status-height: 28px;
-  --radius: 10px;
-  --radius-sm: 7px;
+  --visual-canvas-bg: #f2f6f8;
+  --visual-grid: #d7e0e6;
+  --visual-wall: #53636f;
+  --visual-zone: #1c5f9e;
+  --visual-zone-fill: #e4eff9;
+  --visual-flow: #607684;
+  --visual-boundary: #796b58;
+  --visual-selection: #0b6fc2;
+  --visual-selection-contrast: #ffffff;
+  --toolbar-height: 54px;
+  --activity-width: 56px;
+  --status-height: 26px;
+  --radius: 8px;
+  --radius-sm: 6px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -38,6 +47,30 @@
   --space-5: 20px;
   --space-6: 24px;
   --shadow-overlay: 0 12px 30px rgb(24 33 43 / 16%);
+
+  /* Stable semantic aliases. Legacy names remain for compatibility while
+     feature styles migrate without changing the existing visual contract. */
+  --surface-app: var(--bg-app);
+  --surface-default: var(--bg-surface);
+  --surface-subtle: var(--bg-surface-subtle);
+  --surface-muted: var(--bg-surface-muted);
+  --surface-navigation: var(--bg-activity);
+  --text-default: var(--text-primary);
+  --text-supporting: var(--text-secondary);
+  --text-secondary-muted: var(--text-muted);
+  --border-subtle: var(--border);
+  --border-emphasis: var(--border-strong);
+  --interactive-primary: var(--accent);
+  --interactive-primary-hover: var(--accent-hover);
+  --interactive-primary-soft: var(--accent-soft);
+  --focus-ring: var(--focus);
+  --control-height-sm: 30px;
+  --control-height-md: 34px;
+  --radius-md: var(--radius);
+  --radius-control: var(--radius-sm);
+  --motion-duration-fast: 120ms;
+  --motion-duration-standard: 180ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 :root[data-theme="dark"] {
@@ -64,5 +97,14 @@
   --chart-pressure: #4bc6ba;
   --chart-density: #f0b25b;
   --focus: #75b6ff;
+  --visual-canvas-bg: #20282e;
+  --visual-grid: #33414b;
+  --visual-wall: #a9b7c1;
+  --visual-zone: #73b3f5;
+  --visual-zone-fill: #243e56;
+  --visual-flow: #9badb9;
+  --visual-boundary: #d0b88f;
+  --visual-selection: #75b6ff;
+  --visual-selection-contrast: #111820;
   --shadow-overlay: 0 10px 26px rgb(0 0 0 / 36%);
 }

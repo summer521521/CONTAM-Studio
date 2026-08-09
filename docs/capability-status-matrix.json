@@ -2,27 +2,130 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-07-30T11:49:27Z",
+  "last_updated_utc": "2026-08-02T06:03:41Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
     "implemented": ["complete", "partial", "not_started", "unknown"],
     "automated_verified": ["passed", "partial", "not_run", "failed", "not_required", "unknown"],
-    "manual_gui": ["passed", "pending_user", "not_run", "not_required", "failed", "unknown"],
+    "manual_gui": ["passed", "partial", "pending_user", "not_run", "not_required", "failed", "unknown"],
     "merged_to_main": ["yes", "no", "unknown"],
     "packaged": ["yes", "no", "not_run", "unknown"],
     "user_validated": ["passed", "pending_user", "not_run", "not_required", "unknown"],
-    "released": ["yes", "no", "pending", "unknown"]
+    "released": ["yes", "no", "pending", "unknown"],
+    "github_windows_ci": ["passed", "pending_push", "not_run", "failed", "unknown"],
+    "real_provider": ["passed", "pending_user", "not_run", "failed", "unknown"],
+    "signed": ["passed", "unsigned", "pending_user", "not_run", "failed", "unknown"]
   },
   "rules": [
     "implemented不等于automated_verified、manual_gui、merged_to_main、packaged或user_validated。",
     "没有证据时使用unknown；明确未执行时使用not_run；不适用时使用not_required。",
     "Phase 6A的实现和自动检查已合并到main，但Beta-2本地档案GUI逐项验收仍保持pending_user。",
     "Phase 6B多Provider实现随main交付提交纳入；真实Provider、凭据、GUI和发布证据必须与自动契约/Mock证据分开记录。",
+    "Renewal R1 是当前研发事实源；历史 Phase、QA 和 Batch 记录只用于追溯，不再生成新的平行任务编号。",
+    "R1 工作包必须分别记录 GitHub Windows CI、真实 Provider、GUI、打包、签名、发布和用户验收状态。",
     "完整PRJ、分发和AI写入是能力边界行，不把未实现能力写成阶段完成。",
     "内部Python模型或契约测试通过不等于桌面产品已接入；没有Tauri命令、React入口和纵向证据时不得提升产品能力状态。"
   ],
   "capabilities": [
+    {
+      "id": "r1-01-foundation-reset",
+      "name": "Renewal R1-01 Foundation Reset：Windows CI、研发治理与前端基础",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/R1-visual-workbench/README.md",
+        "docs/development/task-log/records/r1-01-foundation-reset.md"
+      ]
+    },
+    {
+      "id": "r1-02-workbench-task-journeys",
+      "name": "Renewal R1-02 Workbench & Task Journeys：用户工作台与核心任务路径",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/R1-visual-workbench/README.md",
+        "docs/development/task-log/records/r1-02-workbench-task-journeys.md"
+      ]
+    },
+    {
+      "id": "r1-03-visual-model-workspace",
+      "name": "Renewal R1-03 Visual Model Workspace：可视化模型工作区",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/R1-visual-workbench/README.md",
+        "docs/development/task-log/records/r1-03-visual-model-workspace.md",
+        "docs/adr/ADR-019-read-only-visual-model-workspace.md",
+        "docs/architecture/spatial-model-workspace.md",
+        "scripts/tests/test-r1-03-visual-model-contract.mjs"
+      ]
+    },
+    {
+      "id": "r1-04-results-evidence-ai-experience",
+      "name": "Renewal R1-04 Results, Evidence & AI Experience：结果、证据与 AI 体验整合",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/R1-visual-workbench/README.md",
+        "docs/development/task-log/records/r1-04-results-evidence-ai-experience.md",
+        "docs/adr/ADR-020-bind-results-evidence-and-ai-context.md",
+        "docs/architecture/results-evidence-ai-experience.md",
+        "scripts/tests/test-r1-04-results-evidence-ai-contract.mjs"
+      ]
+    },
+    {
+      "id": "r1-05-final-uat-release-readiness",
+      "name": "Renewal R1-05 Final UAT & Release Readiness：最终用户验收与发布准备",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "partial",
+      "real_tools": "passed",
+      "real_provider": "failed",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "clean_machine": "not_run",
+      "signed": "unsigned",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/R1-visual-workbench/README.md",
+        "docs/development/task-log/records/r1-05-final-uat-release-readiness.md"
+      ]
+    },
     {
       "id": "phase-0-foundation",
       "name": "Phase 0项目文档与仓库基础",

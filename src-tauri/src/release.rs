@@ -444,6 +444,146 @@ fn resolve_tool(app: &AppHandle, kind: ToolKind, legacy_path: Option<&Path>) -> 
     tool_from_path(kind, legacy_path)
 }
 
+fn expected_tool_file_name(kind: &ToolKind) -> &'static str {
+    match kind {
+        ToolKind::Contamx => "contamx3.exe",
+        ToolKind::Simread => "simread.exe",
+    }
+}
+
+fn unavailable_tool_error(kind: &ToolKind, detail: Option<&str>) -> SetupError {
+    let (code, fallback) = match kind {
+        ToolKind::Contamx => (
+            "contamx_tool_verification_failed",
+            "内置ContamX未通过身份校验。请重新安装或查看诊断。",
+        ),
+        ToolKind::Simread => (
+            "simread_tool_verification_failed",
+            "内置SimRead未通过身份校验。请重新安装或查看诊断。",
+        ),
+    };
+    SetupError {
+        code: code.to_owned(),
+        message: detail.unwrap_or(fallback).to_owned(),
+    }
+}
+
+fn missing_tool_error(kind: &ToolKind) -> SetupError {
+    match kind {
+        ToolKind::Contamx => error(
+            "",
+            "contamx_solver_not_configured",
+            "未找到已验证的ContamX运行资源。请重新安装或查看诊断。",
+        ),
+        ToolKind::Simread => error(
+            "",
+            "simread_not_configured",
+            "未找到已验证的SimRead运行资源。请重新安装或查看诊断。",
+        ),
+    }
+}
+
+fn verified_tool_path_from_candidate(
+    kind: ToolKind,
+    candidate: &Path,
+    confined_root: Option<&Path>,
+) -> Result<PathBuf, SetupError> {
+    if !candidate.is_absolute() {
+        return Err(unavailable_tool_error(&kind, Some("工具身份校验失败。")));
+    }
+    let normalized = fs::canonicalize(candidate)
+        .map_err(|_| unavailable_tool_error(&kind, Some("工具身份校验失败。")))?;
+    if confined_root.is_some_and(|root| !is_path_within(root, &normalized)) {
+        return Err(unavailable_tool_error(
+            &kind,
+            Some("工具路径不在受控运行资源目录内。"),
+        ));
+    }
+    let expected_name = expected_tool_file_name(&kind);
+    if normalized
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_none_or(|value| !value.eq_ignore_ascii_case(expected_name))
+    {
+        return Err(unavailable_tool_error(
+            &kind,
+            Some("工具文件名不是已验证的官方名称。"),
+        ));
+    }
+    let lock = parse_contam_tools_lock()?;
+    let Some(lock_entry) = lock.files.iter().find(|entry| {
+        Path::new(&entry.file)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case(expected_name))
+    }) else {
+        return Err(unavailable_tool_error(
+            &kind,
+            Some("内置工具清单缺少所需程序。"),
+        ));
+    };
+    let actual = sha256_file(&normalized)?;
+    if !actual.eq_ignore_ascii_case(&lock_entry.sha256) {
+        return Err(unavailable_tool_error(
+            &kind,
+            Some("工具SHA-256身份校验失败。"),
+        ));
+    }
+    let state = tool_from_path(kind.clone(), Some(&normalized));
+    if state.status != ToolStatus::Available {
+        return Err(unavailable_tool_error(&kind, state.detail.as_deref()));
+    }
+    Ok(normalized)
+}
+
+/// Resolve only a Rust-validated tool path for internal worker requests.
+///
+/// This interface deliberately accepts no frontend path and never probes PATH
+/// or scans arbitrary disks. It uses the same bundled roots and lock/hash
+/// verification as the setup view, then permits only a legacy configured path
+/// that passes the exact same filename, hash, and version checks.
+pub(crate) fn resolve_verified_tool_path(
+    app: &AppHandle,
+    kind: ToolKind,
+) -> Result<PathBuf, SetupError> {
+    let mut first_error = None;
+    for root in bundled_tool_roots(app) {
+        if let Some(state) = bundled_tool_from_root(&root, kind.clone()) {
+            if state.status == ToolStatus::Available {
+                if let Some(path) = state.path.as_deref() {
+                    return verified_tool_path_from_candidate(
+                        kind.clone(),
+                        Path::new(path),
+                        Some(&root),
+                    );
+                }
+            } else if first_error.is_none()
+                && !matches!(
+                    state.status,
+                    ToolStatus::ResourceMissing
+                        | ToolStatus::NotConfigured
+                        | ToolStatus::PathMissing
+                )
+            {
+                first_error = Some(unavailable_tool_error(&kind, state.detail.as_deref()));
+            }
+        }
+    }
+
+    let legacy = read_config(app).map(|(_, _, _, _, contamx, simread)| match kind {
+        ToolKind::Contamx => contamx,
+        ToolKind::Simread => simread,
+    });
+    match legacy {
+        Ok(Some(path)) => match verified_tool_path_from_candidate(kind.clone(), &path, None) {
+            Ok(path) => Ok(path),
+            Err(error) => Err(first_error.unwrap_or(error)),
+        },
+        Ok(None) => Err(first_error.unwrap_or_else(|| missing_tool_error(&kind))),
+        Err(error) => Err(first_error.unwrap_or(error)),
+    }
+}
+
 fn runtime_info() -> RuntimeInfo {
     let commit_sha = option_env!("CONTAM_STUDIO_BUILD_SHA")
         .unwrap_or("unknown")
@@ -959,8 +1099,6 @@ pub fn save_studio_setup(
     language: String,
     theme: String,
     data_directory: String,
-    _contamx_path: Option<String>,
-    _simread_path: Option<String>,
 ) -> DesktopSetupResponse {
     if !valid_request(&request_id) {
         return response_error(request_id, "bridge_request_invalid", "request_id无效。");
@@ -1489,6 +1627,45 @@ mod tests {
         let mut roots = Vec::new();
         add_packaged_tool_root_variants(&mut roots, Path::new(r"F:\CONTAM Studio"));
         assert!(roots.contains(&PathBuf::from(r"F:\CONTAM Studio\runtime\contam-tools")));
+    }
+
+    #[test]
+    fn verified_tool_candidates_require_controlled_absolute_official_paths() {
+        let relative =
+            verified_tool_path_from_candidate(ToolKind::Contamx, Path::new("contamx3.exe"), None)
+                .expect_err("relative tool path must be rejected");
+        assert_eq!(relative.code, "contamx_tool_verification_failed");
+
+        let root = std::env::temp_dir().join(format!(
+            "contam-studio-tool-root-{}",
+            TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let outside = std::env::temp_dir().join(format!(
+            "contam-studio-tool-outside-{}",
+            TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).expect("controlled tool root");
+        fs::write(&outside, b"not an official binary").expect("outside candidate");
+        let escaped = verified_tool_path_from_candidate(ToolKind::Contamx, &outside, Some(&root))
+            .expect_err("path outside controlled root must be rejected");
+        assert_eq!(escaped.code, "contamx_tool_verification_failed");
+        assert!(!escaped
+            .message
+            .contains(&outside.to_string_lossy().to_string()));
+        let _ = fs::remove_file(outside);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn missing_contamx_and_simread_have_distinct_internal_errors() {
+        assert_eq!(
+            missing_tool_error(&ToolKind::Contamx).code,
+            "contamx_solver_not_configured"
+        );
+        assert_eq!(
+            missing_tool_error(&ToolKind::Simread).code,
+            "simread_not_configured"
+        );
     }
 
     #[test]

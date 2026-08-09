@@ -324,6 +324,11 @@ function Check-Docs {
     Invoke-Tool "Data lifecycle contract" "node" @("scripts\tests\test-data-lifecycle-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Data lifecycle mutations" "node" @("scripts\tests\test-data-lifecycle-contract-mutations.mjs", $Root) | Out-Null
     Invoke-Tool "Phase 6C user-first runtime contract" "node" @("scripts\tests\test-phase-6c-user-first-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "R1-01 foundation contract" "node" @("scripts\tests\test-r1-01-foundation-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "R1-02 workbench contract" "node" @("scripts\tests\test-r1-02-workbench-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "R1-03 visual model contract" "node" @("scripts\tests\test-r1-03-visual-model-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "R1-04 results evidence AI contract" "node" @("scripts\tests\test-r1-04-results-evidence-ai-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "R1-05 final UAT release readiness contract" "node" @("scripts\tests\test-r1-05-final-uat-release-readiness-contract.mjs", $Root) | Out-Null
 
     $markdownPaths = @(
         (Get-TrackedPaths "*.md")
@@ -491,6 +496,8 @@ function Check-Fast {
     Invoke-Tool "Frontend tests" "pnpm" @("test") | Out-Null
     Invoke-Tool "Rust tests" "cargo" @("test", "--locked") (Join-Path $Root "src-tauri") | Out-Null
     Invoke-Tool "NIST CONTAM tools acquisition script" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-contam-tools-script.ps1")) $Root | Out-Null
+    Invoke-Tool "NIST CONTAM temp-root contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-contam-temp-root.ps1"), "-RepoRoot", $Root) $Root | Out-Null
+    Invoke-Tool "NIST CONTAM redirected-process contract" "powershell.exe" @("-NoProfile", "-File", (Join-Path $Root "scripts\tests\test-contam-tools-redirected-process.ps1")) $Root | Out-Null
 }
 
 function Check-Full {

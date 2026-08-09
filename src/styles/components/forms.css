@@ -1,0 +1,21 @@
+.ui-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ui-field-label {
+  color: var(--text-supporting);
+  font-size: 0.875rem;
+}
+
+.ui-field-control {
+  min-height: var(--control-height-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  color: var(--text-default);
+  background: var(--surface-default);
+}
+
+.ui-field-control:focus-visible {
+  border-color: var(--interactive-primary);
+}

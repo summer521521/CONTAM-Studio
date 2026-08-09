@@ -24,6 +24,7 @@ import {
   type ZoneAirStateAnalysis,
 } from "../../app/zone-air-state-analysis";
 import type { ZoneAirStateChartHandle } from "./ZoneAirStateChart";
+import { Disclosure } from "../ui/Disclosure";
 
 const ZoneAirStateChart = lazy(async () => {
   const module = await import("./ZoneAirStateChart");
@@ -253,13 +254,8 @@ export function ZoneAirStateResults({
           <span>{exportStatus.text}</span>
         </div>
       ) : null}
-      <p className="results-source">
-        {t("results.sourceLabel")}: {t(state.resultSource === "active_run" ? "results.sourceActiveRun" : "results.sourceSelectedManifest")}
-      </p>
       <div className="results-summary-grid">
         <div><span>{t("results.zone")}</span><strong>{result.zone_name} · {result.zone_number}</strong></div>
-        <div><span>{t("results.runId")}</span><strong><code>{result.run_id}</code></strong></div>
-        <div><span>{t("results.extractionId")}</span><strong><code>{result.extraction_id}</code></strong></div>
         <div><span>{t("results.sampleCount")}</span><strong>{analysis.sampleCount}</strong></div>
         <div><span>{t("results.startTime")}</span><strong>{analysis.startTimeSeconds} s</strong></div>
         <div><span>{t("results.endTime")}</span><strong>{analysis.endTimeSeconds} s</strong></div>
@@ -267,7 +263,14 @@ export function ZoneAirStateResults({
         <div><span>{t("results.unitSystem")}</span><strong>{result.unit_system}</strong></div>
       </div>
       <p className="results-note">{t("results.dayTypeUnavailable")}. {t("results.simreadNote")}</p>
-      <p className="results-note">{t("results.analysis.deterministicNote")}</p>
+      <Disclosure label={t("journeys.results.identity")}>
+        <dl className="technical-detail-list">
+          <div><dt>{t("results.runId")}</dt><dd><code>{result.run_id}</code></dd></div>
+          <div><dt>{t("results.extractionId")}</dt><dd><code>{result.extraction_id}</code></dd></div>
+          <div><dt>{t("results.sourceLabel")}</dt><dd>{t(state.resultSource === "active_run" ? "results.sourceActiveRun" : "results.sourceSelectedManifest")}</dd></div>
+        </dl>
+        <p className="results-note">{t("results.analysis.deterministicNote")}</p>
+      </Disclosure>
 
       <div className="results-statistics" aria-label={t("results.analysis.statistics")}>
         {metricCards.map(({ key, label, unit, digits }) => {

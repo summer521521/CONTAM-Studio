@@ -49,6 +49,33 @@ Rust Provider 网关
 
 官方 CONTAM 运行时在构建期由 NIST HTTPS 下载页获取，校验 ZIP 和文件级 SHA-256 后作为 Tauri Resource 输入。安装包和 Portable 目录内包含已验证的 ContamX、SimRead、SimComp 和 PrjUp；运行时每次使用前重新验证身份。源码树不提交二进制，旧用户路径仅保留为高级诊断兼容回退。
 
+R1-03 的可视化模型路径复用语义读取链路，不在前端解析 PRJ：
+
+```text
+read_semantic_project
+↓
+Python levels/zones/flow_paths + spatial_projection.v1
+↓
+Rust identity/revision/数量/绑定/unknown 边界验证
+↓
+React 纯视图投影
+├─ SketchPad：图标网格示意，不代表按比例平面图
+└─ Airflow topology：Zone/边界/FlowPath 关系，不代表空间距离
+```
+
+空间投影不可用时保留语义快照，前端切换拓扑或对象列表；Konva 仅在项目页 lazy boundary 后加载。画布只负责只读呈现和 selection，不建立第二套 reducer 或 PRJ 写入链路。详见[空间模型工作区架构](spatial-model-workspace.md)和[ADR-019](../adr/ADR-019-read-only-visual-model-workspace.md)。
+
+R1-04 将多 Zone 结果、证据和 AI 上下文绑定到同一可信身份：
+
+```text
+Project/Revision -> ContamX manifest -> SimRead -> zone_result_dataset.v1
+                                              ├-> Results + Spatial overlay
+                                              ├-> Evidence Lineage
+                                              └-> bounded AI Context Receipt
+```
+
+Rust 顺序复用既有 SimRead 提取，限制 Zone、样本和 payload；单 Zone 失败可以形成 partial，但 identity/source/revision/run 不匹配必须硬失败。前端不插值、不补零，空间着色只按 Zone 语义 ID 绑定。AI 只接收选定精确时刻的有界摘要，建议修改仍进入统一 Semantic Patch Review。详见[结果、证据与 AI 体验架构](results-evidence-ai-experience.md)和[ADR-020](../adr/ADR-020-bind-results-evidence-and-ai-context.md)。
+
 Phase 2C当前实际读取路径为：
 
 ```text

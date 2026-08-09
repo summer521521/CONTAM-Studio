@@ -34,6 +34,8 @@ fn main() {
         "export_active_project_draft_copy",
         "select_and_extract_zone_air_state",
         "extract_active_run_zone_air_state",
+        "extract_active_run_zone_air_state_dataset",
+        "cancel_zone_result_dataset",
         "export_active_zone_air_state_csv",
         "run_active_contam_project",
         "prepare_simulation_plan",

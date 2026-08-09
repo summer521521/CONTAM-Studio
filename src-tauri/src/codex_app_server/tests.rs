@@ -76,6 +76,12 @@ fn archive_test_preview(context: &AiTrustedContext) -> AiContextDisclosureView {
         destination_origin: None,
         network_scope: "codex_managed".to_string(),
         model_id: "test-model".to_string(),
+        analysis_selection: AiAnalysisSelection {
+            intent: "explain_object".to_string(),
+            result_dataset_fingerprint: None,
+            metric: None,
+            selected_time_seconds: None,
+        },
     }
 }
 
@@ -496,6 +502,56 @@ fn response_schema_is_closed_and_bounded() {
         schema.pointer("/properties/semantic_patch/additionalProperties"),
         Some(&json!(false))
     );
+}
+
+#[test]
+fn openai_strict_schema_derives_from_runtime_contract_without_relaxing_patch_rules() {
+    let runtime = structured_ai_answer_schema();
+    let strict = openai_strict_structured_ai_answer_schema();
+    let core_fields = [
+        "deterministic_facts",
+        "interpretation",
+        "limitations",
+        "suggested_questions",
+    ];
+    for field in core_fields {
+        assert_eq!(runtime["properties"][field], strict["properties"][field]);
+    }
+    assert_eq!(runtime["required"].as_array().unwrap().len(), 4);
+    assert_eq!(strict["required"].as_array().unwrap().len(), 5);
+    assert!(strict["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|value| value == "semantic_patch"));
+    assert_eq!(
+        strict["properties"]["semantic_patch"]["type"],
+        json!(["object", "null"])
+    );
+    assert_eq!(
+        strict["properties"]["semantic_patch"]["additionalProperties"],
+        json!(false)
+    );
+    assert_eq!(
+        strict["properties"]["semantic_patch"]["required"],
+        runtime["properties"]["semantic_patch"]["required"]
+    );
+
+    let without_patch = json!({
+        "deterministic_facts": [],
+        "interpretation": "ok",
+        "limitations": [],
+        "suggested_questions": []
+    });
+    assert!(serde_json::from_value::<StructuredAiAnswer>(without_patch).is_ok());
+    let with_null_patch = json!({
+        "deterministic_facts": [],
+        "interpretation": "ok",
+        "limitations": [],
+        "suggested_questions": [],
+        "semantic_patch": null
+    });
+    assert!(serde_json::from_value::<StructuredAiAnswer>(with_null_patch).is_ok());
 }
 
 #[test]
@@ -1477,6 +1533,12 @@ fn preview_is_bound_to_language_model_and_reasoning_effort() {
             destination_origin: None,
             network_scope: "codex_managed".to_string(),
             model_id: "test-model".to_string(),
+            analysis_selection: AiAnalysisSelection {
+                intent: "explain_object".to_string(),
+                result_dataset_fingerprint: None,
+                metric: None,
+                selected_time_seconds: None,
+            },
         },
         trusted,
         language: "en".into(),
@@ -1494,6 +1556,12 @@ fn preview_is_bound_to_language_model_and_reasoning_effort() {
             language,
             model,
             effort,
+            &AiAnalysisSelection {
+                intent: "explain_object".to_string(),
+                result_dataset_fingerprint: None,
+                metric: None,
+                selected_time_seconds: None,
+            },
         )
     };
     assert!(matches("en", "model-a", "low"));

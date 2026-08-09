@@ -6,6 +6,7 @@ const snapshot: SemanticSnapshot = {
   project: { object_id: "project-a", object_kind: "Project" }, levels: [],
   zones: [{ object_id: "zone-a", object_kind: "Zone", name: "One", fields: { name: "One", volume_m3: 600 }, capabilities: { name: { state: "editable_via_patch", unit: null }, volume_m3: { state: "editable_via_patch", unit: "m3" } } }],
   flow_paths: [], schedules: [], species: [], sources: [], sections: [], read_only_reason: null,
+  spatial_projection: { schema_version: "spatial_projection.v1", status: "unavailable", identity_sha256: "a".repeat(64), source_sha256: "a".repeat(64), revision_id: "baseline", levels: [], warnings: [], unavailable_reason: "spatial_section_missing" },
 };
 
 describe("semantic state", () => {

@@ -23,6 +23,15 @@ export type AiContextScope =
   | "semantic_project"
   | "semantic_object";
 
+export type AiIntent = "explain_object" | "diagnose_run_result" | "propose_change" | "simulation_plan";
+
+export interface AiAnalysisSelection {
+  intent: AiIntent;
+  result_dataset_fingerprint: string | null;
+  metric: "temperature_k" | "reference_pressure_pa" | "air_density_kg_m3" | null;
+  selected_time_seconds: number | null;
+}
+
 export interface AiDiagnostic {
   code: string;
   message: string;
@@ -147,6 +156,7 @@ export interface AiContextDisclosureView {
   destination_origin: string | null;
   network_scope: "codex_managed" | "remote_https" | "loopback_http";
   model_id: string;
+  analysis_selection: AiAnalysisSelection;
   disclosure: {
     contains_local_paths: false;
     contains_prj_text: false;
@@ -281,6 +291,7 @@ export interface AiState {
   providerProfilesStatus: "idle" | "loading" | "loaded" | "error";
   providerLogin: AiProviderLoginView | null;
   providerIssue: AiDiagnostic | null;
+  intent: AiIntent;
   scopes: AiContextScope[];
   modelId: string;
   reasoningEffort: string;
@@ -308,6 +319,7 @@ export const INITIAL_AI_STATE: AiState = {
   providerProfilesStatus: "idle",
   providerLogin: null,
   providerIssue: null,
+  intent: "explain_object",
   scopes: DEFAULT_AI_SCOPES,
   modelId: "",
   reasoningEffort: "",
@@ -342,6 +354,7 @@ export type AiAction =
   | { type: "provider_operation_failed"; issue: AiDiagnostic }
   | { type: "operation_failed"; requestId: string | null; issue: AiDiagnostic }
   | { type: "scope_toggled"; scope: AiContextScope }
+  | { type: "intent_changed"; intent: AiIntent }
   | { type: "model_changed"; modelId: string; effort: string }
   | { type: "effort_changed"; effort: string }
   | { type: "preview_started"; requestId: string }
@@ -537,6 +550,8 @@ export function aiReducer(state: AiState, action: AiAction): AiState {
         : [...state.scopes, action.scope];
       return { ...clearConversationForBindingChange(state), scopes };
     }
+    case "intent_changed":
+      return { ...clearConversationForBindingChange(state), intent: action.intent };
     case "model_changed":
       return { ...clearConversationForBindingChange(state), modelId: action.modelId, reasoningEffort: action.effort };
     case "effort_changed":
@@ -655,6 +670,10 @@ export function isSafeAiPreview(preview: AiContextDisclosureView): boolean {
     && preview.provider_display_name.length > 0
     && ["codex_app_server", "openai_responses", "openai_chat_completions", "anthropic_messages"].includes(preview.provider_protocol)
     && preview.model_id.length > 0
+    && ["explain_object", "diagnose_run_result", "propose_change", "simulation_plan"].includes(preview.analysis_selection.intent)
+    && (preview.analysis_selection.result_dataset_fingerprint === null || /^[0-9a-f]{64}$/i.test(preview.analysis_selection.result_dataset_fingerprint))
+    && (preview.analysis_selection.metric === null || ["temperature_k", "reference_pressure_pa", "air_density_kg_m3"].includes(preview.analysis_selection.metric))
+    && (preview.analysis_selection.selected_time_seconds === null || Number.isFinite(preview.analysis_selection.selected_time_seconds))
     && safeDestination
     && preview.included_scopes.length > 0
     && preview.included_scopes.every((scope) => DEFAULT_AI_SCOPES.includes(scope) || ["project_summary", "run_summary", "result_summary", "study_summary", "diagnostics", "attachment_evidence", "semantic_project", "semantic_object"].includes(scope))

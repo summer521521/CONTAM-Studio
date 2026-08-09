@@ -2,6 +2,11 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [R1-01 Foundation Reset](records/r1-01-foundation-reset.md) | Renewal R1 | completed | live |
+| [R1-02 Workbench & Task Journeys](records/r1-02-workbench-task-journeys.md) | Renewal R1 | completed | live |
+| [R1-03 Visual Model Workspace](records/r1-03-visual-model-workspace.md) | Renewal R1 | completed | live |
+| [R1-04 Results, Evidence & AI Experience](records/r1-04-results-evidence-ai-experience.md) | Renewal R1 | completed | live |
+| [R1-05 Final UAT & Release Readiness](records/r1-05-final-uat-release-readiness.md) | Renewal R1 | completed | live |
 | [RELEASE-01 冻结、发布与归档CONTAM Studio 0.1.0](records/release-01-v0-1-0-finalization.md) | Release 0.1.0 | completed | live |
 | [AGENT-03 完整PRJ语义模型与多字段草稿编辑](records/agent-03-full-prj-domain.md) | Phase 7 | automated_verified | live |
 | [AGENT-04 多参数研究、结果分析与报告工作流](records/agent-04-study-results-report.md) | Phase 8 | automated_verified | live |

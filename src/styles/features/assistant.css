@@ -1,0 +1,780 @@
+/* AI assistant, diff review, and confirmation surfaces belong to this layer. */
+
+/* Migrated from the R1 compatibility sheet; ownership: assistant. */
+.release-advanced,
+.assistant-advanced {
+  border: 1px solid var(--border);
+  background: var(--bg-surface-subtle);
+  padding: 10px 12px;
+}
+
+.release-advanced > summary,
+.assistant-advanced > summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.assistant-model-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.recent-empty p,
+.phase-band p,
+.safety-note p,
+.context-note p,
+.assistant-placeholder p,
+.panel-empty-state p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.assistant-placeholder {
+  padding-top: 36px;
+  text-align: center;
+}
+
+.assistant-placeholder > svg {
+  color: var(--text-muted);
+}
+
+.assistant-placeholder h2 {
+  margin: 13px 0 0;
+  font-size: 16px;
+}
+
+.assistant-boundary {
+  margin-top: 20px;
+  padding-top: 12px;
+  text-align: left;
+  border-top: 1px solid var(--border);
+}
+
+.codex-assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.assistant-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  background: var(--bg-surface-subtle);
+}
+
+.assistant-mode-switch button {
+  min-height: 32px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  font-size: 11px;
+}
+
+.assistant-mode-switch button + button {
+  border-left: 1px solid var(--border);
+}
+
+.assistant-mode-switch button.is-active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.assistant-mode-switch button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.assistant-simulation-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assistant-simulation-plan > h3,
+.assistant-plan-summary h4,
+.assistant-plan-summary h5 {
+  margin: 0;
+}
+
+.assistant-simulation-plan > h3 {
+  font-size: 14px;
+}
+
+.assistant-plan-summary {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-plan-summary dl {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.assistant-plan-summary dl > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px;
+}
+
+.assistant-plan-summary dt,
+.assistant-plan-summary h5 {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.assistant-plan-summary dd,
+.assistant-plan-summary p,
+.assistant-plan-summary li {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-plan-summary dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.assistant-plan-summary ul,
+.assistant-plan-summary ol {
+  display: grid;
+  gap: 4px;
+  margin: 7px 0 10px;
+  padding-left: 18px;
+}
+
+.simulation-diff {
+  margin: 10px 0;
+  padding: 9px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-surface-subtle);
+}
+
+.simulation-diff p {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 5px 0 0;
+}
+
+.simulation-timeline {
+  list-style-position: inside;
+  padding-left: 0;
+}
+
+.simulation-timeline li {
+  padding: 3px 0;
+  color: var(--text-muted);
+}
+
+.simulation-timeline li[data-status="completed"] {
+  color: var(--success);
+}
+
+.simulation-timeline li[data-status="failed"] {
+  color: var(--error);
+}
+
+.assistant-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.assistant-heading > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.assistant-heading h2,
+.assistant-preview h3,
+.assistant-conversation > h3,
+.assistant-answer h4,
+.assistant-answer h5 {
+  margin: 0;
+}
+
+.assistant-heading h2 {
+  font-size: 15px;
+}
+
+.assistant-heading p,
+.assistant-compact-note,
+.assistant-status span,
+.assistant-boundary p,
+.assistant-safe-note,
+.assistant-login-note,
+.assistant-progress {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-compact-note {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.assistant-catalog-warning {
+  color: var(--warning);
+}
+
+.assistant-status {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  background: var(--bg-surface-subtle);
+  border-left: 3px solid var(--border-strong);
+}
+
+.assistant-status-available {
+  border-left-color: var(--success);
+}
+
+.assistant-status-error,
+.assistant-status-not_authenticated {
+  border-left-color: var(--warning);
+}
+
+.assistant-status code {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.assistant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assistant-actions .primary-action,
+.assistant-actions .secondary-action,
+.assistant-wide-action {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 11px;
+}
+
+.assistant-install-reminder {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-surface-subtle);
+  border-left: 3px solid var(--accent);
+}
+
+.assistant-install-reminder svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.assistant-install-reminder.success {
+  border-left-color: var(--success);
+}
+
+.assistant-install-reminder.success svg {
+  color: var(--success);
+}
+
+.assistant-install-reminder p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-install-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 58%);
+}
+
+.assistant-install-dialog {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  padding: 22px;
+  overflow: auto;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-overlay);
+}
+
+.assistant-install-dialog h3 {
+  margin: 0 36px 12px 0;
+  font-size: 16px;
+}
+
+.assistant-install-dialog p,
+.assistant-install-dialog li,
+.assistant-install-dialog summary,
+.assistant-install-dialog code {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.assistant-install-dialog ul {
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.assistant-install-dialog details {
+  margin-top: 14px;
+}
+
+.assistant-install-dialog code {
+  display: block;
+  margin-top: 8px;
+  padding: 10px;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+}
+
+.assistant-install-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.assistant-install-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.assistant-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.assistant-field select,
+.assistant-field textarea {
+  width: 100%;
+  color: var(--text-primary);
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.assistant-field select {
+  height: 34px;
+  padding: 0 8px;
+}
+
+.assistant-field textarea {
+  min-height: 94px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.assistant-scopes {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+}
+
+.assistant-scopes legend {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.assistant-scopes label {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.assistant-preview,
+.assistant-answer {
+  padding: 10px;
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border);
+}
+
+.assistant-preview h3,
+.assistant-conversation > h3,
+.assistant-answer h4,
+.assistant-answer h5 {
+  font-size: 12px;
+}
+
+.assistant-preview dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.assistant-preview dl > div {
+  min-width: 0;
+}
+
+.assistant-preview dt,
+.assistant-preview p {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.assistant-preview dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.assistant-preview pre {
+  max-height: 240px;
+  padding: 8px;
+  overflow: auto;
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-answer {
+  display: grid;
+  gap: 12px;
+}
+
+.assistant-conversation {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-conversation > h3 {
+  color: var(--text-secondary);
+}
+
+.assistant-answer h4 {
+  color: var(--text-primary);
+}
+
+.assistant-answer h5 {
+  color: var(--text-secondary);
+}
+
+.assistant-answer p,
+.assistant-answer ul {
+  margin: 6px 0 0;
+  padding-left: 17px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.assistant-answer p {
+  padding-left: 0;
+}
+
+.assistant-semantic-patch {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-archive {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-archive-heading,
+.assistant-archive-entry-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.assistant-archive-heading > div {
+  min-width: 0;
+}
+
+.assistant-archive-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.assistant-archive-heading p,
+.assistant-archive-confirm p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.assistant-archive-actions,
+.assistant-archive-list {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-archive-confirm {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--error);
+  background: color-mix(in srgb, var(--error) 8%, var(--bg-surface));
+}
+
+.assistant-archive-confirm p {
+  margin: 0;
+}
+
+.assistant-archive-entry {
+  border-left: 3px solid var(--accent);
+}
+
+.assistant-archive-entry-heading h4 {
+  margin: 0;
+}
+
+.attachment-center {
+  display: grid;
+  gap: 9px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.attachment-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 7px;
+  align-items: start;
+  padding: 7px;
+  border: 1px solid var(--border);
+}
+
+.attachment-summary { display: grid; min-width: 0; gap: 2px; }
+
+.attachment-summary strong, .attachment-summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.attachment-summary span, .attachment-details, .attachment-evidence-preview { color: var(--text-secondary); font-size: 11px; }
+
+.attachment-details { grid-column: 2 / -1; margin: 0; white-space: pre-wrap; }
+
+.attachment-blocked { border-left: 3px solid var(--error); }
+
+.attachment-unsupported, .attachment-changed { border-left: 3px solid var(--warning); }
+
+/* Chromium keeps native option colors unless they are explicitly themed. */
+
+.study-workspace select option,
+.top-bar select option,
+.codex-assistant select option {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.assistant-provider-details {
+  margin-top: 10px;
+  border-radius: 9px;
+}
+
+.assistant-provider-details > summary {
+  padding: 9px 11px;
+}
+
+.assistant-field > span,
+.assistant-scopes legend,
+.assistant-compact-note,
+.assistant-safe-note {
+  font-size: 13px;
+}
+
+.assistant-compact-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon copy settings"
+    "icon copy status";
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant-header-icon {
+  grid-area: icon;
+  color: var(--accent);
+}
+
+.assistant-header-copy {
+  grid-area: copy;
+  min-width: 0;
+}
+
+.assistant-compact-header h2,
+.assistant-compact-header p,
+.assistant-context-receipt h3 {
+  margin: 0;
+}
+
+.assistant-compact-header h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.assistant-compact-header p {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-header-status {
+  grid-area: status;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-header-settings {
+  grid-area: settings;
+  justify-self: end;
+}
+
+.assistant-intents {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.assistant-intents legend {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.assistant-intents label {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.assistant-intents label:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+}
+
+.assistant-context-receipt {
+  display: grid;
+  gap: 8px;
+  padding-block: 10px;
+  border-block: 1px solid var(--border);
+}
+
+.assistant-context-receipt dl,
+.assistant-patch-operations dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.assistant-context-receipt dl div,
+.assistant-patch-operations dl div {
+  min-width: 0;
+}
+
+.assistant-context-receipt dt,
+.assistant-patch-operations dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.assistant-context-receipt dd,
+.assistant-patch-operations dd {
+  overflow-wrap: anywhere;
+  margin: 2px 0 0;
+}
+
+.assistant-context-receipt pre {
+  max-height: 180px;
+  overflow: auto;
+  font-size: 11px;
+}
+
+.assistant-patch-operations {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-patch-operations dl {
+  padding: 8px;
+  border-left: 2px solid var(--accent);
+  background: var(--bg-subtle);
+}
+
+@media (max-width: 1100px) {
+  .assistant-intents,
+  .assistant-context-receipt dl,
+  .assistant-patch-operations dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (forced-colors: active) {
+  .assistant-intents label:has(input:checked),
+  .assistant-patch-operations dl {
+    border-color: Highlight;
+  }
+}

@@ -1,10 +1,11 @@
 param(
   [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-08",
   [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging",
-  [string]$ContamToolsTaskRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
+  [string]$ContamToolsTaskRoot = "",
   [switch]$SkipTauriBuild
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\contam-temp-root.ps1")
 
 function Get-Sha256Hex([string]$FilePath) {
   $stream = [IO.File]::OpenRead($FilePath)
@@ -37,8 +38,9 @@ $nativePathMaps = @(
 )
 $env:CFLAGS = (@($env:CFLAGS) + $nativePathMaps -join " ").Trim()
 $env:CXXFLAGS = (@($env:CXXFLAGS) + $nativePathMaps -join " ").Trim()
-$approvedContamTaskRoot = Split-Path -Parent $ContamToolsTaskRoot
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $ContamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
+$contamToolsTaskRoot = Resolve-ContamToolsTaskRoot $ContamToolsTaskRoot
+$approvedContamTaskRoot = Split-Path -Parent $contamToolsTaskRoot
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $contamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
 if ($LASTEXITCODE -ne 0) { throw "verified NIST CONTAM runtime preparation failed" }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 $resolver = Join-Path $PSScriptRoot "resolve-packaging-toolchain.ps1"
@@ -64,7 +66,9 @@ if ($status -eq "available") {
     throw "complete frozen Python worker runtime is missing"
   }
   $workerManifest = Get-Content -LiteralPath $workerManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-  if ($workerManifest.commit_sha -ne $commit -or $workerManifest.source_tree_required -ne $false) {
+  if ($workerManifest.commit_sha -ne $commit -or
+      $workerManifest.detached_semantic_project_read -ne "passed" -or
+      $workerManifest.source_tree_required -ne $false) {
     throw "frozen Python worker manifest does not match this installer commit"
   }
   if (-not $SkipTauriBuild) {

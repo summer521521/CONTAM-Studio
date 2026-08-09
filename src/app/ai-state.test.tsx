@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it } from "vitest";
 import i18n from "../i18n";
 import { CodexAssistantPanel } from "../components/workbench/CodexAssistantPanel";
+import type { AssistantContextReceipt } from "./assistant-context";
 import {
   aiReducer,
   INITIAL_AI_STATE,
@@ -66,6 +67,7 @@ const preview: AiContextDisclosureView = {
   destination_origin: null,
   network_scope: "codex_managed",
   model_id: "model-a",
+  analysis_selection: { intent: "explain_object", result_dataset_fingerprint: null, metric: null, selected_time_seconds: null },
   disclosure: {
     contains_local_paths: false,
     contains_prj_text: false,
@@ -79,6 +81,24 @@ const structuredAnswer = {
   interpretation: "The disclosed Zone has a stable volume.",
   limitations: ["No full result series was sent."],
   suggested_questions: ["What does flag 3 mean?"],
+};
+
+const receipt: AssistantContextReceipt = {
+  identity: "receipt-1",
+  intent: "explain_object",
+  project: "demo.prj",
+  revision: 1,
+  object: "One",
+  run: "run-1",
+  resultDatasetFingerprint: null,
+  metric: null,
+  selectedTimeSeconds: null,
+  attachmentCount: 0,
+  provider: "Codex",
+  model: "model-a",
+  network: true,
+  includedScopes: ["selected_zone", "draft_summary"],
+  excluded: ["credentials", "absolute_paths", "original_prj_text", "complete_result_series"],
 };
 
 const unsavedArchive = { saved: false, entry_id: null, warning: null };
@@ -221,7 +241,9 @@ describe("read-only AI state", () => {
       />,
     );
     expect(html).toContain("Google Gemini");
-    expect(html).toContain("Codex sign-in connects only to the Codex App Server");
+    expect(html).toContain("Provider not configured");
+    expect(html).toContain("Open AI and Provider settings");
+    expect(html).not.toContain(">Connected<");
     expect(html).not.toContain("Codex CLI 1.2.3");
   });
 
@@ -274,6 +296,7 @@ describe("read-only AI state", () => {
     expect(scoped.question).toBe("");
     expect(aiReducer(populated, { type: "model_changed", modelId: "model-a", effort: "high" }).conversation).toEqual([]);
     expect(aiReducer(populated, { type: "effort_changed", effort: "low" }).conversation).toEqual([]);
+    expect(aiReducer(populated, { type: "intent_changed", intent: "diagnose_run_result" }).preview).toBeNull();
     expect(aiReducer(populated, { type: "context_changed" }).conversation).toEqual([]);
     expect(aiReducer(populated, { type: "session_cleared" }).conversation).toEqual([]);
   });
@@ -304,6 +327,7 @@ describe("read-only AI state", () => {
           question: "Explain this Zone.",
         }}
         contextAvailable
+        receipt={receipt}
         onConnect={() => undefined}
         onInstall={() => undefined}
         onRefresh={() => undefined}
@@ -512,6 +536,7 @@ describe("read-only AI state", () => {
           conversation: [{ turn_id: "turn-1", archive_entry_id: null, question: "Explain this Zone.", answer: structuredAnswer }],
         }}
         contextAvailable
+        receipt={receipt}
         onConnect={() => undefined}
         onInstall={() => undefined}
         onRefresh={() => undefined}
@@ -526,8 +551,9 @@ describe("read-only AI state", () => {
         onClear={() => undefined}
       />,
     );
-    expect(html).toContain("Local workbench; Codex uses a local App Server, other providers use direct HTTP APIs");
-    expect(html).toContain("Structured context preview");
+    expect(html).toContain("Context receipt");
+    expect(html).toContain("Will contact the selected Provider");
+    expect(html).toContain("What do you want help with?");
     expect(html).toContain("This session");
     expect(html).toContain("Your question");
     expect(html).toContain("Explain this Zone.");
@@ -550,6 +576,7 @@ describe("read-only AI state", () => {
           archiveStatus: "loaded",
         }}
         contextAvailable
+        receipt={receipt}
         onConnect={() => undefined}
         onInstall={() => undefined}
         onRefresh={() => undefined}
@@ -666,6 +693,7 @@ describe("read-only AI state", () => {
       <CodexAssistantPanel
         state={{ ...INITIAL_AI_STATE, status: "available", connection, preview, previewExpanded: true }}
         contextAvailable
+        receipt={receipt}
         onConnect={() => undefined}
         onInstall={() => undefined}
         onRefresh={() => undefined}
@@ -680,8 +708,8 @@ describe("read-only AI state", () => {
         onClear={() => undefined}
       />,
     );
-    expect(html).toContain("本地工作台；Codex为本地App Server，其他Provider直连HTTP API");
-    expect(html).toContain("结构化上下文预览");
+    expect(html).toContain("上下文回执");
+    expect(html).toContain("将联系所选 Provider");
     expect(html).toContain("不包含绝对路径、PRJ正文或完整结果序列");
     await i18n.changeLanguage("en");
   });

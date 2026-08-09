@@ -2,9 +2,23 @@
 
 记录日期：2026-07-30。
 
-当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。0.4.0桌面纵向路径以“项目、运行、结果、研究”四个用户任务入口组织，包括受支持PRJ语义树、多对象草稿Patch、随包官方ContamX/SimRead运行、单参数和多参数研究、结果分页/筛选/可视化、HTML/PDF/CSV/JSON报告、附件证据中心、受审批AI仿真、多Provider只读AI和结果解释。
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。Renewal R1 的本地候选版本为 0.5.0，桌面纵向路径以“项目、运行、结果、研究”四个用户任务入口组织，并增加只读 SketchPad/气流拓扑、多 Zone 时间序列、空间结果、Evidence Lineage 和 AI Context Receipt。该候选来自尚未提交的累积工作树，不是正式发布资产。
 
 0.4.0将冻结Python Worker和哈希锁定的NIST ContamX工具作为Tauri资源和便携目录的一部分，不再从Release二进制使用`CARGO_MANIFEST_DIR`或仓库`.venv`。Python、ContamX、SimRead、Codex App Server和受控探测/安装命令的后代由Windows Job Object收口。便携版、NSIS、MSI、签名、独立干净机和公开发布状态以[0.4.0发布说明](release/CONTAM-Studio-0.4.0-release-notes.md)、[发布包](release/release-kit-v3.md)及本轮任务记录为准，不能从源码实现状态推断。
+
+## Renewal R1-03 可视化模型工作区
+
+- 项目语义读取链新增 `spatial_projection.v1`：Python 严格读取经 fixture 和参考实现核对的 `icon_type, column, row, object_number`，生成受限 Level/Icon 投影；未知图标保留原类型、网格位置和 object number，绑定失败不丢弃图元。
+- Rust 在现有 `read_semantic_project` 返回链上校验 spatial payload 的 schema、identity/source/revision、数量、字符串、坐标、稳定 ID、bounds 和语义绑定；空间投影失败不会伪装成项目损坏，Zone/FlowPath 语义和拓扑降级仍可用。
+- 项目页新增只读 SketchPad 示意与确定性气流拓扑模式。SketchPad 不代表按比例平面图，拓扑不代表空间距离；Konva 只在项目页 lazy boundary 加载，Canvas 之外提供分页对象列表、键盘控件和失败降级。
+- R1-03 的自动化证据和未执行的人工 GUI、真实 Provider、打包、签名、发布与用户验收状态以[任务日志](development/task-log/records/r1-03-visual-model-workspace.md)和[能力矩阵](capability-status-matrix.json)为准。
+
+## Renewal R1-04 结果、证据与 AI 体验
+
+- Rust 在既有官方 SimRead 链路上提供有界 `zone_result_dataset.v1`：最多 64 个 Zone、250000 个样本和 32 MiB payload，并绑定项目、source hash、Revision、run、manifest、extraction 和确定性 fingerprint。单 Zone 失败形成 partial，身份不匹配硬失败，取消或晚到响应不能污染当前结果。
+- 结果页提供概览、时间序列、空间和证据四个表面。当前只展示温度、参考压力和空气密度；时间轴只使用相同或精确公共时刻，不插值、不补零。空间颜色只绑定已有 Zone 锚点或拓扑节点，固定使用数据集全时段范围。
+- Evidence Lineage 复用项目、run 和结果状态；默认不显示绝对路径。AI Context Receipt 同样绑定 run、dataset fingerprint、指标和时刻，并明确排除凭据、原始 PRJ 与完整结果序列。
+- AI 意图不扩大权限，建议修改只能进入统一 Semantic Patch Review、Diff、确定性验证与用户确认。本轮未运行真实 Provider，也未执行 GUI、打包、签名或发布。
 
 ## Phase 6B 多 Provider 只读 AI 助手
 

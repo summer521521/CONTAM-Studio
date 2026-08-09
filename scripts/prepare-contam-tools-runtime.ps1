@@ -1,16 +1,15 @@
 [CmdletBinding()]
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string]$TaskRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
-    [string]$ApprovedTaskRoot = "F:\Codex_File\phase-6c-user-first-runtime"
+    [string]$TaskRoot = "",
+    [string]$ApprovedTaskRoot = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Get-Sha256Hex([string]$Path) {
-    (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
-}
+. (Join-Path $PSScriptRoot "lib\contam-temp-root.ps1")
+. (Join-Path $PSScriptRoot "lib\contam-integrity.ps1")
 
 function Assert-Same([string]$Actual, [string]$Expected, [string]$Name) {
     if ($Actual -ne $Expected.ToUpperInvariant()) {
@@ -19,9 +18,13 @@ function Assert-Same([string]$Actual, [string]$Expected, [string]$Name) {
 }
 
 $repo = [IO.Path]::GetFullPath($RepoRoot).TrimEnd("\")
-$task = [IO.Path]::GetFullPath($TaskRoot).TrimEnd("\")
-$approvedTask = [IO.Path]::GetFullPath($ApprovedTaskRoot).TrimEnd("\")
-if (-not $task.StartsWith("${approvedTask}\", [StringComparison]::OrdinalIgnoreCase) -and $task -ne $approvedTask) {
+$task = Resolve-ContamToolsTaskRoot $TaskRoot
+$approvedTask = if ([string]::IsNullOrWhiteSpace($ApprovedTaskRoot)) {
+    if ([string]::IsNullOrWhiteSpace($TaskRoot)) { Resolve-ContamTempRoot } else { $task }
+} else {
+    Resolve-ContamAbsolutePath $ApprovedTaskRoot
+}
+if (-not (Test-ContamPathWithinRoot $task $approvedTask)) {
     throw "NIST tool download and extraction must stay under the approved task temporary directory."
 }
 
@@ -68,12 +71,12 @@ foreach ($locked in $lockFiles) {
     if (-not (Test-Path -LiteralPath $runtimeFile -PathType Leaf)) {
         throw "Verified NIST runtime file was not copied: $($locked.file)"
     }
-    Assert-Same (Get-Sha256Hex $runtimeFile) ([string]$locked.sha256) ([string]$locked.file)
+    Assert-Same (Get-ContamSha256Hex $runtimeFile) ([string]$locked.sha256) ([string]$locked.file)
 }
 
 [ordered]@{
     status = "verified_and_synced"
-    task_root = "approved_phase_6c_temp"
+    task_root = "approved_contam_temp"
     lock_file = "resources/contam-tools.lock.json"
     runtime_root = "src-tauri/runtime/contam-tools"
     files = @($lockFiles | ForEach-Object { [string]$_.file })

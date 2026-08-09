@@ -1,5 +1,7 @@
 # 阶段路线图
 
+> **历史归档。** 本文件保留早期 Phase 路线和证据，不再作为当前任务分配或完成定义来源。当前研发计划唯一入口是 [CONTAM Studio Renewal R1](../initiatives/R1-visual-workbench/README.md)。
+
 路线图不承诺未经验证的工期。每一阶段都应形成可独立验证的纵向切片，并保持此前安全边界。
 
 2026-07-22全项目审计后的实际执行顺序、任务依赖和门禁见[下一阶段执行任务书](next-development-execution-plan.md)。在该任务书的安全、产品、分发和用户验证门禁完成前，Phase 7保持暂停。

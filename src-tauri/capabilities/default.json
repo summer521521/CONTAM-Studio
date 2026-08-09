@@ -18,6 +18,8 @@
     "allow-export-active-project-draft-copy",
     "allow-select-and-extract-zone-air-state",
     "allow-extract-active-run-zone-air-state",
+    "allow-extract-active-run-zone-air-state-dataset",
+    "allow-cancel-zone-result-dataset",
     "allow-export-active-zone-air-state-csv",
     "allow-run-active-contam-project",
     "allow-prepare-simulation-plan",

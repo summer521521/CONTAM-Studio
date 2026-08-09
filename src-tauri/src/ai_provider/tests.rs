@@ -87,18 +87,42 @@ fn read_request(stream: &mut TcpStream) -> String {
         .unwrap();
     let mut bytes = Vec::new();
     let mut buffer = [0_u8; 4096];
+    let mut expected_total = None;
     loop {
         match stream.read(&mut buffer) {
             Ok(0) | Err(_) => break,
             Ok(count) => {
                 bytes.extend_from_slice(&buffer[..count]);
-                if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                if expected_total.is_none() {
+                    if let Some(header_end) =
+                        bytes.windows(4).position(|window| window == b"\r\n\r\n")
+                    {
+                        let header_length = header_end + 4;
+                        let headers = String::from_utf8_lossy(&bytes[..header_end]);
+                        let content_length = headers
+                            .lines()
+                            .find_map(|line| {
+                                line.strip_prefix("Content-Length:")
+                                    .or_else(|| line.strip_prefix("content-length:"))
+                            })
+                            .and_then(|value| value.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
+                        expected_total = Some(header_length + content_length);
+                    }
+                }
+                if expected_total.is_some_and(|total| bytes.len() >= total) {
                     break;
                 }
             }
         }
     }
     String::from_utf8_lossy(&bytes).into_owned()
+}
+
+fn request_body(request: &str) -> Value {
+    let body = request.split("\r\n\r\n").nth(1).unwrap_or_default();
+    serde_json::from_str(body)
+        .unwrap_or_else(|error| panic!("mock request body was not JSON: {error}"))
 }
 
 fn run_completion(
@@ -333,6 +357,17 @@ fn openai_responses_completes_through_local_mock_server() {
         .unwrap()
         .to_ascii_lowercase()
         .contains("authorization: bearer"));
+    let body = request_body(&capture.lock().unwrap());
+    assert_eq!(body.pointer("/text/format/strict"), Some(&json!(true)));
+    let required = body
+        .pointer("/text/format/schema/required")
+        .and_then(Value::as_array)
+        .unwrap();
+    assert!(required.iter().any(|value| value == "semantic_patch"));
+    assert_eq!(
+        body.pointer("/text/format/schema/properties/semantic_patch/type"),
+        Some(&json!(["object", "null"]))
+    );
 }
 
 #[test]
@@ -356,6 +391,9 @@ fn openai_compatible_and_anthropic_complete_through_local_mock_server() {
         .lock()
         .unwrap()
         .contains("POST /v1/chat/completions"));
+    assert!(request_body(&openai_capture.lock().unwrap())
+        .get("response_format")
+        .is_none());
     assert!(!openai_capture
         .lock()
         .unwrap()
@@ -403,4 +441,217 @@ fn adapter_parsers_block_tool_events() {
     }];
     let parsed = super::openai_compatible::parse_events(events);
     assert_eq!(parsed.unwrap_err().code, "ai_tool_use_blocked");
+}
+
+#[test]
+fn openai_compatible_accepts_one_complete_json_fence_and_rejects_surrounding_prose() {
+    let answer = answer_json();
+    let fenced = format!("```json\n{answer}\n```");
+    let parsed = super::openai_compatible::parse_events(vec![
+        SseEvent {
+            data: json!({"choices":[{"delta":{"content":fenced}}]}).to_string(),
+        },
+        SseEvent {
+            data: "[DONE]".to_string(),
+        },
+    ])
+    .unwrap();
+    assert_eq!(parsed.answer.deterministic_facts.len(), 1);
+
+    let with_prose = format!("Here is the answer:\n```json\n{answer}\n```");
+    let rejected = super::openai_compatible::parse_events(vec![
+        SseEvent {
+            data: json!({"choices":[{"delta":{"content":with_prose}}]}).to_string(),
+        },
+        SseEvent {
+            data: "[DONE]".to_string(),
+        },
+    ]);
+    assert_eq!(rejected.unwrap_err().code, "ai_provider_response_not_json");
+}
+
+#[test]
+fn deepseek_json_mode_is_narrow_and_explicit() {
+    let deepseek = builtin_profiles()
+        .into_iter()
+        .find(|profile| profile.preset_id.as_deref() == Some("deepseek"))
+        .unwrap();
+    assert!(super::openai_compatible::is_deepseek_json_mode(&deepseek));
+    for preset in ["gemini", "openrouter", "ollama", "lm_studio", "vllm"] {
+        let profile = builtin_profiles()
+            .into_iter()
+            .find(|profile| profile.preset_id.as_deref() == Some(preset))
+            .unwrap();
+        assert!(!super::openai_compatible::is_deepseek_json_mode(&profile));
+    }
+    let custom = http_profile(
+        AiProviderProtocol::OpenAiChatCompletions,
+        "https://provider.example/v1/".to_string(),
+        AiProviderAuthKind::ApiKey,
+    );
+    assert!(!super::openai_compatible::is_deepseek_json_mode(&custom));
+}
+
+#[test]
+fn deepseek_request_uses_json_object_mode_and_bounded_output() {
+    let answer = answer_json();
+    let (base_url, capture, handle) = spawn_mock_server(sse(&[
+        &json!({"choices":[{"delta":{"content":answer},"finish_reason":"stop"}]}).to_string(),
+        "[DONE]",
+    ]));
+    let mut profile = builtin_profiles()
+        .into_iter()
+        .find(|profile| profile.preset_id.as_deref() == Some("deepseek"))
+        .unwrap();
+    profile.base_url = Some(base_url.to_string());
+    let store = AiProviderStore::with_credentials(Arc::new(MemoryCredentialStore::default()));
+    store
+        .credentials
+        .set(
+            profile.profile_id,
+            SecretInput::new("unit-test-key-not-real".to_string()),
+        )
+        .unwrap();
+    run_completion(profile, &store).unwrap();
+    handle.join().unwrap();
+    let request = capture.lock().unwrap();
+    let body = request_body(&request);
+    assert_eq!(body["stream"], true);
+    assert_eq!(body["response_format"], json!({"type": "json_object"}));
+    assert_eq!(body["max_tokens"], 4_096);
+    let system = body
+        .pointer("/messages/0/content")
+        .and_then(Value::as_str)
+        .unwrap();
+    assert!(system.contains("JSON"));
+    assert!(system.contains("deterministic_facts"));
+    assert!(system.contains("interpretation"));
+    assert!(system.contains("suggested_questions"));
+}
+
+fn chat_events(content: &str) -> Vec<SseEvent> {
+    vec![
+        SseEvent {
+            data: json!({"choices":[{"delta":{"content":content},"finish_reason":"stop"}]})
+                .to_string(),
+        },
+        SseEvent {
+            data: "[DONE]".to_string(),
+        },
+    ]
+}
+
+#[test]
+fn openai_compatible_diagnostics_distinguish_stream_and_answer_failures() {
+    let answer = answer_json();
+    let missing_done = super::openai_compatible::parse_events(vec![SseEvent {
+        data: json!({"choices":[{"delta":{"content":answer}}]}).to_string(),
+    }]);
+    assert_eq!(
+        missing_done.unwrap_err().code,
+        "ai_provider_stream_incomplete"
+    );
+
+    let truncated = super::openai_compatible::parse_events(vec![
+        SseEvent {
+            data: json!({"choices":[{"delta":{"content":answer},"finish_reason":"length"}]})
+                .to_string(),
+        },
+        SseEvent {
+            data: "[DONE]".to_string(),
+        },
+    ]);
+    assert_eq!(
+        truncated.unwrap_err().code,
+        "ai_provider_response_truncated"
+    );
+
+    let empty = super::openai_compatible::parse_events(vec![
+        SseEvent {
+            data: json!({"choices":[],"usage":{"total_tokens":1}}).to_string(),
+        },
+        SseEvent {
+            data: "[DONE]".to_string(),
+        },
+    ]);
+    assert_eq!(empty.unwrap_err().code, "ai_provider_response_empty");
+
+    let invalid_json = super::openai_compatible::parse_events(chat_events("not JSON"));
+    assert_eq!(
+        invalid_json.unwrap_err().code,
+        "ai_provider_response_not_json"
+    );
+
+    let wrong_type = r#"{"deterministic_facts":"wrong","interpretation":"ok","limitations":[],"suggested_questions":[]}"#;
+    let contract_invalid = super::openai_compatible::parse_events(chat_events(wrong_type));
+    assert_eq!(
+        contract_invalid.unwrap_err().code,
+        "ai_provider_response_contract_invalid"
+    );
+
+    let extra_field = r#"{"deterministic_facts":[],"interpretation":"ok","limitations":[],"suggested_questions":[],"extra":true}"#;
+    let extra_invalid = super::openai_compatible::parse_events(chat_events(extra_field));
+    assert_eq!(
+        extra_invalid.unwrap_err().code,
+        "ai_provider_response_contract_invalid"
+    );
+
+    let long_answer = serde_json::to_string(&json!({
+        "deterministic_facts": [],
+        "interpretation": "x".repeat(4_001),
+        "limitations": [],
+        "suggested_questions": []
+    }))
+    .unwrap();
+    let oversize = super::openai_compatible::parse_events(chat_events(&long_answer));
+    assert_eq!(
+        oversize.unwrap_err().code,
+        "ai_provider_response_contract_invalid"
+    );
+
+    let multiple =
+        super::openai_compatible::parse_events(chat_events(&format!("{answer}{answer}")));
+    assert_eq!(multiple.unwrap_err().code, "ai_provider_response_not_json");
+
+    let remote = super::openai_compatible::parse_events(vec![SseEvent {
+        data: json!({"error":{"message":"redacted"}}).to_string(),
+    }]);
+    assert_eq!(remote.unwrap_err().code, "ai_provider_remote_error");
+}
+
+#[test]
+fn openai_compatible_trims_empty_content_and_rejects_non_stop_finish_reasons() {
+    let whitespace = super::openai_compatible::parse_events(chat_events(" \n\t "));
+    assert_eq!(whitespace.unwrap_err().code, "ai_provider_response_empty");
+    for reason in ["content_filter", "insufficient_system_resource", "other"] {
+        let parsed = super::openai_compatible::parse_events(vec![
+            SseEvent {
+                data:
+                    json!({"choices":[{"delta":{"content":answer_json()},"finish_reason":reason}]})
+                        .to_string(),
+            },
+            SseEvent {
+                data: "[DONE]".to_string(),
+            },
+        ]);
+        assert_eq!(parsed.unwrap_err().code, "ai_provider_response_invalid");
+    }
+}
+
+#[test]
+fn openai_compatible_usage_null_does_not_hide_later_usage() {
+    let answer = answer_json();
+    let parsed = super::openai_compatible::parse_events(vec![
+        SseEvent {
+            data: json!({"choices":[{"delta":{"content":answer},"finish_reason":null}],"usage":null}).to_string(),
+        },
+        SseEvent {
+            data: json!({"choices":[],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}).to_string(),
+        },
+        SseEvent {
+            data: "[DONE]".to_string(),
+        },
+    ])
+    .expect("valid streamed answer");
+    assert_eq!(parsed.token_usage.unwrap().total_tokens, Some(5));
 }

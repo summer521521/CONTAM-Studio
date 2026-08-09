@@ -1,0 +1,384 @@
+/* Settings and local-data transparency views belong to this layer. */
+
+.settings-workspace {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 32px;
+  margin-top: 24px;
+}
+
+.settings-category-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-category-nav button {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  color: var(--text-supporting);
+  text-align: left;
+  background: transparent;
+  border-radius: var(--radius-sm);
+}
+
+.settings-category-nav button:hover,
+.settings-category-nav button.is-active {
+  color: var(--text-default);
+  background: var(--surface-subtle);
+}
+
+.settings-category-nav button.is-active {
+  box-shadow: inset 3px 0 var(--interactive-primary);
+}
+
+.settings-category-content {
+  min-width: 0;
+}
+
+.settings-category-content h2 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+
+.settings-category-content > section > p {
+  margin: 0 0 20px;
+  color: var(--text-supporting);
+}
+
+.settings-category-content .ui-button,
+.settings-category-content .ui-status-tag {
+  margin-top: 16px;
+}
+
+.settings-reset {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 820px) {
+  .settings-workspace {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .settings-category-nav {
+    overflow-x: auto;
+    flex-direction: row;
+    padding-bottom: 4px;
+  }
+
+  .settings-category-nav button {
+    flex: 0 0 auto;
+  }
+}
+
+/* Migrated from the R1 compatibility sheet; ownership: settings. */
+.settings-list > div {
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-list strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.release-settings {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.release-callout,
+.release-card {
+  border: 1px solid var(--border);
+  background: var(--bg-surface-subtle);
+}
+
+.release-callout {
+  display: flex;
+  gap: 11px;
+  padding: 13px;
+}
+
+.release-callout > svg,
+.release-card-heading > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.release-callout strong,
+.release-card-heading strong {
+  color: var(--text-primary);
+}
+
+.release-callout p,
+.release-muted {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.release-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.release-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+}
+
+.release-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.release-path-row,
+.release-tool-row,
+.release-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.release-path-row code {
+  min-width: 0;
+  flex: 1 1 240px;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.release-tool-row {
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.release-tool-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.release-tool-row span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.release-tool-row code {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.release-about {
+  grid-column: 1 / -1;
+}
+
+.release-runtime-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  gap: 7px 14px;
+  font-size: 12px;
+}
+
+.release-advanced[open] {
+  display: grid;
+  gap: 12px;
+}
+
+.release-storage-list {
+  display: grid;
+  gap: 5px;
+}
+
+.release-storage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.release-runtime-grid span {
+  color: var(--text-muted);
+}
+
+.release-runtime-grid code {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.release-notice {
+  margin: 0;
+  color: var(--success);
+  font-size: 12px;
+}
+
+@media (max-width: 850px) {
+  .release-grid {
+      grid-template-columns: 1fr;
+    }
+
+  .release-about {
+      grid-column: auto;
+    }
+}
+
+.settings-overview {
+  max-width: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: grid;
+  gap: 12px;
+}
+
+.settings-category {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.settings-category:last-child {
+  grid-column: 1 / -1;
+}
+
+.settings-category-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+}
+
+.settings-category-copy {
+  min-width: 0;
+}
+
+.settings-category-copy h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.settings-category-copy p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.settings-category .compact-action {
+  min-height: 34px;
+  padding-inline: 11px;
+  font-size: 12px;
+}
+
+.settings-controls {
+  max-width: none;
+  padding-top: 30px;
+}
+
+.release-settings {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.release-callout,
+.release-card {
+  border-radius: 10px;
+}
+
+.release-callout p,
+.release-muted,
+.release-tool-row span,
+.release-runtime-grid,
+.release-storage-row {
+  font-size: 13px;
+}
+
+@media (max-width: 920px) {
+  .settings-overview {
+      grid-template-columns: 1fr;
+    }
+
+  .settings-category:last-child {
+      grid-column: auto;
+    }
+}
+
+@media (max-width: 720px) {
+  .settings-category {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+  .settings-category .compact-action {
+      grid-column: 2;
+      justify-self: start;
+    }
+}
+
+.settings-overview {
+  gap: 8px;
+}
+
+.settings-category {
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 1px rgb(20 34 48 / 3%);
+}
+
+.settings-category-copy p {
+  color: var(--text-muted);
+}
+
+.provider-settings {
+  display: grid;
+  gap: 12px;
+  margin-block: 14px;
+}
+
+.provider-settings-main,
+.provider-settings-advanced {
+  display: grid;
+  gap: 10px;
+}
+
+.provider-settings label {
+  display: grid;
+  gap: 5px;
+}
+
+.provider-settings label > span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.provider-settings input,
+.provider-settings select,
+.provider-settings textarea {
+  width: 100%;
+  min-width: 0;
+}

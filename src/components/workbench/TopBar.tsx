@@ -12,6 +12,8 @@ import {
 import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { AppLanguage, AppTheme } from "../../app/workbench-state";
+import { Button } from "../ui/Button";
+import { IconButton } from "../ui/IconButton";
 
 type TopBarAvailability = Pick<CommandAvailability, "newProject" | "openProject" | "runProject" | "undoDraft" | "redoDraft" | "exportDraft" | "language"> & { navigation?: boolean };
 
@@ -62,7 +64,8 @@ export function TopBar({
 
       <div className="toolbar-actions" role="toolbar" aria-label={t("app.name")}>
         {actions.map(({ key, icon: Icon, onClick }) => (
-          <button
+          <Button
+            variant="tool"
             className={`tool-button ${key === "run" ? "tool-button-run" : ""}`}
             key={key}
             type="button"
@@ -73,15 +76,15 @@ export function TopBar({
           >
             <Icon size={16} aria-hidden="true" />
             <span>{t(`toolbar.${key}`)}</span>
-          </button>
+          </Button>
         ))}
       </div>
 
       {(availability.undoDraft || availability.redoDraft || availability.exportDraft) ? (
         <div className="toolbar-actions draft-toolbar-actions" role="toolbar" aria-label={t("draft.toolbarLabel")}>
-          <button className="tool-button" type="button" disabled={!availability.undoDraft} onClick={onUndoDraft} title={t("draft.undo")} aria-label={t("draft.undo")}><Undo2 size={16} /><span>{t("draft.undo")}</span></button>
-          <button className="tool-button" type="button" disabled={!availability.redoDraft} onClick={onRedoDraft} title={t("draft.redo")} aria-label={t("draft.redo")}><Redo2 size={16} /><span>{t("draft.redo")}</span></button>
-          <button className="tool-button" type="button" disabled={!availability.exportDraft} onClick={onExportDraft} title={t("draft.export")} aria-label={t("draft.export")}><Download size={16} /><span>{t("draft.export")}</span></button>
+          <Button variant="tool" className="tool-button" disabled={!availability.undoDraft} onClick={onUndoDraft} title={t("draft.undo")} aria-label={t("draft.undo")}><Undo2 size={16} /><span>{t("draft.undo")}</span></Button>
+          <Button variant="tool" className="tool-button" disabled={!availability.redoDraft} onClick={onRedoDraft} title={t("draft.redo")} aria-label={t("draft.redo")}><Redo2 size={16} /><span>{t("draft.redo")}</span></Button>
+          <Button variant="tool" className="tool-button" disabled={!availability.exportDraft} onClick={onExportDraft} title={t("draft.export")} aria-label={t("draft.export")}><Download size={16} /><span>{t("draft.export")}</span></Button>
         </div>
       ) : null}
 
@@ -98,26 +101,24 @@ export function TopBar({
           <option value="en">English</option>
         </select>
       </label>
-      <button
+      <IconButton
         className="icon-button"
-        type="button"
         title={`${t("toolbar.theme")}: ${t(`toolbar.${theme}`)}`}
         aria-label={`${t("toolbar.theme")}: ${t(`toolbar.${theme}`)}`}
         disabled={availability.navigation === false}
         onClick={onThemeToggle}
       >
         {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
-      </button>
-      <button
+      </IconButton>
+      <IconButton
         className="icon-button"
-        type="button"
         title={t("toolbar.settings")}
         aria-label={t("toolbar.settings")}
         disabled={availability.navigation === false}
         onClick={onSettings ?? (() => onPlaceholder?.(t("toolbar.settings")))}
       >
         <Settings size={17} />
-      </button>
+      </IconButton>
     </header>
   );
 }

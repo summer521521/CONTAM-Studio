@@ -1,20 +1,22 @@
 param(
   [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-08",
   [string]$ToolchainRoot = "F:\Codex_File\toolchains\contam-studio-packaging",
-  [string]$ContamToolsTaskRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
+  [string]$ContamToolsTaskRoot = "",
   [switch]$SkipBuild,
   [switch]$ResetArtifacts,
   [switch]$RequireInstallers
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\contam-temp-root.ps1")
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $version = node -p "require('$($repo.Replace('\', '/'))/package.json').version"
 $commit = git -C $repo rev-parse HEAD
 $target = Join-Path $ArtifactRoot $version
 
-$approvedContamTaskRoot = Split-Path -Parent $ContamToolsTaskRoot
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $ContamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
+$contamToolsTaskRoot = Resolve-ContamToolsTaskRoot $ContamToolsTaskRoot
+$approvedContamTaskRoot = Split-Path -Parent $contamToolsTaskRoot
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $contamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
 if ($LASTEXITCODE -ne 0) { throw "verified NIST CONTAM runtime preparation failed" }
 
 if ($ResetArtifacts -and (Test-Path -LiteralPath $target)) {
@@ -25,7 +27,7 @@ if ($ResetArtifacts -and (Test-Path -LiteralPath $target)) {
 }
 
 if (-not $SkipBuild) {
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-release.ps1") -ArtifactRoot $ArtifactRoot
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-release.ps1") -ArtifactRoot $ArtifactRoot -ContamToolsTaskRoot $contamToolsTaskRoot
   if ($LASTEXITCODE -ne 0) { throw "portable build failed" }
 }
 
@@ -44,7 +46,7 @@ New-Item -ItemType Directory -Path $installers -Force | Out-Null
 $installerArgs = @(
   "-ArtifactRoot", $ArtifactRoot,
   "-ToolchainRoot", $ToolchainRoot,
-  "-ContamToolsTaskRoot", $ContamToolsTaskRoot
+  "-ContamToolsTaskRoot", $contamToolsTaskRoot
 )
 if ($SkipBuild) { $installerArgs += "-SkipTauriBuild" }
 $buildOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\build-installers.ps1") @installerArgs

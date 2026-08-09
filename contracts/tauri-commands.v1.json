@@ -92,6 +92,20 @@
       "payload_keys": ["requestId", "projectSessionId", "zoneId"]
     },
     {
+      "command": "extract_active_run_zone_air_state_dataset",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "extractActiveRunZoneAirStateDataset",
+      "permission": "allow-extract-active-run-zone-air-state-dataset",
+      "payload_keys": ["requestId", "projectSessionId", "zoneIds"]
+    },
+    {
+      "command": "cancel_zone_result_dataset",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "cancelZoneResultDataset",
+      "permission": "allow-cancel-zone-result-dataset",
+      "payload_keys": ["requestId", "projectSessionId", "extractionBatchId"]
+    },
+    {
       "command": "export_active_zone_air_state_csv",
       "rust_module": "zone_bridge",
       "ts_wrapper": "exportActiveZoneAirStateCsv",
@@ -131,7 +145,7 @@
       "rust_module": "zone_bridge",
       "ts_wrapper": "runStudy",
       "permission": "allow-run-study",
-      "payload_keys": ["requestId", "projectSessionId", "revisionId", "plan", "solverPath", "simreadPath"]
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "plan"]
     },
     {
       "command": "cancel_study",
@@ -299,14 +313,14 @@
       "rust_module": "codex_app_server",
       "ts_wrapper": "previewAiContext",
       "permission": "allow-preview-ai-context",
-      "payload_keys": ["requestId", "providerProfileId", "projectSessionId", "revisionId", "zoneId", "scopes", "language", "modelId", "reasoningEffort"]
+      "payload_keys": ["requestId", "providerProfileId", "projectSessionId", "revisionId", "zoneId", "scopes", "language", "modelId", "reasoningEffort", "analysisSelection"]
     },
     {
       "command": "start_readonly_ai_turn",
       "rust_module": "codex_app_server",
       "ts_wrapper": "startReadonlyAiTurn",
       "permission": "allow-start-readonly-ai-turn",
-      "payload_keys": ["requestId", "providerProfileId", "projectSessionId", "revisionId", "zoneId", "previewId", "question", "scopes", "language", "modelId", "reasoningEffort"]
+      "payload_keys": ["requestId", "providerProfileId", "projectSessionId", "revisionId", "zoneId", "previewId", "question", "scopes", "language", "modelId", "reasoningEffort", "analysisSelection"]
     },
     {
       "command": "load_ai_conversation_archive",
@@ -374,9 +388,9 @@
     {
       "command": "save_studio_setup",
       "rust_module": "release",
-      "ts_wrapper": "saveStudioSetup",
+      "ts_wrapper": "saveStudioPreferences",
       "permission": "allow-save-studio-setup",
-      "payload_keys": ["requestId", "language", "theme", "dataDirectory", "contamxPath", "simreadPath"]
+      "payload_keys": ["requestId", "language", "theme", "dataDirectory"]
     },
     {
       "command": "select_data_directory",

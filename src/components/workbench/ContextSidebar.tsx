@@ -1,21 +1,27 @@
 import { Eye, Info, PanelRightClose, Pencil, SlidersHorizontal, X } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { PatchState } from "../../app/patch-state";
 import type { ContextTab } from "../../app/workbench-state";
 import type { ProjectInspection, ZoneRecord } from "../../app/project-state";
-import { INITIAL_AI_STATE, type AiContextScope, type AiProviderProfile, type AiSemanticPatchSuggestion, type AiState } from "../../app/ai-state";
+import { INITIAL_AI_STATE, type AiContextScope, type AiIntent, type AiProviderProfile, type AiSemanticPatchSuggestion, type AiState } from "../../app/ai-state";
+import type { AssistantContextReceipt } from "../../app/assistant-context";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
-import { CodexAssistantPanel } from "./CodexAssistantPanel";
+import { LoadingState } from "../ui/LoadingState";
+import { Disclosure } from "../ui/Disclosure";
 import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
 import type { SemanticNode, SemanticOperationRequest, SemanticState } from "../../app/semantic-state";
 import { SemanticPropertyPanel } from "./SemanticPropertyPanel";
+
+const CodexAssistantPanel = lazy(async () => ({
+  default: (await import("./CodexAssistantPanel")).CodexAssistantPanel,
+}));
 
 interface ContextSidebarProps {
   activeTab: ContextTab;
   project: ProjectInspection | null;
   selectedZone: ZoneRecord | null;
-  selectedObject: string;
   patchState: PatchState;
   availability?: Pick<CommandAvailability, "startEditing" | "patchInput" | "planPatch" | "patchCancel"> & { navigation?: boolean };
   onStartVolumeEdit: () => void;
@@ -26,6 +32,9 @@ interface ContextSidebarProps {
   onCollapse: () => void;
   aiState?: AiState;
   aiContextAvailable?: boolean;
+  assistantReceipt?: AssistantContextReceipt | null;
+  onAiIntentChange?: (intent: AiIntent) => void;
+  onOpenAiSettings?: () => void;
   onAiConnect?: () => void;
   onAiInstall?: () => void;
   onAiRefresh?: () => void;
@@ -92,6 +101,9 @@ export function ContextSidebar({
   onCollapse,
   aiState = INITIAL_AI_STATE,
   aiContextAvailable = false,
+  assistantReceipt = null,
+  onAiIntentChange = () => undefined,
+  onOpenAiSettings = () => undefined,
   onAiConnect = () => undefined,
   onAiInstall = () => undefined,
   onAiRefresh = () => undefined,
@@ -206,10 +218,16 @@ export function ContextSidebar({
                   ) : null}
                 </dd>
               </div>
-              <div><dt>{t("inspector.sourceLine")}</dt><dd>{selectedZone.source_line_number}</dd></div>
-              <div><dt>{t("inspector.readerMode")}</dt><dd>{project.reader_mode}</dd></div>
               <div><dt>{t("inspector.status")}</dt><dd>{t("inspector.readOnlyValue")}</dd></div>
             </dl>
+          ) : null}
+          {project && selectedZone ? (
+            <Disclosure label={t("journeys.advanced")}>
+              <dl className="property-list property-list-technical">
+                <div><dt>{t("inspector.sourceLine")}</dt><dd>{selectedZone.source_line_number}</dd></div>
+                <div><dt>{t("inspector.readerMode")}</dt><dd><code>{project.reader_mode}</code></dd></div>
+              </dl>
+            </Disclosure>
           ) : null}
           {project && selectedZone && ["editing", "planning", "error"].includes(patchState.status) ? (
             <div className="volume-edit-panel">
@@ -267,9 +285,14 @@ export function ContextSidebar({
           </div>
         </div>
       ) : (
+        <Suspense fallback={<LoadingState label={t("journeys.loading")} />}>
         <CodexAssistantPanel
           state={aiState}
           contextAvailable={aiContextAvailable}
+          receipt={assistantReceipt}
+          semanticSnapshot={semanticState?.snapshot ?? null}
+          onIntentChange={onAiIntentChange}
+          onOpenSettings={onOpenAiSettings}
           onConnect={onAiConnect}
           onInstall={onAiInstall}
           onRefresh={onAiRefresh}
@@ -312,6 +335,7 @@ export function ContextSidebar({
           onAttachmentPreview={onAttachmentPreview}
           onAttachmentRemove={onAttachmentRemove}
         />
+        </Suspense>
       )}
     </aside>
   );

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -15,6 +15,7 @@ use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 use crate::controlled_process::ControlledChild;
+use crate::release::{resolve_verified_tool_path, ToolKind};
 
 const PROTOCOL_VERSION: &str = "1.2";
 const RESULT_SCHEMA_VERSION: &str = "1.0";
@@ -48,6 +49,10 @@ const MAX_DIFF_CHARS: usize = 16 * 1024;
 const MAX_DIAGNOSTIC_CODE_BYTES: usize = 80;
 const MAX_DIAGNOSTIC_MESSAGE_CHARS: usize = 160;
 const MAX_CONTEXT_STRING_CHARS: usize = 120;
+const ZONE_RESULT_DATASET_SCHEMA: &str = "zone_result_dataset.v1";
+const MAX_RESULT_DATASET_ZONES: usize = 64;
+const MAX_RESULT_DATASET_SAMPLES: usize = 250_000;
+const MAX_RESULT_DATASET_PAYLOAD_BYTES: usize = 32 * 1024 * 1024;
 const PYTHON_DIAGNOSTIC_MESSAGE: &str = "Python Zone bridge returned a structured diagnostic.";
 const SHA256_INITIAL: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
@@ -194,6 +199,22 @@ pub(crate) fn sha256_file(path: &Path) -> std::io::Result<(String, u64)> {
     let digest = hasher.finalize();
     let hash = digest.iter().map(|byte| format!("{byte:02X}")).collect();
     Ok((hash, size))
+}
+
+fn sha256_bytes(bytes: &[u8]) -> Result<String, ReaderDiagnostic> {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes).map_err(|_| {
+        host_diagnostic(
+            "result_dataset_fingerprint_failed",
+            "The result dataset identity could not be created.",
+            BTreeMap::new(),
+        )
+    })?;
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02X}"))
+        .collect())
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -665,6 +686,141 @@ pub struct DesktopZoneAirStateResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ResultMetricDefinitionView {
+    key: &'static str,
+    display_name: &'static str,
+    unit: &'static str,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RequestedZoneIdentityView {
+    zone_id: String,
+    zone_number: i64,
+    zone_name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ZoneResultFailureView {
+    zone_id: String,
+    zone_number: i64,
+    zone_name: String,
+    code: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ResultTimeIdentityView {
+    kind: &'static str,
+    shared_time_seconds: Vec<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ResultEvidenceSummaryView {
+    solver_name: String,
+    solver_version: String,
+    run_manifest_sha256: String,
+    source_unchanged: bool,
+    successful_zone_count: usize,
+    failed_zone_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ResultDatasetBoundsView {
+    zone_limit: usize,
+    sample_limit: usize,
+    payload_limit_bytes: usize,
+    total_samples: usize,
+    truncated: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ZoneResultDatasetView {
+    schema: &'static str,
+    status: &'static str,
+    project_session_id: String,
+    project_source_hash: String,
+    revision_id: String,
+    run_id: String,
+    run_manifest_identity: String,
+    extraction_batch_id: String,
+    metric_definitions: Vec<ResultMetricDefinitionView>,
+    requested_zones: Vec<RequestedZoneIdentityView>,
+    successful_zone_series: Vec<ZoneAirStateResultView>,
+    per_zone_failures: Vec<ZoneResultFailureView>,
+    time_identity: ResultTimeIdentityView,
+    evidence_summary: ResultEvidenceSummaryView,
+    created_at_unix_ms: u128,
+    bounds: ResultDatasetBoundsView,
+    dataset_fingerprint: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopZoneResultDatasetResponse {
+    request_id: String,
+    cancelled: bool,
+    project_session_id: Option<String>,
+    dataset: Option<ZoneResultDatasetView>,
+    error: Option<ReaderDiagnostic>,
+}
+
+fn result_dataset_is_trusted(dataset: &ZoneResultDatasetView) -> bool {
+    dataset.status == "ready"
+        || (dataset.status == "partial" && !dataset.successful_zone_series.is_empty())
+}
+
+fn verified_tool_diagnostic(error: crate::release::SetupError) -> ReaderDiagnostic {
+    host_diagnostic(&error.code, &error.message, BTreeMap::new())
+}
+
+const AI_ANALYSIS_MAX_TIME_SECONDS: f64 = 1_000_000_000_000.0;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AiAnalysisSelection {
+    pub(crate) intent: String,
+    pub(crate) result_dataset_fingerprint: Option<String>,
+    pub(crate) metric: Option<String>,
+    pub(crate) selected_time_seconds: Option<f64>,
+}
+
+impl AiAnalysisSelection {
+    fn validate(&self) -> Result<(), ReaderDiagnostic> {
+        if !matches!(
+            self.intent.as_str(),
+            "explain_object" | "diagnose_run_result" | "propose_change" | "simulation_plan"
+        ) {
+            return Err(host_diagnostic(
+                "ai_context_selection_invalid",
+                "The AI intent is not supported.",
+                BTreeMap::new(),
+            ));
+        }
+        if self
+            .result_dataset_fingerprint
+            .as_deref()
+            .is_some_and(|value| !safe_sha256(value))
+            || self.metric.as_deref().is_some_and(|value| {
+                !matches!(
+                    value,
+                    "temperature_k" | "reference_pressure_pa" | "air_density_kg_m3"
+                )
+            })
+            || self.selected_time_seconds.is_some_and(|value| {
+                !value.is_finite() || !(0.0..=AI_ANALYSIS_MAX_TIME_SECONDS).contains(&value)
+            })
+            || (self.result_dataset_fingerprint.is_none()
+                && (self.metric.is_some() || self.selected_time_seconds.is_some()))
+        {
+            return Err(host_diagnostic(
+                "ai_context_selection_invalid",
+                "The AI result selection is invalid.",
+                BTreeMap::new(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ZoneAirStateCsvExportSummary {
     file_name: String,
     row_count: u64,
@@ -895,6 +1051,89 @@ pub struct DesktopSemanticSnapshotResponse {
     revision_id: Option<String>,
     snapshot: Option<Value>,
     error: Option<ReaderDiagnostic>,
+}
+
+const SPATIAL_SCHEMA_VERSION: &str = "spatial_projection.v1";
+const MAX_SPATIAL_LEVELS: usize = 256;
+const MAX_SPATIAL_ICONS: usize = 100_000;
+const MAX_SPATIAL_STRING_BYTES: usize = 512;
+const MAX_SPATIAL_COORDINATE: i64 = 1_000_000;
+const MAX_SPATIAL_LEVEL_NUMBER: i64 = 1_000_000;
+const MAX_SPATIAL_ICON_TYPE: i64 = 1_000_000;
+const MIN_SPATIAL_OBJECT_NUMBER: i64 = -1;
+const MAX_SPATIAL_OBJECT_NUMBER: i64 = 1_000_000;
+const MAX_SPATIAL_LEVEL_UNIT_CODE: i64 = 1;
+const MAX_SPATIAL_WARNINGS: usize = 1_024;
+const MAX_SPATIAL_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialProjectionPayload {
+    schema_version: String,
+    status: String,
+    identity_sha256: String,
+    source_sha256: String,
+    revision_id: String,
+    levels: Vec<SpatialLevelPayload>,
+    warnings: Vec<SpatialWarningPayload>,
+    unavailable_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialLevelPayload {
+    level_number: i64,
+    name: String,
+    reference_height: f64,
+    delta_height: f64,
+    reference_height_unit: i64,
+    delta_height_unit: i64,
+    bounds: Option<SpatialBoundsPayload>,
+    icons: Vec<SpatialIconPayload>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialBoundsPayload {
+    min_column: i64,
+    max_column: i64,
+    min_row: i64,
+    max_row: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialIconPayload {
+    id: String,
+    icon_type: i64,
+    kind: String,
+    column: i64,
+    row: i64,
+    object_number: i64,
+    binding: SpatialBindingPayload,
+    evidence: SpatialEvidencePayload,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialBindingPayload {
+    kind: String,
+    semantic_id: Option<String>,
+    status: String,
+    reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialEvidencePayload {
+    source_line: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpatialWarningPayload {
+    code: String,
+    icon_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1163,6 +1402,8 @@ struct DesktopSessionState {
     active_run: Option<ActiveRunContext>,
     active_result: Option<ActiveResultContext>,
     last_trusted_result: Option<ActiveResultContext>,
+    active_result_dataset: Option<ZoneResultDatasetView>,
+    last_trusted_result_dataset: Option<ZoneResultDatasetView>,
     active_study: Option<Value>,
     active_study_control: Option<ActiveStudyControl>,
 }
@@ -1171,6 +1412,8 @@ struct DesktopSessionState {
 pub struct DesktopProjectSessionStore {
     state: Mutex<DesktopSessionState>,
     operation_busy: AtomicBool,
+    result_dataset_cancel_requested: AtomicBool,
+    active_result_dataset_request: Mutex<Option<String>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1185,9 +1428,20 @@ struct OperationGuard<'a> {
     busy: &'a AtomicBool,
 }
 
+struct ResultDatasetRequestGuard<'a> {
+    store: &'a DesktopProjectSessionStore,
+    request_id: &'a str,
+}
+
 impl Drop for OperationGuard<'_> {
     fn drop(&mut self) {
         self.busy.store(false, Ordering::Release);
+    }
+}
+
+impl Drop for ResultDatasetRequestGuard<'_> {
+    fn drop(&mut self) {
+        self.store.finish_result_dataset(self.request_id);
     }
 }
 
@@ -1259,6 +1513,8 @@ impl DesktopProjectSessionStore {
         state.active_run = None;
         state.active_result = None;
         state.last_trusted_result = None;
+        state.active_result_dataset = None;
+        state.last_trusted_result_dataset = None;
         state.active_study = None;
         state.active_study_control = None;
         drop(state);
@@ -1293,6 +1549,71 @@ impl DesktopProjectSessionStore {
         Ok(())
     }
 
+    fn begin_result_dataset(&self, request_id: &str) {
+        self.result_dataset_cancel_requested
+            .store(false, Ordering::Release);
+        *self
+            .active_result_dataset_request
+            .lock()
+            .expect("result dataset request mutex poisoned") = Some(request_id.to_owned());
+    }
+
+    fn finish_result_dataset(&self, request_id: &str) {
+        let mut active = self
+            .active_result_dataset_request
+            .lock()
+            .expect("result dataset request mutex poisoned");
+        if active.as_deref() == Some(request_id) {
+            *active = None;
+        }
+        self.result_dataset_cancel_requested
+            .store(false, Ordering::Release);
+    }
+
+    fn result_dataset_cancelled(&self, request_id: &str) -> bool {
+        self.active_result_dataset_request
+            .lock()
+            .expect("result dataset request mutex poisoned")
+            .as_deref()
+            == Some(request_id)
+            && self.result_dataset_cancel_requested.load(Ordering::Acquire)
+    }
+
+    fn retain_result_dataset(
+        &self,
+        active: &ActiveProjectContext,
+        active_run: &ActiveRunContext,
+        dataset: ZoneResultDatasetView,
+    ) -> Result<(), ReaderDiagnostic> {
+        let mut state = self.state.lock().expect("desktop session mutex poisoned");
+        let still_current = state.active_project.as_ref().is_some_and(|project| {
+            project.project_session_id == active.project_session_id
+                && project.source_sha256 == active.source_sha256
+                && project.active_revision().revision_id == active.active_revision().revision_id
+        }) && state
+            .active_run
+            .as_ref()
+            .is_some_and(|run| run.run_id == active_run.run_id && run.is_bound_to(active));
+        if !still_current
+            || dataset.project_session_id != active.project_session_id
+            || dataset.project_source_hash != active.source_sha256
+            || dataset.revision_id != active.active_revision().revision_id
+            || dataset.run_id != active_run.run_id
+        {
+            return Err(host_diagnostic(
+                "result_dataset_identity_mismatch",
+                "The result dataset no longer belongs to the active project and run.",
+                BTreeMap::new(),
+            ));
+        }
+        let trusted = result_dataset_is_trusted(&dataset);
+        state.active_result_dataset = Some(dataset);
+        if trusted {
+            state.last_trusted_result_dataset = state.active_result_dataset.clone();
+        }
+        Ok(())
+    }
+
     pub(crate) fn has_last_trusted_result(&self) -> bool {
         self.state
             .lock()
@@ -1308,6 +1629,20 @@ impl DesktopProjectSessionStore {
         zone_id: &str,
         scopes: &[String],
     ) -> Result<AiTrustedContext, ReaderDiagnostic> {
+        self.build_ai_context_for_analysis(project_session_id, revision_id, zone_id, scopes, None)
+    }
+
+    pub(crate) fn build_ai_context_for_analysis(
+        &self,
+        project_session_id: &str,
+        revision_id: &str,
+        zone_id: &str,
+        scopes: &[String],
+        analysis_selection: Option<&AiAnalysisSelection>,
+    ) -> Result<AiTrustedContext, ReaderDiagnostic> {
+        if let Some(selection) = analysis_selection {
+            selection.validate()?;
+        }
         let state = self.state.lock().expect("desktop session mutex poisoned");
         let active = state.active_project.as_ref().ok_or_else(|| {
             host_diagnostic(
@@ -1441,6 +1776,70 @@ impl DesktopProjectSessionStore {
                     );
                 }
                 "result_summary" => {
+                    if let Some(selection) = analysis_selection
+                        .filter(|selection| selection.result_dataset_fingerprint.is_some())
+                    {
+                        let dataset = state.active_result_dataset.as_ref().filter(|dataset| {
+                            dataset.project_session_id == active.project_session_id
+                                && dataset.revision_id == active.active_revision().revision_id
+                                && dataset.project_source_hash == active.source_sha256
+                                && selection.result_dataset_fingerprint.as_deref()
+                                    == Some(dataset.dataset_fingerprint.as_str())
+                        });
+                        let Some(dataset) = dataset else {
+                            return Err(host_diagnostic(
+                                "ai_context_stale",
+                                "The selected result dataset is no longer current.",
+                                BTreeMap::new(),
+                            ));
+                        };
+                        let selected_values =
+                            match (selection.metric.as_deref(), selection.selected_time_seconds) {
+                                (Some(metric), Some(selected_time)) => dataset
+                                    .successful_zone_series
+                                    .iter()
+                                    .filter_map(|series| {
+                                        let sample = series.samples.iter().find(|sample| {
+                                            sample.sim_time_seconds.to_bits()
+                                                == selected_time.to_bits()
+                                        })?;
+                                        let value = match metric {
+                                            "temperature_k" => sample.temperature_k,
+                                            "reference_pressure_pa" => sample.reference_pressure_pa,
+                                            "air_density_kg_m3" => sample.air_density_kg_m3,
+                                            _ => return None,
+                                        };
+                                        Some(json!({
+                                            "zone_id": series.zone_id,
+                                            "zone_number": series.zone_number,
+                                            "zone_name": series.zone_name,
+                                            "value": value,
+                                        }))
+                                    })
+                                    .collect::<Vec<_>>(),
+                                _ => Vec::new(),
+                            };
+                        payload.insert(
+                            scope.clone(),
+                            json!({
+                                "available": true,
+                                "schema": dataset.schema,
+                                "status": dataset.status,
+                                "run_id": dataset.run_id,
+                                "dataset_fingerprint": dataset.dataset_fingerprint,
+                                "metric": selection.metric,
+                                "selected_time_seconds": selection.selected_time_seconds,
+                                "selected_values": selected_values,
+                                "time_identity": dataset.time_identity,
+                                "successful_zone_count": dataset.evidence_summary.successful_zone_count,
+                                "failed_zone_count": dataset.evidence_summary.failed_zone_count,
+                                "sample_count": dataset.bounds.total_samples,
+                                "full_series_disclosed": false,
+                                "disclosure_note": "Only exact values at the selected time were sent; complete series were not sent.",
+                            }),
+                        );
+                        continue;
+                    }
                     let result = state.active_result.as_ref().filter(|result| {
                         result.project_session_id == active.project_session_id
                             && result.revision_id == active.active_revision().revision_id
@@ -1522,6 +1921,9 @@ impl DesktopProjectSessionStore {
                     ))
                 }
             }
+        }
+        if let Some(selection) = analysis_selection {
+            payload.insert("assistant_request".to_string(), json!(selection));
         }
         Ok(AiTrustedContext {
             project_session_id: active.project_session_id.clone(),
@@ -2592,6 +2994,203 @@ fn semantic_string_is_valid(value: &str, max: usize) -> bool {
         && !value.contains(['\r', '\n', '\0'])
 }
 
+fn spatial_string_is_valid(value: &str, max: usize, allow_empty: bool) -> bool {
+    (allow_empty || !value.is_empty()) && value.len() <= max && !value.contains(['\r', '\n', '\0'])
+}
+
+fn spatial_validation_error(code: &'static str) -> ReaderDiagnostic {
+    host_diagnostic(
+        code,
+        "空间模型数据无法安全显示。请切换到对象列表或查看诊断详情。",
+        BTreeMap::new(),
+    )
+}
+
+fn semantic_ids_for(snapshot: &Value, key: &str, alternate_key: &str) -> BTreeSet<String> {
+    snapshot
+        .get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            item.get("object_id")
+                .or_else(|| item.get(alternate_key))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+fn spatial_kind_binding_compatible(kind: &str, binding_kind: &str) -> bool {
+    match kind {
+        "zone" => binding_kind == "zone",
+        "flow_path" | "opening" | "fan" => binding_kind == "flow_path",
+        "wall" | "note" | "unknown" => binding_kind == "none",
+        _ => false,
+    }
+}
+
+fn validate_spatial_projection(
+    value: &Value,
+    active: &ActiveProjectContext,
+    snapshot: &Value,
+) -> Result<(), ReaderDiagnostic> {
+    let payload_size = serde_json::to_vec(value)
+        .map_err(|_| spatial_validation_error("spatial_payload_invalid"))?
+        .len();
+    if payload_size > MAX_SPATIAL_PAYLOAD_BYTES {
+        return Err(spatial_validation_error("spatial_payload_limit_exceeded"));
+    }
+    let payload: SpatialProjectionPayload = serde_json::from_value(value.clone())
+        .map_err(|_| spatial_validation_error("spatial_payload_invalid"))?;
+    if payload.schema_version != SPATIAL_SCHEMA_VERSION {
+        return Err(spatial_validation_error("spatial_schema_version_invalid"));
+    }
+    if payload.identity_sha256 != active.baseline_source_sha256 {
+        return Err(spatial_validation_error("spatial_identity_mismatch"));
+    }
+    if payload.source_sha256 != active.source_sha256 {
+        return Err(spatial_validation_error("spatial_source_mismatch"));
+    }
+    if payload.revision_id != active.active_revision().revision_id {
+        return Err(spatial_validation_error("spatial_revision_mismatch"));
+    }
+    if !matches!(payload.status.as_str(), "available" | "unavailable") {
+        return Err(spatial_validation_error("spatial_status_invalid"));
+    }
+    if payload.levels.len() > MAX_SPATIAL_LEVELS {
+        return Err(spatial_validation_error("spatial_level_limit_exceeded"));
+    }
+    if payload.warnings.len() > MAX_SPATIAL_WARNINGS {
+        return Err(spatial_validation_error("spatial_warning_limit_exceeded"));
+    }
+    match payload.status.as_str() {
+        "available" if payload.unavailable_reason.is_some() => {
+            return Err(spatial_validation_error("spatial_reason_invalid"));
+        }
+        "unavailable" if !payload.levels.is_empty() => {
+            return Err(spatial_validation_error(
+                "spatial_unavailable_contains_levels",
+            ));
+        }
+        "unavailable" if payload.unavailable_reason.is_none() => {
+            return Err(spatial_validation_error(
+                "spatial_unavailable_reason_missing",
+            ));
+        }
+        _ => {}
+    }
+    if !spatial_string_is_valid(
+        payload.unavailable_reason.as_deref().unwrap_or("ok"),
+        MAX_SPATIAL_STRING_BYTES,
+        false,
+    ) {
+        return Err(spatial_validation_error("spatial_reason_invalid"));
+    }
+
+    let zone_ids = semantic_ids_for(snapshot, "zones", "zone_id");
+    let flow_path_ids = semantic_ids_for(snapshot, "flow_paths", "path_id");
+    let mut level_ids = BTreeSet::new();
+    let mut icon_ids = BTreeSet::new();
+    let mut icon_count = 0_usize;
+    for level in &payload.levels {
+        if !(1..=MAX_SPATIAL_LEVEL_NUMBER).contains(&level.level_number)
+            || !level_ids.insert(level.level_number)
+        {
+            return Err(spatial_validation_error("spatial_level_number_invalid"));
+        }
+        if !spatial_string_is_valid(&level.name, MAX_SPATIAL_STRING_BYTES, false)
+            || !level.reference_height.is_finite()
+            || !level.delta_height.is_finite()
+            || !(0..=MAX_SPATIAL_LEVEL_UNIT_CODE).contains(&level.reference_height_unit)
+            || !(0..=MAX_SPATIAL_LEVEL_UNIT_CODE).contains(&level.delta_height_unit)
+        {
+            return Err(spatial_validation_error("spatial_level_invalid"));
+        }
+        if level.icons.len() > MAX_SPATIAL_ICONS.saturating_sub(icon_count) {
+            return Err(spatial_validation_error("spatial_icon_limit_exceeded"));
+        }
+        icon_count += level.icons.len();
+        let mut expected_bounds: Option<(i64, i64, i64, i64)> = None;
+        for icon in &level.icons {
+            if !icon_ids.insert(icon.id.clone()) {
+                return Err(spatial_validation_error("spatial_duplicate_icon_id"));
+            }
+            if !semantic_string_is_valid(&icon.id, 160)
+                || !(0..=MAX_SPATIAL_ICON_TYPE).contains(&icon.icon_type)
+                || !(MIN_SPATIAL_OBJECT_NUMBER..=MAX_SPATIAL_OBJECT_NUMBER)
+                    .contains(&icon.object_number)
+                || !(-MAX_SPATIAL_COORDINATE..=MAX_SPATIAL_COORDINATE).contains(&icon.column)
+                || !(-MAX_SPATIAL_COORDINATE..=MAX_SPATIAL_COORDINATE).contains(&icon.row)
+                || icon.evidence.source_line == 0
+            {
+                return Err(spatial_validation_error("spatial_icon_invalid"));
+            }
+            let bounds =
+                expected_bounds.get_or_insert((icon.column, icon.column, icon.row, icon.row));
+            bounds.0 = bounds.0.min(icon.column);
+            bounds.1 = bounds.1.max(icon.column);
+            bounds.2 = bounds.2.min(icon.row);
+            bounds.3 = bounds.3.max(icon.row);
+            if !spatial_kind_binding_compatible(&icon.kind, &icon.binding.kind)
+                || !matches!(icon.binding.kind.as_str(), "zone" | "flow_path" | "none")
+                || !matches!(icon.binding.status.as_str(), "bound" | "unbound")
+            {
+                return Err(spatial_validation_error("spatial_binding_invalid"));
+            }
+            match icon.binding.status.as_str() {
+                "bound" => {
+                    let Some(semantic_id) = icon.binding.semantic_id.as_ref() else {
+                        return Err(spatial_validation_error("spatial_binding_invalid"));
+                    };
+                    if !semantic_string_is_valid(semantic_id, 160)
+                        || icon.binding.reason.is_some()
+                        || (icon.binding.kind == "zone" && !zone_ids.contains(semantic_id))
+                        || (icon.binding.kind == "flow_path"
+                            && !flow_path_ids.contains(semantic_id))
+                    {
+                        return Err(spatial_validation_error("spatial_dangling_binding"));
+                    }
+                }
+                "unbound" => {
+                    if icon.binding.semantic_id.is_some()
+                        || !icon
+                            .binding
+                            .reason
+                            .as_deref()
+                            .is_some_and(|reason| spatial_string_is_valid(reason, 160, false))
+                    {
+                        return Err(spatial_validation_error("spatial_binding_invalid"));
+                    }
+                }
+                _ => unreachable!("binding status was checked above"),
+            }
+        }
+        match (&level.bounds, expected_bounds) {
+            (None, None) => {}
+            (Some(bounds), Some(expected))
+                if (
+                    bounds.min_column,
+                    bounds.max_column,
+                    bounds.min_row,
+                    bounds.max_row,
+                ) == expected => {}
+            _ => return Err(spatial_validation_error("spatial_bounds_invalid")),
+        }
+    }
+    for warning in &payload.warnings {
+        if !semantic_string_is_valid(&warning.code, 160)
+            || warning
+                .icon_id
+                .as_deref()
+                .is_some_and(|icon_id| !icon_ids.contains(icon_id))
+        {
+            return Err(spatial_validation_error("spatial_warning_invalid"));
+        }
+    }
+    Ok(())
+}
+
 fn canonicalize_manifest_path(path: &Path) -> Result<PathBuf, &'static str> {
     if !path.is_file()
         || !path
@@ -3181,6 +3780,7 @@ async fn extract_zone_air_state_with_manifest(
     active: &ActiveProjectContext,
     zone_number: i64,
     manifest_path: PathBuf,
+    simread_path: &Path,
     expected_run_id: Option<&str>,
 ) -> Result<ZoneAirStateResultView, ReaderDiagnostic> {
     let result_root = app
@@ -3203,6 +3803,7 @@ async fn extract_zone_air_state_with_manifest(
         "source_sha256": active.source_sha256,
         "result_root": result_root,
         "zone_number": zone_number,
+        "simread_path": simread_path,
     });
     let bridge_id = request_id.to_owned();
     let raw = tauri::async_runtime::spawn_blocking(move || {
@@ -3228,6 +3829,242 @@ async fn extract_zone_air_state_with_manifest(
             )
         })?;
     validate_zone_air_state_result(extraction, active, zone_number, expected_run_id)
+}
+
+fn result_dataset_metric_definitions() -> Vec<ResultMetricDefinitionView> {
+    vec![
+        ResultMetricDefinitionView {
+            key: "temperature_k",
+            display_name: "Temperature",
+            unit: "K",
+        },
+        ResultMetricDefinitionView {
+            key: "reference_pressure_pa",
+            display_name: "Reference pressure",
+            unit: "Pa",
+        },
+        ResultMetricDefinitionView {
+            key: "air_density_kg_m3",
+            display_name: "Air density",
+            unit: "kg/m3",
+        },
+    ]
+}
+
+fn exact_common_result_times(series: &[ZoneAirStateResultView]) -> ResultTimeIdentityView {
+    let Some(first) = series.first() else {
+        return ResultTimeIdentityView {
+            kind: "none",
+            shared_time_seconds: Vec::new(),
+        };
+    };
+    let mut common: Vec<f64> = first
+        .samples
+        .iter()
+        .map(|sample| sample.sim_time_seconds)
+        .collect();
+    for candidate in &series[1..] {
+        let times: BTreeSet<u64> = candidate
+            .samples
+            .iter()
+            .map(|sample| sample.sim_time_seconds.to_bits())
+            .collect();
+        common.retain(|time| times.contains(&time.to_bits()));
+        if common.is_empty() {
+            break;
+        }
+    }
+    let all_exact = series.iter().all(|candidate| {
+        candidate.samples.len() == common.len()
+            && candidate
+                .samples
+                .iter()
+                .zip(&common)
+                .all(|(sample, expected)| sample.sim_time_seconds.to_bits() == expected.to_bits())
+    });
+    ResultTimeIdentityView {
+        kind: if common.is_empty() {
+            "per_zone"
+        } else if all_exact {
+            "exact_shared"
+        } else {
+            "exact_common"
+        },
+        shared_time_seconds: common,
+    }
+}
+
+fn result_dataset_failure_is_hard(code: &str) -> bool {
+    code.contains("identity_mismatch")
+        || code.contains("project_mismatch")
+        || code.contains("source_mismatch")
+        || code.contains("run_mismatch")
+        || code == "active_run_result_mismatch"
+}
+
+struct ZoneResultDatasetInput<'a> {
+    extraction_batch_id: &'a str,
+    manifest_sha256: &'a str,
+    requested_zones: Vec<RequestedZoneIdentityView>,
+    successful_zone_series: Vec<ZoneAirStateResultView>,
+    per_zone_failures: Vec<ZoneResultFailureView>,
+    forced_status: Option<&'static str>,
+}
+
+fn build_zone_result_dataset(
+    active: &ActiveProjectContext,
+    active_run: &ActiveRunContext,
+    input: ZoneResultDatasetInput<'_>,
+) -> Result<ZoneResultDatasetView, ReaderDiagnostic> {
+    let ZoneResultDatasetInput {
+        extraction_batch_id,
+        manifest_sha256,
+        mut requested_zones,
+        mut successful_zone_series,
+        mut per_zone_failures,
+        forced_status,
+    } = input;
+    requested_zones.sort_by(|left, right| {
+        left.zone_number
+            .cmp(&right.zone_number)
+            .then_with(|| left.zone_id.cmp(&right.zone_id))
+    });
+    successful_zone_series.sort_by(|left, right| {
+        left.zone_number
+            .cmp(&right.zone_number)
+            .then_with(|| left.zone_id.cmp(&right.zone_id))
+    });
+    per_zone_failures.sort_by(|left, right| {
+        left.zone_number
+            .cmp(&right.zone_number)
+            .then_with(|| left.zone_id.cmp(&right.zone_id))
+    });
+    if requested_zones.is_empty() || requested_zones.len() > MAX_RESULT_DATASET_ZONES {
+        return Err(host_diagnostic(
+            "result_dataset_zone_limit_exceeded",
+            "Select between 1 and 64 Zones for result reading.",
+            BTreeMap::new(),
+        ));
+    }
+    let total_samples = successful_zone_series
+        .iter()
+        .try_fold(0_usize, |total, series| {
+            total
+                .checked_add(series.samples.len())
+                .filter(|value| *value <= MAX_RESULT_DATASET_SAMPLES)
+        })
+        .ok_or_else(|| {
+            host_diagnostic(
+                "result_dataset_sample_limit_exceeded",
+                "The selected result contains too many samples. Select fewer Zones.",
+                BTreeMap::new(),
+            )
+        })?;
+    let status = forced_status.unwrap_or(if successful_zone_series.is_empty() {
+        "failed"
+    } else if per_zone_failures.is_empty() {
+        "ready"
+    } else {
+        "partial"
+    });
+    let time_identity = exact_common_result_times(&successful_zone_series);
+    let canonical = json!({
+        "schema": ZONE_RESULT_DATASET_SCHEMA,
+        "status": status,
+        "project_session_id": active.project_session_id,
+        "project_source_hash": active.source_sha256,
+        "revision_id": active.active_revision().revision_id,
+        "run_id": active_run.run_id,
+        "run_manifest_identity": manifest_sha256,
+        "requested_zones": requested_zones,
+        "successful_zone_series": successful_zone_series,
+        "per_zone_failures": per_zone_failures,
+        "time_identity": time_identity,
+        "total_samples": total_samples,
+    });
+    let canonical_bytes = serde_json::to_vec(&canonical).map_err(|_| {
+        host_diagnostic(
+            "result_dataset_payload_invalid",
+            "The result dataset could not be serialized safely.",
+            BTreeMap::new(),
+        )
+    })?;
+    if canonical_bytes.len() > MAX_RESULT_DATASET_PAYLOAD_BYTES {
+        return Err(host_diagnostic(
+            "result_dataset_payload_limit_exceeded",
+            "The selected result is too large. Select fewer Zones.",
+            BTreeMap::new(),
+        ));
+    }
+    let dataset_fingerprint = sha256_bytes(&canonical_bytes)?;
+    let mut dataset = ZoneResultDatasetView {
+        schema: ZONE_RESULT_DATASET_SCHEMA,
+        status,
+        project_session_id: active.project_session_id.clone(),
+        project_source_hash: active.source_sha256.clone(),
+        revision_id: active.active_revision().revision_id.clone(),
+        run_id: active_run.run_id.clone(),
+        run_manifest_identity: manifest_sha256.to_owned(),
+        extraction_batch_id: extraction_batch_id.to_owned(),
+        metric_definitions: result_dataset_metric_definitions(),
+        requested_zones,
+        successful_zone_series,
+        per_zone_failures,
+        time_identity,
+        evidence_summary: ResultEvidenceSummaryView {
+            solver_name: active_run.summary.solver_name.clone(),
+            solver_version: active_run.summary.solver_version.clone(),
+            run_manifest_sha256: manifest_sha256.to_owned(),
+            source_unchanged: active_run.summary.source_unchanged,
+            successful_zone_count: canonical["successful_zone_series"]
+                .as_array()
+                .map_or(0, Vec::len),
+            failed_zone_count: canonical["per_zone_failures"]
+                .as_array()
+                .map_or(0, Vec::len),
+        },
+        created_at_unix_ms: unix_time_ms(),
+        bounds: ResultDatasetBoundsView {
+            zone_limit: MAX_RESULT_DATASET_ZONES,
+            sample_limit: MAX_RESULT_DATASET_SAMPLES,
+            payload_limit_bytes: MAX_RESULT_DATASET_PAYLOAD_BYTES,
+            total_samples,
+            truncated: false,
+        },
+        dataset_fingerprint,
+    };
+    let encoded_size = serde_json::to_vec(&dataset)
+        .map_err(|_| {
+            host_diagnostic(
+                "result_dataset_payload_invalid",
+                "The result dataset could not be serialized safely.",
+                BTreeMap::new(),
+            )
+        })?
+        .len();
+    if encoded_size > MAX_RESULT_DATASET_PAYLOAD_BYTES {
+        return Err(host_diagnostic(
+            "result_dataset_payload_limit_exceeded",
+            "The selected result is too large. Select fewer Zones.",
+            BTreeMap::new(),
+        ));
+    }
+    dataset.evidence_summary.successful_zone_count = dataset.successful_zone_series.len();
+    dataset.evidence_summary.failed_zone_count = dataset.per_zone_failures.len();
+    Ok(dataset)
+}
+
+fn result_dataset_failure(
+    request_id: &str,
+    error: ReaderDiagnostic,
+) -> DesktopZoneResultDatasetResponse {
+    DesktopZoneResultDatasetResponse {
+        request_id: request_id.to_owned(),
+        cancelled: false,
+        project_session_id: None,
+        dataset: None,
+        error: Some(error),
+    }
 }
 
 #[tauri::command]
@@ -3382,6 +4219,7 @@ async fn semantic_bridge_snapshot(
         "operation": "read_semantic_project",
         "source_path": active.source_path,
         "baseline_sha256": active.baseline_source_sha256,
+        "revision_id": active.active_revision().revision_id,
     });
     let bridge_id = request_id.to_owned();
     let raw = tauri::async_runtime::spawn_blocking(move || {
@@ -3422,6 +4260,10 @@ async fn semantic_bridge_snapshot(
             BTreeMap::new(),
         ));
     }
+    let spatial = result
+        .get("spatial_projection")
+        .ok_or_else(|| spatial_validation_error("spatial_payload_missing"))?;
+    validate_spatial_projection(spatial, active, &result)?;
     Ok(result)
 }
 
@@ -4028,6 +4870,8 @@ pub async fn apply_semantic_patch_to_draft(
     state.planned_patch = None;
     state.active_run = None;
     state.active_result = None;
+    state.active_result_dataset = None;
+    state.last_trusted_result_dataset = None;
     drop(state);
     for old in truncated {
         if old.application_owned
@@ -4220,6 +5064,10 @@ pub async fn select_and_extract_zone_air_state(
             )
         }
     };
+    let simread_path = match resolve_verified_tool_path(&app, ToolKind::Simread) {
+        Ok(path) => path,
+        Err(error) => return result_failure(&request_id, verified_tool_diagnostic(error)),
+    };
     if app
         .emit(
             ZONE_RESULT_STAGE_EVENT,
@@ -4245,6 +5093,7 @@ pub async fn select_and_extract_zone_air_state(
         &active,
         zone_number,
         manifest_path,
+        &simread_path,
         None,
     )
     .await
@@ -4256,7 +5105,7 @@ pub async fn select_and_extract_zone_air_state(
                 return result_failure(&request_id, error);
             }
             DesktopZoneAirStateResponse {
-                request_id,
+                request_id: request_id.clone(),
                 cancelled: false,
                 project_session_id: Some(active.project_session_id.clone()),
                 result: Some(result),
@@ -4360,12 +5209,17 @@ pub async fn extract_active_run_zone_air_state(
         Ok(path) => path,
         Err(error) => return result_failure(&request_id, error),
     };
+    let simread_path = match resolve_verified_tool_path(&app, ToolKind::Simread) {
+        Ok(path) => path,
+        Err(error) => return result_failure(&request_id, verified_tool_diagnostic(error)),
+    };
     let result = match extract_zone_air_state_with_manifest(
         &app,
         &request_id,
         &active,
         zone_number,
         manifest_path.clone(),
+        &simread_path,
         Some(&active_run.run_id),
     )
     .await
@@ -4406,6 +5260,330 @@ pub async fn extract_active_run_zone_air_state(
         cancelled: false,
         project_session_id: Some(active.project_session_id),
         result: Some(result),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn extract_active_run_zone_air_state_dataset(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    zone_ids: Vec<String>,
+) -> DesktopZoneResultDatasetResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || Uuid::parse_str(&request_id).is_err()
+        || !request_id_is_valid(&project_session_id)
+        || zone_ids.is_empty()
+        || zone_ids.len() > MAX_RESULT_DATASET_ZONES
+        || zone_ids
+            .iter()
+            .any(|zone_id| Uuid::parse_str(zone_id).is_err())
+        || zone_ids.iter().collect::<BTreeSet<_>>().len() != zone_ids.len()
+    {
+        return result_dataset_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "The multi-Zone result request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let Some(_operation) = store.try_operation() else {
+        return result_dataset_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        );
+    };
+    store.begin_result_dataset(&request_id);
+    let _request_guard = ResultDatasetRequestGuard {
+        store: &store,
+        request_id: &request_id,
+    };
+    let (active, active_run, mut requested) = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return result_dataset_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_missing",
+                    "No active project session exists.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        if active.project_session_id != project_session_id {
+            return result_dataset_failure(
+                &request_id,
+                host_diagnostic(
+                    "project_session_mismatch",
+                    "Project session did not match.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+        let Some(active_run) = state.active_run.clone() else {
+            return result_dataset_failure(
+                &request_id,
+                host_diagnostic(
+                    "active_run_missing",
+                    "No successful active run is available.",
+                    BTreeMap::new(),
+                ),
+            );
+        };
+        let mut requested = Vec::with_capacity(zone_ids.len());
+        for zone_id in &zone_ids {
+            let Some(zone) = active.zone_by_id(zone_id) else {
+                return result_dataset_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "result_zone_mismatch",
+                        "A requested Zone is not part of the active project.",
+                        BTreeMap::new(),
+                    ),
+                );
+            };
+            requested.push(RequestedZoneIdentityView {
+                zone_id: zone.zone_id.clone(),
+                zone_number: zone.contam_number,
+                zone_name: zone.name.clone(),
+            });
+        }
+        (active, active_run, requested)
+    };
+    if !active_project_source_matches(&active) {
+        return result_dataset_failure(
+            &request_id,
+            host_diagnostic(
+                "result_dataset_source_mismatch",
+                "The project source changed before result reading.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let run_root = match app.path().app_local_data_dir() {
+        Ok(path) => path.join("runs"),
+        Err(_) => {
+            return result_dataset_failure(
+                &request_id,
+                host_diagnostic(
+                    "active_run_invalid",
+                    "The controlled run root is unavailable.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    let manifest_path = match validate_active_run_context(&active_run, &active, &run_root) {
+        Ok(path) => path,
+        Err(error) => return result_dataset_failure(&request_id, error),
+    };
+    let simread_path = match resolve_verified_tool_path(&app, ToolKind::Simread) {
+        Ok(path) => path,
+        Err(error) => return result_dataset_failure(&request_id, verified_tool_diagnostic(error)),
+    };
+    let (manifest_sha256, _) = match sha256_file(&manifest_path) {
+        Ok(evidence) => evidence,
+        Err(_) => {
+            return result_dataset_failure(
+                &request_id,
+                host_diagnostic(
+                    "result_manifest_invalid",
+                    "The run manifest could not be verified.",
+                    BTreeMap::new(),
+                ),
+            )
+        }
+    };
+    requested.sort_by(|left, right| {
+        left.zone_number
+            .cmp(&right.zone_number)
+            .then_with(|| left.zone_id.cmp(&right.zone_id))
+    });
+    let mut successful = Vec::new();
+    let mut failures = Vec::new();
+    for (ordinal, zone) in requested.iter().enumerate() {
+        if store.result_dataset_cancelled(&request_id) {
+            let dataset = build_zone_result_dataset(
+                &active,
+                &active_run,
+                ZoneResultDatasetInput {
+                    extraction_batch_id: &request_id,
+                    manifest_sha256: &manifest_sha256,
+                    requested_zones: requested.clone(),
+                    successful_zone_series: successful,
+                    per_zone_failures: failures,
+                    forced_status: Some("cancelled"),
+                },
+            )
+            .ok();
+            return DesktopZoneResultDatasetResponse {
+                request_id: request_id.clone(),
+                cancelled: true,
+                project_session_id: Some(active.project_session_id),
+                dataset,
+                error: None,
+            };
+        }
+        let zone_request_id = zone_uuid(
+            &active.source_sha256,
+            "result-dataset-zone",
+            zone.zone_number,
+            ordinal as u64,
+            &request_id,
+        );
+        match extract_zone_air_state_with_manifest(
+            &app,
+            &zone_request_id,
+            &active,
+            zone.zone_number,
+            manifest_path.clone(),
+            &simread_path,
+            Some(&active_run.run_id),
+        )
+        .await
+        {
+            Ok(result) => successful.push(result),
+            Err(error) if result_dataset_failure_is_hard(&error.code) => {
+                return result_dataset_failure(&request_id, error)
+            }
+            Err(error) => failures.push(ZoneResultFailureView {
+                zone_id: zone.zone_id.clone(),
+                zone_number: zone.zone_number,
+                zone_name: zone.zone_name.clone(),
+                code: error.code,
+            }),
+        }
+        let sample_count: usize = successful.iter().map(|result| result.samples.len()).sum();
+        if sample_count > MAX_RESULT_DATASET_SAMPLES {
+            return result_dataset_failure(
+                &request_id,
+                host_diagnostic(
+                    "result_dataset_sample_limit_exceeded",
+                    "The selected result contains too many samples. Select fewer Zones.",
+                    BTreeMap::new(),
+                ),
+            );
+        }
+    }
+    if store.result_dataset_cancelled(&request_id) {
+        let dataset = build_zone_result_dataset(
+            &active,
+            &active_run,
+            ZoneResultDatasetInput {
+                extraction_batch_id: &request_id,
+                manifest_sha256: &manifest_sha256,
+                requested_zones: requested,
+                successful_zone_series: successful,
+                per_zone_failures: failures,
+                forced_status: Some("cancelled"),
+            },
+        )
+        .ok();
+        return DesktopZoneResultDatasetResponse {
+            request_id: request_id.clone(),
+            cancelled: true,
+            project_session_id: Some(active.project_session_id),
+            dataset,
+            error: None,
+        };
+    }
+    if !active_project_source_matches(&active) {
+        return result_dataset_failure(
+            &request_id,
+            host_diagnostic(
+                "result_dataset_source_mismatch",
+                "The project source changed during result reading.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let dataset = match build_zone_result_dataset(
+        &active,
+        &active_run,
+        ZoneResultDatasetInput {
+            extraction_batch_id: &request_id,
+            manifest_sha256: &manifest_sha256,
+            requested_zones: requested,
+            successful_zone_series: successful,
+            per_zone_failures: failures,
+            forced_status: None,
+        },
+    ) {
+        Ok(dataset) => dataset,
+        Err(error) => return result_dataset_failure(&request_id, error),
+    };
+    if let Err(error) = store.retain_result_dataset(&active, &active_run, dataset.clone()) {
+        return result_dataset_failure(&request_id, error);
+    }
+    DesktopZoneResultDatasetResponse {
+        request_id: request_id.clone(),
+        cancelled: false,
+        project_session_id: Some(active.project_session_id),
+        dataset: Some(dataset),
+        error: None,
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_zone_result_dataset(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    extraction_batch_id: String,
+) -> DesktopZoneResultDatasetResponse {
+    let store = app.state::<DesktopProjectSessionStore>();
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || !request_id_is_valid(&extraction_batch_id)
+    {
+        return result_dataset_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "The result cancellation request is invalid.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    let project_matches = store
+        .state
+        .lock()
+        .expect("desktop session mutex poisoned")
+        .active_project
+        .as_ref()
+        .is_some_and(|project| project.project_session_id == project_session_id);
+    let batch_matches = store
+        .active_result_dataset_request
+        .lock()
+        .expect("result dataset request mutex poisoned")
+        .as_deref()
+        == Some(extraction_batch_id.as_str());
+    if !project_matches || !batch_matches {
+        return result_dataset_failure(
+            &request_id,
+            host_diagnostic(
+                "result_dataset_cancel_stale",
+                "The result dataset request is no longer active.",
+                BTreeMap::new(),
+            ),
+        );
+    }
+    store
+        .result_dataset_cancel_requested
+        .store(true, Ordering::Release);
+    DesktopZoneResultDatasetResponse {
+        request_id,
+        cancelled: true,
+        project_session_id: Some(project_session_id),
+        dataset: None,
         error: None,
     }
 }
@@ -4749,6 +5927,10 @@ pub async fn run_active_contam_project(
             )
         }
     };
+    let solver_path = match resolve_verified_tool_path(&app, ToolKind::Contamx) {
+        Ok(path) => path,
+        Err(error) => return run_failure(&request_id, verified_tool_diagnostic(error)),
+    };
     let request = json!({
         "protocol_version": PROTOCOL_VERSION,
         "request_id": request_id,
@@ -4756,6 +5938,7 @@ pub async fn run_active_contam_project(
         "source_path": active.source_path,
         "source_sha256": active.source_sha256,
         "run_root": run_root,
+        "solver_path": solver_path,
     });
     let bridge_id = request_id.clone();
     let raw = match tauri::async_runtime::spawn_blocking(move || {
@@ -4831,6 +6014,9 @@ pub async fn run_active_contam_project(
             ),
         );
     }
+    state.active_result = None;
+    state.active_result_dataset = None;
+    state.last_trusted_result_dataset = None;
     state.active_run = Some(active_run);
     DesktopRunResponse {
         request_id,
@@ -5247,6 +6433,8 @@ pub async fn apply_zone_volume_patch_to_draft(
         state.last_trusted_result = state.active_result.clone();
     }
     state.active_result = None;
+    state.active_result_dataset = None;
+    state.last_trusted_result_dataset = None;
     drop(state);
     for old in truncated {
         if old.application_owned
@@ -5539,6 +6727,8 @@ async fn switch_project_draft(
     state.planned_patch = None;
     state.active_run = None;
     state.active_result = None;
+    state.active_result_dataset = None;
+    state.last_trusted_result_dataset = None;
     drop(state);
     app.state::<crate::codex_app_server::CodexAssistantStore>()
         .invalidate_context();
@@ -6099,8 +7289,6 @@ pub async fn run_study(
     project_session_id: String,
     revision_id: String,
     plan: Value,
-    solver_path: Option<String>,
-    simread_path: Option<String>,
 ) -> DesktopStudyResponse {
     let store = app.state::<DesktopProjectSessionStore>();
     if !request_id_is_valid(&request_id)
@@ -6131,6 +7319,26 @@ pub async fn run_study(
     let active = match study_context(&store, &project_session_id, &revision_id) {
         Ok(value) => value,
         Err(error) => return study_failure(&request_id, Some(project_session_id), error),
+    };
+    let solver_path = match resolve_verified_tool_path(&app, ToolKind::Contamx) {
+        Ok(path) => path,
+        Err(error) => {
+            return study_failure(
+                &request_id,
+                Some(project_session_id),
+                verified_tool_diagnostic(error),
+            )
+        }
+    };
+    let simread_path = match resolve_verified_tool_path(&app, ToolKind::Simread) {
+        Ok(path) => path,
+        Err(error) => {
+            return study_failure(
+                &request_id,
+                Some(project_session_id),
+                verified_tool_diagnostic(error),
+            )
+        }
     };
     let run_root = match app.path().app_local_data_dir() {
         Ok(path) => path.join("study-runs"),

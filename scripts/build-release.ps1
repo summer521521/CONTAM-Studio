@@ -1,9 +1,10 @@
 param(
   [string]$ArtifactRoot = "F:\Codex_File\artifacts\contam-studio\agent-06",
-  [string]$ContamToolsTaskRoot = "F:\Codex_File\phase-6c-user-first-runtime\contam-tools",
+  [string]$ContamToolsTaskRoot = "",
   [switch]$SkipBuild
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\contam-temp-root.ps1")
 
 function Get-Sha256Hex([string]$FilePath) {
   $stream = [IO.File]::OpenRead($FilePath)
@@ -24,6 +25,7 @@ $workerExecutable = Join-Path $workerRoot "contam-studio-python-worker.exe"
 $workerManifestPath = Join-Path $workerRoot "runtime-manifest.json"
 $contamToolsRoot = Join-Path $repo "src-tauri\runtime\contam-tools"
 $contamToolsLock = Join-Path $repo "resources\contam-tools.lock.json"
+$contamToolsTaskRoot = Resolve-ContamToolsTaskRoot $ContamToolsTaskRoot
 if (-not (Test-Path $ArtifactRoot)) { New-Item -ItemType Directory -Path $ArtifactRoot -Force | Out-Null }
 $encodedSeparator = [string][char]0x1f
 $releaseRustFlags = @(
@@ -51,8 +53,8 @@ Push-Location $repo
 try {
   pnpm verify:release
   if ($LASTEXITCODE -ne 0) { throw "release metadata verification failed" }
-  $approvedContamTaskRoot = Split-Path -Parent $ContamToolsTaskRoot
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $ContamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
+  $approvedContamTaskRoot = Split-Path -Parent $contamToolsTaskRoot
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo "scripts\prepare-contam-tools-runtime.ps1") -RepoRoot $repo -TaskRoot $contamToolsTaskRoot -ApprovedTaskRoot $approvedContamTaskRoot
   if ($LASTEXITCODE -ne 0) { throw "verified NIST CONTAM runtime preparation failed" }
   if (-not $SkipBuild) {
     $workerBuildRoot = Join-Path $ArtifactRoot "python-worker-build"
@@ -70,6 +72,7 @@ try {
   if ($workerManifest.commit_sha -ne $commit -or
       $workerManifest.detached_protocol_smoke -ne "passed" -or
       $workerManifest.detached_project_read -ne "passed" -or
+      $workerManifest.detached_semantic_project_read -ne "passed" -or
       $workerManifest.source_tree_required -ne $false) {
     throw "frozen Python worker manifest does not match this release commit"
   }

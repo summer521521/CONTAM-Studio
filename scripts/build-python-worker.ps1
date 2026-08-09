@@ -212,6 +212,32 @@ try {
   if (-not $readValid) {
     throw "frozen worker detached project read returned an invalid envelope"
   }
+
+  $semanticRequest = [ordered]@{
+    protocol_version = "1.2"
+    request_id = "frozen-worker-semantic-read"
+    operation = "read_semantic_project"
+    source_path = $fixtureCopy
+    baseline_sha256 = $fixtureHashBefore
+    revision_id = "00000000-0000-5000-8000-000000000001"
+  } | ConvertTo-Json -Compress
+  $semanticProcess = Invoke-WorkerJson $builtWorker $smokeRoot $semanticRequest
+  if ($semanticProcess.exit_code -ne 0 -or -not [string]::IsNullOrEmpty($semanticProcess.stderr)) {
+    throw "frozen worker detached semantic project read exited unsuccessfully"
+  }
+  $semantic = $semanticProcess.stdout.Trim() | ConvertFrom-Json
+  $semanticValid = (
+    [string]$semantic.protocol_version -eq "1.2" -and
+    [string]$semantic.request_id -eq "frozen-worker-semantic-read" -and
+    [bool]$semantic.ok -and
+    [string]$semantic.result.result_type -eq "semantic_project_snapshot" -and
+    [string]$semantic.result.spatial_projection.schema_version -eq "spatial_projection.v1" -and
+    [string]$semantic.result.spatial_projection.status -eq "available" -and
+    @($semantic.result.zones).Count -eq 7
+  )
+  if (-not $semanticValid) {
+    throw "frozen worker detached semantic project read returned an invalid envelope"
+  }
   $fixtureHashAfter = Get-Sha256Hex $fixtureCopy
   if ($fixtureHashBefore -ne $fixtureHashAfter) {
     throw "frozen worker modified the detached source fixture"
@@ -244,6 +270,7 @@ $manifest = [ordered]@{
   source_tree_required = $false
   detached_protocol_smoke = "passed"
   detached_project_read = "passed"
+  detached_semantic_project_read = "passed"
   source_fixture_unchanged = $true
 }
 $manifest |
