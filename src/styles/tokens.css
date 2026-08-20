@@ -108,3 +108,62 @@
   --visual-selection-contrast: #111820;
   --shadow-overlay: 0 10px 26px rgb(0 0 0 / 36%);
 }
+
+/* Geometry Workbench themes are scoped and additive. The existing application
+   theme remains the fallback until the floating canvas shell is integrated. */
+[data-geometry-theme="engineering-blueprint"] {
+  color-scheme: dark;
+  --geometry-canvas: #123b5b;
+  --geometry-grid-minor: rgb(166 211 237 / 18%);
+  --geometry-grid-major: rgb(166 211 237 / 36%);
+  --geometry-line: #e8f5fb;
+  --geometry-line-muted: #9bc5da;
+  --geometry-zone-fill: rgb(35 113 153 / 42%);
+  --geometry-selection: #ffcf5a;
+  --geometry-selection-contrast: #10283c;
+  --geometry-opening: #5dd6df;
+  --geometry-flow: #ff9b64;
+  --geometry-panel: rgb(12 36 54 / 88%);
+  --geometry-panel-border: rgb(157 207 232 / 44%);
+  --geometry-panel-text: #eef9fd;
+  --geometry-panel-muted: #b4d1df;
+  --geometry-panel-shadow: 0 16px 34px rgb(1 17 29 / 34%);
+}
+
+[data-geometry-theme="architectural-paper"] {
+  color-scheme: light;
+  --geometry-canvas: #eee8dc;
+  --geometry-grid-minor: rgb(85 81 73 / 10%);
+  --geometry-grid-major: rgb(85 81 73 / 21%);
+  --geometry-line: #383b3b;
+  --geometry-line-muted: #6e706c;
+  --geometry-zone-fill: rgb(163 174 164 / 28%);
+  --geometry-selection: #b55235;
+  --geometry-selection-contrast: #fffaf2;
+  --geometry-opening: #2f7c87;
+  --geometry-flow: #a84d36;
+  --geometry-panel: rgb(249 247 241 / 92%);
+  --geometry-panel-border: rgb(87 83 75 / 28%);
+  --geometry-panel-text: #282b2a;
+  --geometry-panel-muted: #666a66;
+  --geometry-panel-shadow: 0 14px 32px rgb(60 52 40 / 18%);
+}
+
+[data-geometry-theme="night-laboratory"] {
+  color-scheme: dark;
+  --geometry-canvas: #131a20;
+  --geometry-grid-minor: rgb(132 159 173 / 11%);
+  --geometry-grid-major: rgb(132 159 173 / 24%);
+  --geometry-line: #d3dde2;
+  --geometry-line-muted: #82949e;
+  --geometry-zone-fill: rgb(55 96 110 / 32%);
+  --geometry-selection: #54d5c5;
+  --geometry-selection-contrast: #092b2b;
+  --geometry-opening: #5fc9d6;
+  --geometry-flow: #f39a72;
+  --geometry-panel: rgb(27 35 41 / 92%);
+  --geometry-panel-border: rgb(128 153 166 / 25%);
+  --geometry-panel-text: #edf2f4;
+  --geometry-panel-muted: #9fadb4;
+  --geometry-panel-shadow: 0 16px 36px rgb(0 0 0 / 42%);
+}

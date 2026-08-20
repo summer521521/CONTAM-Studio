@@ -2,6 +2,7 @@ import { Activity, BarChart3, FlaskConical, Home, PanelBottomClose, PanelBottomO
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import type { AiProviderProfile, AiState } from "../../app/ai-state";
+import type { AttachmentState, AttachmentView } from "../../app/attachment-state";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { ProjectState, ReaderDiagnostic } from "../../app/project-state";
 import type { ResultExportState } from "../../app/result-export-state";
@@ -12,6 +13,9 @@ import type { RunState } from "../../app/run-state";
 import type { SemanticSnapshot, SemanticStatus } from "../../app/semantic-state";
 import type { VisualWorkspacePreferences } from "../../app/spatial-model";
 import type { AppLanguage, AppTheme, WorkbenchDestination } from "../../app/workbench-state";
+import type { GeometryWorkbenchController } from "../../app/runtime/useGeometryWorkbench";
+import type { GeometryVisionDraftController } from "../../app/runtime/useGeometryVisionDraft";
+import type { SketchpadProjectionPreview } from "../../app/geometry/sketchpad-projection-preview";
 import { EmptyState } from "../ui/EmptyState";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { IconButton } from "../ui/IconButton";
@@ -60,8 +64,11 @@ export interface DestinationContentProps {
   visualPreferences: VisualWorkspacePreferences;
   onVisualPreferencesChange: (preferences: VisualWorkspacePreferences) => void;
   onSelectSemantic: (semanticId: string) => void;
+  geometryWorkbench: GeometryWorkbenchController;
+  geometryVisionDraft: GeometryVisionDraftController;
   onNotice: (message: string) => void;
   onOpenAssistant: () => void;
+  onReviewSketchpadProjection: (preview: SketchpadProjectionPreview) => Promise<boolean>;
   onAiConnect: () => void;
   onAiRefresh: () => void;
   onAiProviderSelect: (profileId: string) => void;
@@ -76,6 +83,10 @@ export interface DestinationContentProps {
   onAiProviderSecret: (secret: string) => void;
   onAiProviderClearSecret: () => void;
   onAiModelChange: (modelId: string) => void;
+  attachmentState: AttachmentState;
+  onAttachmentImport: () => void;
+  onAttachmentsImported: (attachments: AttachmentView[]) => void;
+  onAttachmentSelect: (attachment: AttachmentView, selected: boolean) => void;
   setup: StudioSetup | null;
   setupBusy: boolean;
   onChooseDataDirectory: () => Promise<string | null>;
@@ -102,11 +113,12 @@ export function DestinationContent(props: DestinationContentProps) {
   const destinationLabel = props.destination === "project"
     ? props.projectState.project ? t("navigation.projects") : t("welcome.tab")
     : t(`navigation.${props.destination}`);
+  const immersiveProject = props.destination === "project" && Boolean(props.projectState.project);
   const fallback = <EmptyState title={t("journeys.loadFailed")} description={t("journeys.loadFailedBody")} />;
 
   return (
-    <main className="editor-surface">
-      <div className="editor-tabs">
+    <main className={`editor-surface ${immersiveProject ? "is-immersive-project" : ""}`}>
+      {!immersiveProject ? <div className="editor-tabs">
         <div className="editor-tab is-active"><Icon size={14} aria-hidden="true" /><span>{destinationLabel}</span></div>
         <div className="editor-layout-actions">
           <IconButton className="panel-icon-button" label={props.contextCollapsed ? t("inspector.expand") : t("inspector.collapse")} title={props.contextCollapsed ? t("inspector.expand") : t("inspector.collapse")} onClick={props.onToggleContext}>
@@ -116,12 +128,12 @@ export function DestinationContent(props: DestinationContentProps) {
             {props.bottomCollapsed ? <PanelBottomOpen size={16} /> : <PanelBottomClose size={16} />}
           </IconButton>
         </div>
-      </div>
-      <div className="journey-scroll">
+      </div> : null}
+      <div className={`journey-scroll ${immersiveProject ? "is-immersive" : ""}`}>
         <ErrorBoundary resetKey={props.destination} fallback={fallback}>
           <Suspense fallback={<LoadingState label={t("journeys.loading")} />}>
             {props.destination === "project" ? (
-              <ProjectPage projectState={props.projectState} runState={props.runState} resultState={props.resultState} setup={props.setup} availability={props.availability} onOpenProject={props.onOpenProject} onNavigate={props.onNavigate} semanticSnapshot={props.semanticSnapshot} semanticStatus={props.semanticStatus} semanticIssue={props.semanticIssue} selectedSemanticObjectId={props.selectedSemanticObjectId} visualPreferences={props.visualPreferences} onVisualPreferencesChange={props.onVisualPreferencesChange} onSelectSemantic={props.onSelectSemantic} />
+              <ProjectPage projectState={props.projectState} runState={props.runState} resultState={props.resultState} setup={props.setup} availability={props.availability} onOpenProject={props.onOpenProject} onNavigate={props.onNavigate} semanticSnapshot={props.semanticSnapshot} semanticStatus={props.semanticStatus} semanticIssue={props.semanticIssue} selectedSemanticObjectId={props.selectedSemanticObjectId} visualPreferences={props.visualPreferences} onVisualPreferencesChange={props.onVisualPreferencesChange} onSelectSemantic={props.onSelectSemantic} geometryWorkbench={props.geometryWorkbench} geometryVisionDraft={props.geometryVisionDraft} attachmentState={props.attachmentState} onAttachmentImport={props.onAttachmentImport} onAttachmentsImported={props.onAttachmentsImported} onAttachmentSelect={props.onAttachmentSelect} onOpenAssistant={props.onOpenAssistant} onReviewSketchpadProjection={props.onReviewSketchpadProjection} />
             ) : props.destination === "run" ? (
               <RunPage projectState={props.projectState} runState={props.runState} resultState={props.resultState} setup={props.setup} availability={props.availability} onOpenProject={props.onOpenProject} onRunProject={props.onRunProject} onLoadLatestResults={props.onLoadLatestResults} onNavigate={props.onNavigate} />
             ) : props.destination === "results" ? (

@@ -104,6 +104,12 @@ Rust监视命令执行、文件修改、MCP、动态工具、网页搜索、Comp
 
 停止按钮只中断当前Turn，保留已完成回答；协议故障时连接转为故障并可由用户手动重连。Phase 6A不持久化Thread、不自动恢复聊天或重新发送本地档案，不支持AI写入、完整项目问答、完整曲线分析、其他AI后端或自主Agent。
 
+## Geometry Workbench 的独立 Luna 草案回合
+
+Geometry Workbench 复用同一个受控 App Server 连接和中断互斥，但不复用普通助手 Thread、Archive 或上下文 Preview。用户明确选择 Studio 隔离图片并点击生成后，Rust 创建临时只读 Thread，以 `localImage` 发送该隔离副本，并固定请求当前模型目录中声明 `image` 输入的 `gpt-5.6-luna`。该回合仍禁用工具、环境和网络访问，且要求 ChatGPT 订阅登录；不接受 API Key 登录替代，不静默回退其他模型。
+
+Luna 的 `geometry_ai_draft.v1` 只是一份绑定项目、Revision、几何基线哈希和附件哈希的建议。Rust 和 TypeScript 分别执行封闭 Schema 与有界操作检查，TypeScript 再在候选几何上运行同一确定性命令验证。只有用户第二次确认后，操作才以 `ai_suggestion` 身份进入可撤销几何历史；原始 PRJ、CONTAM SketchPad 投影和普通 AI Archive 均不改变。详见 [Geometry Workbench 架构](geometry-workbench.md)。
+
 ## 诊断
 
 对外诊断为稳定白名单，例如`codex_cli_not_found`、`codex_cli_install_failed`、`codex_cli_installer_unsupported`、`codex_not_authenticated`、`codex_readonly_mode_unavailable`、`ai_context_stale`、`ai_tool_use_blocked`和`ai_response_contract_invalid`。诊断不包含CLI路径、项目路径、下载输出、stderr、RPC正文、凭据或Traceback。

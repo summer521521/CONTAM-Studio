@@ -146,6 +146,54 @@ describe("real project components", () => {
     expect(destinationMarkup).toContain("打开项目后才能读取结果");
   });
 
+  it("surfaces a completed SimRead run without node air-state output in the main results overview", () => {
+    const markup = renderToStaticMarkup(
+      <ResultsPage
+        projectState={state}
+        runState={{
+          ...INITIAL_RUN_STATE,
+          status: "succeeded",
+          projectSessionId: "request-1",
+          summary: {
+            status: "succeeded",
+            run_id: "run-success",
+            solver_name: "contamx3.exe",
+            solver_version: "3.4.0.3",
+            started_at_utc: "2026-08-17T00:00:00Z",
+            duration_ms: 1,
+            exit_code: 0,
+            timed_out: false,
+            sim_artifact_count: 1,
+            source_unchanged: true,
+          },
+        }}
+        resultState={{
+          ...INITIAL_RESULT_STATE,
+          status: "error",
+          issue: {
+            code: "simread_node_air_state_unavailable",
+            message: "Node contaminant results not available",
+            source_line_number: null,
+            context: {},
+          },
+        }}
+        resultExportState={INITIAL_RESULT_EXPORT_STATE}
+        activeRunId="run-success"
+        theme="light"
+        availability={{ openProject: true, loadActiveResult: true, selectManifest: true, exportResult: false }}
+        onOpenProject={() => undefined}
+        onLoadLatestResults={() => undefined}
+        onSelectManifestResults={() => undefined}
+        onExportResults={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    );
+    expect(markup).toContain("求解已完成，但该运行没有可读取的节点空气状态结果");
+    expect(markup).toContain("SimRead 已正常完成并保留运行证据");
+    expect(markup).toContain("读取失败");
+    expect(markup).toContain("simread_node_air_state_unavailable");
+  });
+
   it("exposes all explicit draft switch choices", () => {
     const markup = renderToStaticMarkup(<DraftSwitchDialog busy={false} onCancel={() => undefined} onExport={() => undefined} onDiscard={() => undefined} />);
     expect(markup).toContain("取消切换");
@@ -539,6 +587,33 @@ describe("real project components", () => {
     expect(markup).toContain("运行证据仍然可信");
     expect(markup).toContain("查看结果读取详情");
     expect(markup).toContain("zone_result_contract_invalid");
+  });
+
+  it("explains an official SimRead run without node air-state output separately", () => {
+    const markup = renderToStaticMarkup(
+      <ZoneAirStateResults
+        state={{
+          ...INITIAL_RESULT_STATE,
+          status: "error",
+          issue: {
+            code: "simread_node_air_state_unavailable",
+            message: "Node contaminant results not available",
+            source_line_number: null,
+            context: {},
+          },
+        }}
+        exportState={INITIAL_RESULT_EXPORT_STATE}
+        activeRunId="run-success"
+        theme="light"
+        onLoadLatest={() => undefined}
+        onSelectManifest={() => undefined}
+        onExport={() => undefined}
+        availability={{ loadActiveResult: true, selectManifest: true, exportResult: false }}
+      />,
+    );
+    expect(markup).toContain("求解已完成，但该运行没有可读取的节点空气状态结果");
+    expect(markup).toContain("SimRead 已正常完成并保留运行证据");
+    expect(markup).toContain("simread_node_air_state_unavailable");
   });
 
   it("retains the result analysis and shows a safe cancellation or error notice", () => {

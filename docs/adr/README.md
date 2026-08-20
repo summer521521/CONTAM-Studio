@@ -19,6 +19,11 @@ ADR用于记录具有长期影响的项目决策、理由、后果和待验证�
 - [ADR-018：采用用户优先、本地优先且联网增强的运行时](ADR-018-adopt-user-first-online-enhanced-runtime.md)
 - [ADR-019：在可信语义快照上提供只读可视化模型工作区](ADR-019-read-only-visual-model-workspace.md)
 - [ADR-020：将结果、证据和 AI 上下文绑定到同一可信身份](ADR-020-bind-results-evidence-and-ai-context.md)
+- [ADR-021：分离 Studio 建筑几何与 CONTAM SketchPad 投影](ADR-021-separate-studio-building-geometry-from-contam-sketchpad.md)
+- [ADR-022：首个 PRJ 几何写入仅允许移动既有 SketchPad 图标](ADR-022-limit-first-prj-geometry-write-to-existing-icon-position.md)
+- [ADR-023：将 Studio 建筑几何保存为应用自有项目文档](ADR-023-store-project-geometry-as-app-owned-document.md)
+- [ADR-024：SketchPad 候选位置必须经过 Semantic Patch 审查](ADR-024-route-sketchpad-candidates-through-semantic-patch-review.md)
+- [ADR-025：将校准平面底图作为项目绑定的应用资源管理](ADR-025-manage-calibrated-plan-underlays-as-project-bound-app-resources.md)
 
 ## 统一格式
 

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contam-studio.local/contracts/sketchpad-projection-preview-v1.schema.json",
+  "title": "CONTAM Studio Lossy SketchPad Projection Preview",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "method",
+    "lossy",
+    "can_apply",
+    "project_session_id",
+    "geometry_id",
+    "geometry_sha256",
+    "identity_sha256",
+    "source_sha256",
+    "revision_id",
+    "moves",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": { "const": "sketchpad_projection_preview.v1" },
+    "status": { "enum": ["preview", "blocked", "unavailable"] },
+    "method": { "const": "zone_centroid_normalized_to_existing_icon_bounds" },
+    "lossy": { "const": true },
+    "can_apply": { "const": false },
+    "project_session_id": { "$ref": "#/$defs/id" },
+    "geometry_id": { "$ref": "#/$defs/id" },
+    "geometry_sha256": { "$ref": "#/$defs/sha256" },
+    "identity_sha256": { "$ref": "#/$defs/sha256" },
+    "source_sha256": { "$ref": "#/$defs/sha256" },
+    "revision_id": { "$ref": "#/$defs/id" },
+    "moves": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/move" }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+    "gridCoordinate": { "type": "integer", "minimum": -1000000000, "maximum": 1000000000 },
+    "move": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "icon_id",
+        "semantic_zone_id",
+        "level_number",
+        "from_column",
+        "from_row",
+        "to_column",
+        "to_row",
+        "changed"
+      ],
+      "properties": {
+        "icon_id": { "$ref": "#/$defs/id" },
+        "semantic_zone_id": { "$ref": "#/$defs/id" },
+        "level_number": { "type": "integer", "minimum": 0, "maximum": 4096 },
+        "from_column": { "$ref": "#/$defs/gridCoordinate" },
+        "from_row": { "$ref": "#/$defs/gridCoordinate" },
+        "to_column": { "$ref": "#/$defs/gridCoordinate" },
+        "to_row": { "$ref": "#/$defs/gridCoordinate" },
+        "changed": { "type": "boolean" }
+      }
+    }
+  }
+}

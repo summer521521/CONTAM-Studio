@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contam-studio.local/contracts/geometry-edit-command-v1.schema.json",
+  "title": "CONTAM Studio Geometry Edit Command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command_id", "sequence", "project_session_id", "geometry_id", "baseline_revision_id", "baseline_geometry_hash", "actor", "operation", "parameters"],
+  "properties": {
+    "schema_version": { "const": "geometry_edit_command.v1" },
+    "command_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "project_session_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "geometry_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "baseline_revision_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "baseline_geometry_hash": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+    "actor": { "enum": ["user", "ai_suggestion", "system"] },
+    "operation": { "enum": ["add_vertex", "add_wall", "split_wall", "move_vertex", "move_vertices", "delete_wall", "create_zone_region", "partition_zone_region", "merge_zone_regions", "copy_level_construction", "place_vertical_opening", "remove_vertical_opening", "link_vertical_flow_path", "unlink_vertical_flow_path", "place_opening", "update_opening", "remove_opening", "link_flow_path", "unlink_flow_path", "set_plan_underlay", "update_plan_underlay", "remove_plan_underlay"] },
+    "parameters": { "type": "object" }
+  }
+}

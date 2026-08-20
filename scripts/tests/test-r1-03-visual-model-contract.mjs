@@ -29,6 +29,7 @@ const rustBridge = read("src-tauri/src/zone_bridge.rs");
 const model = read("src/app/spatial-model.ts");
 const semanticState = read("src/app/semantic-state.ts");
 const projectPage = read("src/components/workbench/pages/ProjectPage.tsx");
+const geometryWorkbench = read("src/components/workbench/geometry/GeometryWorkbench.tsx");
 const workspace = read("src/components/workbench/visual/VisualModelWorkspace.tsx");
 const canvas = read("src/components/workbench/visual/VisualCanvasKonva.tsx");
 const zh = read("src/i18n/locales/zh-CN.json");
@@ -61,13 +62,13 @@ for (const transform of ["classifySpatialIconType", "spatialBoundsForIcons", "fi
   assert(`pure frontend transform ${transform}`, model.includes(`function ${transform}`));
 }
 assert("semantic snapshot carries one spatial fact source", semanticState.includes("spatial_projection: SpatialProjection"));
-assert("visual workspace is lazy from project page", projectPage.includes('await import("../visual/VisualModelWorkspace")'));
+assert("visual workspace remains behind the lazy project geometry boundary", projectPage.includes('await import("../geometry/GeometryWorkbench")') && geometryWorkbench.includes('await import("../visual/VisualModelWorkspace")'));
 assert("Konva is lazy behind the visual workspace", workspace.includes('lazy(() => import("./VisualCanvasKonva"))'));
 const konvaImporters = sourceFiles(path.join(root, "src")).filter((file) => {
   const content = fs.readFileSync(file, "utf8");
   return /from\s+["'](?:konva|react-konva)["']/.test(content);
 });
-assert("Konva imports exist only in the lazy canvas module", konvaImporters.length === 1 && path.basename(konvaImporters[0]) === "VisualCanvasKonva.tsx");
+assert("Konva imports exist only in the two lazy canvas modules", konvaImporters.length === 2 && ["GeometryCanvasKonva.tsx", "VisualCanvasKonva.tsx"].every((name) => konvaImporters.some((file) => path.basename(file) === name)));
 assert("approved exact Konva versions are installed", packageJson.dependencies?.konva === "10.3.0" && packageJson.dependencies?.["react-konva"] === "19.2.5");
 assert("canvas drag is limited to the viewport stage", (canvas.match(/\bdraggable\b/g) ?? []).length === 1 && canvas.includes("<Stage") && !canvas.includes("Transformer") && !canvas.includes("write_prj"));
 assert("topology drawing uses indexed endpoint lookup", canvas.includes("topologyNodeById") && !canvas.includes("topology.nodes.find"));

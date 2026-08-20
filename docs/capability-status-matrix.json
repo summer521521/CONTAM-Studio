@@ -2,7 +2,7 @@
   "schema_version": 1,
   "matrix_id": "contam-studio-capability-status",
   "title": "CONTAM Studio能力状态矩阵",
-  "last_updated_utc": "2026-08-09T07:09:13Z",
+  "last_updated_utc": "2026-08-20T07:44:16Z",
   "source_of_truth": true,
   "evidence_root": "repository",
   "status_vocabulary": {
@@ -22,12 +22,522 @@
     "没有证据时使用unknown；明确未执行时使用not_run；不适用时使用not_required。",
     "Phase 6A的实现和自动检查已合并到main，但Beta-2本地档案GUI逐项验收仍保持pending_user。",
     "Phase 6B多Provider实现随main交付提交纳入；真实Provider、凭据、GUI和发布证据必须与自动契约/Mock证据分开记录。",
-    "Renewal R1 是当前研发事实源；历史 Phase、QA 和 Batch 记录只用于追溯，不再生成新的平行任务编号。",
-    "R1 工作包必须分别记录 GitHub Windows CI、真实 Provider、GUI、打包、签名、发布和用户验收状态。",
+    "Geometry Workbench 是当前研发事实源；Renewal R1 与历史 Phase、QA 和 Batch 记录只用于追溯，不再生成新的平行任务编号。",
+    "描述性工作目标必须分别记录 GitHub Windows CI、真实 Provider、GUI、打包、签名、发布和用户验收状态。",
     "完整PRJ、分发和AI写入是能力边界行，不把未实现能力写成阶段完成。",
     "内部Python模型或契约测试通过不等于桌面产品已接入；没有Tauri命令、React入口和纵向证据时不得提升产品能力状态。"
   ],
   "capabilities": [
+    {
+      "id": "geometry-workbench-background-browser-acceptance",
+      "name": "Geometry Workbench Background Browser Acceptance：几何工作台无屏幕浏览器视觉与交互验收",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-workbench-background-browser-acceptance.md",
+        "docs/initiatives/geometry-workbench/README.md",
+        "src/components/workbench/geometry/GeometryQualityHarness.tsx"
+      ]
+    },
+    {
+      "id": "simread-official-output-compatibility",
+      "name": "SimRead Official Output Compatibility：SimRead 官方输出兼容性",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "passed",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/simread-official-output-compatibility.md",
+        "python/src/contam_studio_core/zone_air_state_results.py",
+        "python/src/contam_studio_core/simread_runner.py",
+        "src-tauri/src/zone_bridge.rs",
+        "src/components/workbench/results/ResultsWorkspace.tsx"
+      ]
+    },
+    {
+      "id": "contam-semantic-authoring-and-safe-draft-foundation",
+      "name": "CONTAM Semantic Authoring and Safe Draft Foundation：CONTAM 语义对象创作与安全草稿基础",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "passed",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/contam-semantic-authoring-and-safe-draft-foundation.md",
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/architecture/geometry-workbench.md",
+        "docs/adr/ADR-026-store-contam-authoring-as-app-owned-semantic-draft-and-export-new-copy.md",
+        "scripts/tests/test-contam-semantic-authoring-contract.mjs"
+      ]
+    },
+    {
+      "id": "calibrated-plan-underlay-and-building-tracing",
+      "name": "Calibrated Plan Underlay and Building Tracing：校准底图与建筑描图",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/calibrated-plan-underlay-and-building-tracing.md",
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/architecture/geometry-workbench.md",
+        "docs/adr/ADR-025-manage-calibrated-plan-underlays-as-project-bound-app-resources.md"
+      ]
+    },
+    {
+      "id": "wall-airflow-boundaries-and-outdoor-context",
+      "name": "Wall Airflow Boundaries and Outdoor Context：墙体开口与室内/室外气流边界",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/wall-airflow-boundaries-and-outdoor-context.md",
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/architecture/geometry-workbench.md",
+        "scripts/tests/test-wall-airflow-boundaries-outdoor-context-contract.mjs"
+      ]
+    },
+    {
+      "id": "vertical-openings-and-cross-level-airflow",
+      "name": "Vertical Openings and Cross-level Airflow：楼板开口与跨楼层气流连接",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/vertical-openings-and-cross-level-airflow.md",
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/architecture/geometry-workbench.md",
+        "scripts/tests/test-vertical-openings-cross-level-airflow-contract.mjs"
+      ]
+    },
+    {
+      "id": "multi-level-navigation-and-construction-reuse",
+      "name": "Multi-level Navigation and Construction Reuse：多楼层导航、对齐底图与构造复用",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/multi-level-navigation-and-construction-reuse.md",
+        "docs/initiatives/geometry-workbench/README.md"
+      ]
+    },
+    {
+      "id": "zone-boundaries-and-room-partitioning",
+      "name": "Zone Boundaries and Room Partitioning：Zone 封闭轮廓、房间拆分与受控合并",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/zone-boundaries-and-room-partitioning.md",
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/architecture/geometry-workbench.md",
+        "scripts/tests/test-zone-boundaries-room-partitioning-contract.mjs"
+      ]
+    },
+    {
+      "id": "topology-aware-wall-intersections-and-segments",
+      "name": "Topology-aware Wall Intersections and Segments：墙体相交、显式分割与延伸修剪",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/topology-aware-wall-intersections-and-segments.md",
+        "docs/initiatives/geometry-workbench/README.md"
+      ]
+    },
+    {
+      "id": "wall-and-opening-direct-manipulation",
+      "name": "Wall and Opening Direct Manipulation：墙段法向平移与门窗沿墙尺寸编辑",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/wall-and-opening-direct-manipulation.md",
+        "docs/initiatives/geometry-workbench/README.md"
+      ]
+    },
+    {
+      "id": "geometry-direct-manipulation-and-precision-editing",
+      "name": "Geometry Direct Manipulation and Precision Editing：共享角点正交拖拽与毫米坐标编辑",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-direct-manipulation-and-precision-editing.md",
+        "docs/initiatives/geometry-workbench/README.md"
+      ]
+    },
+    {
+      "id": "sketchpad-projection-safe-draft-application",
+      "name": "SketchPad Projection Safe Draft Application：候选位置经 Diff 与确认写入草稿副本",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/sketchpad-projection-safe-draft-application.md",
+        "docs/architecture/geometry-workbench.md"
+      ]
+    },
+    {
+      "id": "project-geometry-document-and-sketchpad-preview",
+      "name": "Project Geometry Document：项目级建筑草稿恢复与 SketchPad 有损预览",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/project-geometry-document-and-sketchpad-preview.md",
+        "docs/architecture/geometry-workbench.md"
+      ]
+    },
+    {
+      "id": "verified-sketchpad-icon-round-trip",
+      "name": "Verified SketchPad Icon Round Trip：既有图标位置的安全副本写入",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/verified-sketchpad-icon-round-trip.md",
+        "docs/architecture/geometry-workbench.md"
+      ]
+    },
+    {
+      "id": "vision-to-geometry-draft",
+      "name": "Vision to Geometry Draft：Codex Luna 受控读图与可确认几何草案",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/vision-to-geometry-draft.md",
+        "docs/architecture/geometry-workbench.md"
+      ]
+    },
+    {
+      "id": "geometry-assistant-vision-integration",
+      "name": "Geometry Assistant Vision Integration：Codex 助手内的读图与建筑草案审查入口",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-assistant-vision-integration.md",
+        "src/components/workbench/assistant/GeometryVisionDraftPanel.tsx",
+        "src/app/runtime/WorkbenchRuntime.tsx",
+        "scripts/tests/test-geometry-assistant-vision-integration-contract.mjs"
+      ]
+    },
+    {
+      "id": "geometry-assistant-draft-evidence-review",
+      "name": "Geometry Assistant Draft Evidence Review：AI 几何草案证据回执与操作明细",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-assistant-draft-evidence-review.md",
+        "src/components/workbench/assistant/GeometryVisionDraftPanel.tsx",
+        "scripts/tests/test-geometry-assistant-draft-evidence-contract.mjs"
+      ]
+    },
+    {
+      "id": "geometry-ai-selective-operation-approval",
+      "name": "Geometry AI Selective Operation Approval：AI 几何草案逐项审阅与选择性确认",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-ai-selective-operation-approval.md",
+        "src/app/runtime/useGeometryVisionDraft.ts",
+        "src/components/workbench/assistant/GeometryVisionDraftPanel.tsx",
+        "src/components/workbench/geometry/GeometryCanvasKonva.tsx",
+        "scripts/tests/test-geometry-assistant-selective-approval-contract.mjs"
+      ]
+    },
+    {
+      "id": "geometry-ai-dependency-aware-selection",
+      "name": "Geometry AI Dependency-aware Selection：AI 几何草案依赖感知审批",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-ai-dependency-aware-selection.md",
+        "src/app/geometry/geometry-ai-draft.ts",
+        "src/app/runtime/useGeometryVisionDraft.ts",
+        "src/components/workbench/assistant/GeometryVisionDraftPanel.tsx",
+        "scripts/tests/test-geometry-assistant-dependency-aware-selection-contract.mjs"
+      ]
+    },
+    {
+      "id": "geometry-workbench-gui-acceptance",
+      "name": "Geometry Workbench GUI Acceptance：真实 Tauri 构造、结果与 AI 入口验收",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "partial",
+      "real_tools": "passed",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-workbench-gui-acceptance.md",
+        "src/components/workbench/visual/VisualModelWorkspace.tsx",
+        "src/components/workbench/visual/VisualModelWorkspace.test.tsx"
+      ]
+    },
+    {
+      "id": "geometry-workbench-user-modeling-closure",
+      "name": "Geometry Workbench User Modeling Closure：草稿生命周期与安全导出用户闭环",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "not_run",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-workbench-user-modeling-closure.md",
+        "src/components/workbench/geometry/GeometryWorkbench.tsx",
+        "src/app/runtime/useGeometryWorkbench-persistence.test.tsx"
+      ]
+    },
+    {
+      "id": "spatial-command-deck",
+      "name": "Spatial Command Deck：全画布几何工作台与受控 AI 草稿入口",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/development/task-log/records/spatial-command-deck.md",
+        "design-qa.md",
+        "scripts/tests/test-spatial-command-deck-contract.mjs"
+      ]
+    },
+    {
+      "id": "geometry-editor-integration",
+      "name": "Geometry Editor Integration：悬浮式毫米建筑几何编辑器",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/development/task-log/records/geometry-editor-integration.md",
+        "design-qa.md",
+        "scripts/tests/test-geometry-editor-integration-contract.mjs"
+      ]
+    },
+    {
+      "id": "geometry-workbench-integration-closure",
+      "name": "Geometry Workbench Integration Closure：累计工作树集成一致性收口",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "browser_design_qa": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "partial",
+      "real_tools": "passed",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "clean_machine": "not_run",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/development/task-log/records/geometry-workbench-integration-closure.md",
+        "docs/initiatives/geometry-workbench/README.md"
+      ]
+    },
+    {
+      "id": "geometry-workbench-foundation",
+      "name": "Geometry Workbench Foundation：建筑几何契约、编辑状态机与悬浮工作台基础",
+      "implemented": "complete",
+      "automated_verified": "passed",
+      "github_windows_ci": "pending_push",
+      "manual_gui": "not_run",
+      "real_tools": "not_run",
+      "real_provider": "not_run",
+      "merged_to_main": "no",
+      "packaged": "no",
+      "signed": "not_run",
+      "released": "no",
+      "user_validated": "not_run",
+      "evidence": [
+        "docs/initiatives/geometry-workbench/README.md",
+        "docs/development/task-log/records/geometry-workbench-foundation.md",
+        "docs/adr/ADR-021-separate-studio-building-geometry-from-contam-sketchpad.md",
+        "docs/architecture/geometry-workbench.md",
+        "scripts/tests/test-geometry-workbench-foundation-contract.mjs"
+      ]
+    },
     {
       "id": "r1-01-foundation-reset",
       "name": "Renewal R1-01 Foundation Reset：Windows CI、研发治理与前端基础",

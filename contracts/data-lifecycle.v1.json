@@ -8,6 +8,18 @@
       "joins": ["project-drafts", "snapshots"]
     },
     {
+      "id": "project_geometry_documents",
+      "path": "src-tauri/src/zone_bridge/geometry_document.rs",
+      "functions": ["document_path", "load_document_at", "save_document_at"],
+      "joins": ["geometry-documents"]
+    },
+    {
+      "id": "project_geometry_underlays",
+      "path": "src-tauri/src/zone_bridge/geometry_underlay.rs",
+      "functions": ["resource_root", "persist_resource", "read_geometry_underlay_resource_impl"],
+      "joins": ["geometry-underlays"]
+    },
+    {
       "id": "run_results",
       "path": "src-tauri/src/zone_bridge.rs",
       "functions": ["run_active_contam_project", "validate_contamx_run_result", "canonicalize_manifest_path"],
@@ -47,6 +59,6 @@
   "allowed_rust_literal_joins": [
     "ai", "archive.json", "bin", "codex-installer", "codex-runtime", "codex.exe", "Codex", "conversation-archive", "providers", "profiles.json",
     "install-official-codex.ps1", "OpenAI", "powershell.exe", "Programs", "System32", "v1.0", "WindowsPowerShell", "model-catalog.json",
-    ",", "evidence", "manifest.json", "project-drafts", "python/.venv/Scripts/python.exe", "result-extractions", "runs", "snapshots", "study-runs", "study-results", "study-reports"
+    ",", "evidence", "geometry-documents", "geometry-underlays", "manifest.json", "plan.png", "project-drafts", "python/.venv/Scripts/python.exe", "result-extractions", "runs", "snapshots", "study-runs", "study-results", "study-reports"
   ]
 }

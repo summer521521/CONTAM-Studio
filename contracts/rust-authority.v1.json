@@ -48,7 +48,12 @@
           "discard_semantic_patch",
           "undo_project_draft",
           "redo_project_draft",
-          "export_active_project_draft_copy"
+          "export_active_project_draft_copy",
+          "export_semantic_authoring_draft_copy",
+          "load_project_geometry_document",
+          "save_project_geometry_document",
+          "select_and_import_geometry_underlay",
+          "read_geometry_underlay_resource"
         ],
         "structs": [
           "ReaderDiagnostic",
@@ -67,6 +72,8 @@
           "DesktopDraftTransitionResponse",
           "DraftExportSummary",
           "DesktopDraftExportResponse",
+          "SemanticAuthoringExportSummary",
+          "DesktopSemanticAuthoringExportResponse",
           "ZoneAirStateSampleView",
           "ZoneAirStateResultView",
       "DesktopZoneAirStateResponse",
@@ -106,6 +113,7 @@
           "refresh_codex_account",
           "preview_ai_context",
           "start_readonly_ai_turn",
+          "generate_geometry_draft_from_image",
           "load_ai_conversation_archive",
           "set_ai_conversation_archive_enabled",
           "delete_ai_conversation_archive_entry",

@@ -2,6 +2,31 @@
 
 | 任务 | 阶段 | 状态 | 来源 |
 | --- | --- | --- | --- |
+| [Geometry Workbench Background Browser Acceptance](records/geometry-workbench-background-browser-acceptance.md) | Geometry Workbench | completed | live |
+| [SimRead Official Output Compatibility](records/simread-official-output-compatibility.md) | Geometry Workbench | completed | live |
+| [CONTAM Semantic Authoring and Safe Draft Foundation](records/contam-semantic-authoring-and-safe-draft-foundation.md) | Geometry Workbench | completed | live |
+| [Calibrated Plan Underlay and Building Tracing](records/calibrated-plan-underlay-and-building-tracing.md) | Geometry Workbench | completed | live |
+| [Wall Airflow Boundaries and Outdoor Context](records/wall-airflow-boundaries-and-outdoor-context.md) | Geometry Workbench | completed | live |
+| [Vertical Openings and Cross-level Airflow](records/vertical-openings-and-cross-level-airflow.md) | Geometry Workbench | completed | live |
+| [Multi-level Navigation and Construction Reuse](records/multi-level-navigation-and-construction-reuse.md) | Geometry Workbench | completed | live |
+| [Zone Boundaries and Room Partitioning](records/zone-boundaries-and-room-partitioning.md) | Geometry Workbench | completed | live |
+| [Topology-aware Wall Intersections and Segments](records/topology-aware-wall-intersections-and-segments.md) | Geometry Workbench | completed | live |
+| [Wall and Opening Direct Manipulation](records/wall-and-opening-direct-manipulation.md) | Geometry Workbench | completed | live |
+| [Geometry Direct Manipulation and Precision Editing](records/geometry-direct-manipulation-and-precision-editing.md) | Geometry Workbench | completed | live |
+| [SketchPad Projection Safe Draft Application](records/sketchpad-projection-safe-draft-application.md) | Geometry Workbench | completed | live |
+| [Project Geometry Document and SketchPad Preview](records/project-geometry-document-and-sketchpad-preview.md) | Geometry Workbench | completed | live |
+| [Verified SketchPad Icon Round Trip](records/verified-sketchpad-icon-round-trip.md) | Geometry Workbench | completed | live |
+| [Vision to Geometry Draft](records/vision-to-geometry-draft.md) | Geometry Workbench | completed | live |
+| [Geometry Assistant Vision Integration](records/geometry-assistant-vision-integration.md) | Geometry Workbench | completed | live |
+| [Geometry Assistant Draft Evidence Review](records/geometry-assistant-draft-evidence-review.md) | Geometry Workbench | completed | live |
+| [Geometry AI Selective Operation Approval](records/geometry-ai-selective-operation-approval.md) | Geometry Workbench | completed | live |
+| [Geometry AI Dependency-aware Selection](records/geometry-ai-dependency-aware-selection.md) | Geometry Workbench | completed | live |
+| [Spatial Command Deck](records/spatial-command-deck.md) | Geometry Workbench | completed | live |
+| [Geometry Editor Integration](records/geometry-editor-integration.md) | Geometry Workbench | completed | live |
+| [Geometry Workbench Integration Closure](records/geometry-workbench-integration-closure.md) | Geometry Workbench | completed | live |
+| [Geometry Workbench GUI Acceptance](records/geometry-workbench-gui-acceptance.md) | Geometry Workbench | completed | live |
+| [Geometry Workbench User Modeling Closure](records/geometry-workbench-user-modeling-closure.md) | Geometry Workbench | completed | live |
+| [Geometry Workbench Foundation](records/geometry-workbench-foundation.md) | Geometry Workbench | completed | live |
 | [R1-01 Foundation Reset](records/r1-01-foundation-reset.md) | Renewal R1 | completed | live |
 | [R1-02 Workbench & Task Journeys](records/r1-02-workbench-task-journeys.md) | Renewal R1 | completed | live |
 | [R1-03 Visual Model Workspace](records/r1-03-visual-model-workspace.md) | Renewal R1 | completed | live |

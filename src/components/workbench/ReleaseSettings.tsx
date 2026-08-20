@@ -43,6 +43,8 @@ function categoryLabel(id: string, language: AppLanguage): string {
   const labels: Record<string, [string, string]> = {
     EBWebView: ["WebView缓存", "WebView cache"],
     "project-drafts": ["项目草稿", "Project drafts"],
+    "geometry-documents": ["建筑几何文档", "Building geometry documents"],
+    "geometry-underlays": ["建筑底图", "Building underlays"],
     runs: ["运行记录", "Run records"],
     "result-extractions": ["结果提取", "Result extractions"],
     "study-runs": ["研究任务", "Study runs"],

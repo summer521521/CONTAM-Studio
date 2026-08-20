@@ -23,6 +23,8 @@ use zeroize::Zeroizing;
 
 use crate::controlled_process::ControlledChild;
 
+pub(crate) mod geometry_vision;
+
 const CODEX_ENVIRONMENT_VARIABLE: &str = "CONTAM_STUDIO_CODEX";
 const OFFICIAL_CODEX_INSTALLER_URL: &str = "https://chatgpt.com/codex/install.ps1";
 const OFFICIAL_CODEX_INSTALLER_SHA256: &str =
@@ -119,6 +121,7 @@ pub struct CodexModelView {
     display_name: String,
     is_default: bool,
     available: bool,
+    input_modalities: Vec<String>,
     reasoning_efforts: Vec<CodexReasoningEffortView>,
     default_reasoning_effort: String,
 }
@@ -1808,6 +1811,23 @@ fn append_model_page(
             })
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| RpcFailure::new("codex_model_catalog_failed"))?;
+        let input_modalities = match raw.get("inputModalities") {
+            None => vec!["text".to_string(), "image".to_string()],
+            Some(Value::Array(values)) => values
+                .iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .filter(|value| matches!(*value, "text" | "image"))
+                        .map(str::to_string)
+                })
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| RpcFailure::new("codex_model_catalog_failed"))?,
+            _ => return Err(RpcFailure::new("codex_model_catalog_failed")),
+        };
+        if input_modalities.is_empty() {
+            return Err(RpcFailure::new("codex_model_catalog_failed"));
+        }
         if efforts.is_empty() || !efforts.iter().any(|effort| effort.id == default_effort) {
             return Err(RpcFailure::new("codex_model_catalog_failed"));
         }
@@ -1819,6 +1839,7 @@ fn append_model_page(
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             available: true,
+            input_modalities,
             reasoning_efforts: efforts,
             default_reasoning_effort: default_effort.to_string(),
         });
@@ -2715,6 +2736,31 @@ fn turn_start_params(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn generate_geometry_draft_from_image(
+    app: AppHandle,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    attachment_id: String,
+    geometry: Value,
+    prompt: String,
+    language: String,
+) -> geometry_vision::DesktopGeometryAiDraftResponse {
+    geometry_vision::generate_geometry_draft_from_image_impl(
+        app,
+        request_id,
+        project_session_id,
+        revision_id,
+        attachment_id,
+        geometry,
+        prompt,
+        language,
+    )
+    .await
+}
+
 /// Build the response contract used by the App Server and JSON-mode adapters.
 ///
 /// OpenAI Responses strict schemas have one additional structural requirement:
@@ -3169,6 +3215,108 @@ fn process_turn_notification(
         );
     }
     TurnNotificationAction::Continue
+}
+
+fn wait_for_turn_completion(
+    connection: Arc<AppServerConnection>,
+    thread_id: String,
+    turn_id: String,
+    cancellation: Arc<AtomicBool>,
+    interrupt_requested: Arc<AtomicBool>,
+    interrupted_before_wait: bool,
+) -> TurnWaitOutcome {
+    let turn_deadline = Instant::now() + TURN_TIMEOUT;
+    let mut collection = TurnCollectionState::default();
+    let mut stop_reason = interrupted_before_wait.then_some(TurnStopReason::UserInterrupted);
+    let mut interrupt_sent = interrupt_requested.load(Ordering::Acquire);
+    let mut confirmation_deadline = None;
+    if interrupt_sent {
+        confirmation_deadline = Some(Instant::now() + TURN_INTERRUPT_CONFIRM_TIMEOUT);
+    }
+    loop {
+        let now = Instant::now();
+        if cancellation.load(Ordering::Acquire) && stop_reason.is_none() {
+            stop_reason = Some(TurnStopReason::UserInterrupted);
+        }
+        if stop_reason.is_none() && now >= turn_deadline {
+            stop_reason = Some(TurnStopReason::TimedOut);
+        }
+        if stop_reason.is_some() {
+            if !interrupt_sent {
+                if claim_turn_interrupt(&interrupt_requested) {
+                    if let Err(error) = connection.request(
+                        "turn/interrupt",
+                        json!({"threadId": thread_id, "turnId": turn_id}),
+                        TURN_INTERRUPT_REQUEST_TIMEOUT,
+                    ) {
+                        return TurnWaitOutcome::Failed {
+                            error,
+                            token_usage: collection.token_usage,
+                            completion_confirmed: false,
+                        };
+                    }
+                }
+                interrupt_sent = true;
+                confirmation_deadline = Some(Instant::now() + TURN_INTERRUPT_CONFIRM_TIMEOUT);
+            }
+            if confirmation_deadline.is_some_and(|deadline| now >= deadline) {
+                return TurnWaitOutcome::Failed {
+                    error: RpcFailure::new("codex_app_server_disconnected"),
+                    token_usage: collection.token_usage,
+                    completion_confirmed: false,
+                };
+            }
+        }
+        let next_deadline = confirmation_deadline.unwrap_or(turn_deadline);
+        let notification_timeout = next_deadline
+            .checked_duration_since(Instant::now())
+            .unwrap_or(Duration::from_millis(1))
+            .min(Duration::from_millis(500));
+        let notification = match connection.next_notification(notification_timeout) {
+            Ok(Some(value)) => value,
+            Ok(None) => continue,
+            Err(error) => {
+                return TurnWaitOutcome::Failed {
+                    error,
+                    token_usage: collection.token_usage,
+                    completion_confirmed: false,
+                }
+            }
+        };
+        match process_turn_notification(&notification, &thread_id, &turn_id, &mut collection) {
+            TurnNotificationAction::Continue => {}
+            TurnNotificationAction::InterruptForTool => {
+                if stop_reason != Some(TurnStopReason::ToolUseBlocked) {
+                    eprintln!("CONTAM Studio AI safety event: tool_or_approval");
+                }
+                stop_reason = Some(TurnStopReason::ToolUseBlocked);
+            }
+            TurnNotificationAction::Completed(answer, usage) => {
+                if let Some(reason) = stop_reason {
+                    return TurnWaitOutcome::Failed {
+                        error: RpcFailure::new(reason.diagnostic_code()),
+                        token_usage: usage,
+                        completion_confirmed: true,
+                    };
+                }
+                return TurnWaitOutcome::Completed {
+                    answer,
+                    token_usage: usage,
+                };
+            }
+            TurnNotificationAction::Failed {
+                error,
+                token_usage,
+                completion_confirmed,
+            } => {
+                return TurnWaitOutcome::Failed {
+                    error,
+                    token_usage,
+                    completion_confirmed,
+                };
+            }
+        }
+    }
 }
 
 pub(crate) fn preview_failure(
@@ -4721,103 +4869,14 @@ pub async fn start_readonly_ai_turn(
     let interrupt_requested_for_wait = Arc::clone(&interrupt_requested);
     let connection_for_wait = Arc::clone(&connection);
     let waited = tauri::async_runtime::spawn_blocking(move || {
-        let turn_deadline = Instant::now() + TURN_TIMEOUT;
-        let mut collection = TurnCollectionState::default();
-        let mut stop_reason = interrupted_before_wait.then_some(TurnStopReason::UserInterrupted);
-        let mut interrupt_sent = interrupt_requested_for_wait.load(Ordering::Acquire);
-        let mut confirmation_deadline = None;
-        if interrupt_sent {
-            confirmation_deadline = Some(Instant::now() + TURN_INTERRUPT_CONFIRM_TIMEOUT);
-        }
-        loop {
-            let now = Instant::now();
-            if cancellation_for_wait.load(Ordering::Acquire) && stop_reason.is_none() {
-                stop_reason = Some(TurnStopReason::UserInterrupted);
-            }
-            if stop_reason.is_none() && now >= turn_deadline {
-                stop_reason = Some(TurnStopReason::TimedOut);
-            }
-            if stop_reason.is_some() {
-                if !interrupt_sent {
-                    if claim_turn_interrupt(&interrupt_requested_for_wait) {
-                        if let Err(error) = connection_for_wait.request(
-                            "turn/interrupt",
-                            json!({"threadId": thread_for_wait, "turnId": turn_for_wait}),
-                            TURN_INTERRUPT_REQUEST_TIMEOUT,
-                        ) {
-                            return TurnWaitOutcome::Failed {
-                                error,
-                                token_usage: collection.token_usage,
-                                completion_confirmed: false,
-                            };
-                        }
-                    }
-                    interrupt_sent = true;
-                    confirmation_deadline = Some(Instant::now() + TURN_INTERRUPT_CONFIRM_TIMEOUT);
-                }
-                if confirmation_deadline.is_some_and(|deadline| now >= deadline) {
-                    return TurnWaitOutcome::Failed {
-                        error: RpcFailure::new("codex_app_server_disconnected"),
-                        token_usage: collection.token_usage,
-                        completion_confirmed: false,
-                    };
-                }
-            }
-            let next_deadline = confirmation_deadline.unwrap_or(turn_deadline);
-            let notification_timeout = next_deadline
-                .checked_duration_since(Instant::now())
-                .unwrap_or(Duration::from_millis(1))
-                .min(Duration::from_millis(500));
-            let notification = match connection_for_wait.next_notification(notification_timeout) {
-                Ok(Some(value)) => value,
-                Ok(None) => continue,
-                Err(error) => {
-                    return TurnWaitOutcome::Failed {
-                        error,
-                        token_usage: collection.token_usage,
-                        completion_confirmed: false,
-                    }
-                }
-            };
-            match process_turn_notification(
-                &notification,
-                &thread_for_wait,
-                &turn_for_wait,
-                &mut collection,
-            ) {
-                TurnNotificationAction::Continue => {}
-                TurnNotificationAction::InterruptForTool => {
-                    if stop_reason != Some(TurnStopReason::ToolUseBlocked) {
-                        eprintln!("CONTAM Studio AI safety event: tool_or_approval");
-                    }
-                    stop_reason = Some(TurnStopReason::ToolUseBlocked);
-                }
-                TurnNotificationAction::Completed(answer, usage) => {
-                    if let Some(reason) = stop_reason {
-                        return TurnWaitOutcome::Failed {
-                            error: RpcFailure::new(reason.diagnostic_code()),
-                            token_usage: usage,
-                            completion_confirmed: true,
-                        };
-                    }
-                    return TurnWaitOutcome::Completed {
-                        answer,
-                        token_usage: usage,
-                    };
-                }
-                TurnNotificationAction::Failed {
-                    error,
-                    token_usage,
-                    completion_confirmed,
-                } => {
-                    return TurnWaitOutcome::Failed {
-                        error,
-                        token_usage,
-                        completion_confirmed,
-                    };
-                }
-            }
-        }
+        wait_for_turn_completion(
+            connection_for_wait,
+            thread_for_wait,
+            turn_for_wait,
+            cancellation_for_wait,
+            interrupt_requested_for_wait,
+            interrupted_before_wait,
+        )
     })
     .await;
     // Never reuse a connection after a turn that might still be active. A late

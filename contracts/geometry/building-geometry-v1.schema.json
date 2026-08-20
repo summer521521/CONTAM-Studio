@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contam-studio.local/contracts/building-geometry-v1.schema.json",
+  "title": "CONTAM Studio Building Geometry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "geometry_id",
+    "project_session_id",
+    "identity_sha256",
+    "source_sha256",
+    "revision_id",
+    "geometry_revision",
+    "coordinate_space",
+    "provenance",
+    "capabilities",
+    "levels",
+    "vertical_openings",
+    "vertical_flow_path_anchors",
+    "warnings",
+    "unavailable_reason"
+  ],
+  "properties": {
+    "schema_version": { "const": "building_geometry.v1" },
+    "status": { "enum": ["available", "unavailable"] },
+    "geometry_id": { "$ref": "#/$defs/id" },
+    "project_session_id": { "$ref": "#/$defs/id" },
+    "identity_sha256": { "$ref": "#/$defs/sha256" },
+    "source_sha256": { "$ref": "#/$defs/sha256" },
+    "revision_id": { "$ref": "#/$defs/id" },
+    "geometry_revision": { "type": "integer", "minimum": 0 },
+    "coordinate_space": { "$ref": "#/$defs/coordinate_space" },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "capabilities": { "$ref": "#/$defs/capabilities" },
+    "levels": { "type": "array", "items": { "$ref": "#/$defs/level" } },
+    "vertical_openings": { "type": "array", "items": { "$ref": "#/$defs/vertical_opening" } },
+    "vertical_flow_path_anchors": { "type": "array", "items": { "$ref": "#/$defs/vertical_flow_path_anchor" } },
+    "warnings": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "unavailable_reason": { "type": ["string", "null"], "maxLength": 80 }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+    "coordinate": { "type": "integer", "minimum": -1000000000, "maximum": 1000000000 },
+    "coordinate_space": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "unit", "units_per_grid_cell", "y_axis"],
+      "properties": {
+        "kind": { "enum": ["contam_sketchpad_grid", "studio_metric"] },
+        "unit": { "enum": ["half_grid", "mm"] },
+        "units_per_grid_cell": { "type": ["integer", "null"], "minimum": 1 },
+        "y_axis": { "const": "up" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_kind", "application_owned", "source_schema_version"],
+      "properties": {
+        "source_kind": { "enum": ["contam_sketchpad_projection", "studio_metric_draft"] },
+        "application_owned": { "type": "boolean" },
+        "source_schema_version": { "type": ["string", "null"], "maxLength": 80 }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometry_editing", "prj_round_trip"],
+      "properties": {
+        "geometry_editing": { "enum": ["read_only", "studio_draft"] },
+        "prj_round_trip": { "enum": ["unsupported", "read_only_projection", "verified_subset"] }
+      }
+    },
+    "vertex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "x", "y"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "x": { "$ref": "#/$defs/coordinate" },
+        "y": { "$ref": "#/$defs/coordinate" }
+      }
+    },
+    "wall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "start_vertex_id", "end_vertex_id", "kind", "thickness", "source_icon_id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "start_vertex_id": { "$ref": "#/$defs/id" },
+        "end_vertex_id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["exterior", "interior", "unknown"] },
+        "thickness": { "type": ["integer", "null"], "minimum": 1 },
+        "source_icon_id": { "type": ["string", "null"], "maxLength": 128 }
+      }
+    },
+    "opening": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "wall_id", "kind", "offset", "width", "swing", "adjacent_zone_ids"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "wall_id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["door", "window", "exterior_opening", "other"] },
+        "offset": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "swing": { "enum": ["none", "left", "right", "double"] },
+        "adjacent_zone_ids": { "type": "array", "maxItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "zone_region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "semantic_zone_id", "outer_vertex_ids"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "semantic_zone_id": { "$ref": "#/$defs/id" },
+        "outer_vertex_ids": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "flow_path_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "opening_id", "semantic_flow_path_id", "from_zone_id", "to_zone_id", "exterior_side"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "opening_id": { "$ref": "#/$defs/id" },
+        "semantic_flow_path_id": { "$ref": "#/$defs/id" },
+        "from_zone_id": { "type": ["string", "null"], "maxLength": 128 },
+        "to_zone_id": { "type": ["string", "null"], "maxLength": 128 },
+        "exterior_side": { "enum": ["none", "from", "to"] }
+      }
+    },
+    "plan_underlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "resource_id", "display_name", "sha256", "mime_type", "page_number", "pixel_width", "pixel_height", "pixel_origin_x_milli", "pixel_origin_y_milli", "origin_x_mm", "origin_y_mm", "micrometres_per_pixel", "rotation_millidegrees", "opacity_percent", "visible", "locked"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "resource_id": { "type": "string", "pattern": "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[1-5][A-Fa-f0-9]{3}-[89ABab][A-Fa-f0-9]{3}-[A-Fa-f0-9]{12}$" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[^\\\\/]+$" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "mime_type": { "enum": ["image/png", "image/jpeg", "application/pdf"] },
+        "page_number": { "type": ["integer", "null"], "minimum": 1, "maximum": 10000 },
+        "pixel_width": { "type": "integer", "minimum": 1, "maximum": 20000 },
+        "pixel_height": { "type": "integer", "minimum": 1, "maximum": 20000 },
+        "pixel_origin_x_milli": { "type": "integer", "minimum": -20000000, "maximum": 20000000 },
+        "pixel_origin_y_milli": { "type": "integer", "minimum": -20000000, "maximum": 20000000 },
+        "origin_x_mm": { "$ref": "#/$defs/coordinate" },
+        "origin_y_mm": { "$ref": "#/$defs/coordinate" },
+        "micrometres_per_pixel": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "rotation_millidegrees": { "type": "integer", "minimum": -359999, "maximum": 359999 },
+        "opacity_percent": { "type": "integer", "minimum": 5, "maximum": 100 },
+        "visible": { "type": "boolean" },
+        "locked": { "type": "boolean" }
+      }
+    },
+    "vertical_opening": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "lower_level_id", "upper_level_id", "x", "y", "width", "depth", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "lower_level_id": { "$ref": "#/$defs/id" },
+        "upper_level_id": { "$ref": "#/$defs/id" },
+        "x": { "$ref": "#/$defs/coordinate" },
+        "y": { "$ref": "#/$defs/coordinate" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "depth": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "kind": { "enum": ["floor_opening", "stair", "shaft"] }
+      }
+    },
+    "vertical_flow_path_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "vertical_opening_id", "semantic_flow_path_id", "lower_zone_id", "upper_zone_id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "vertical_opening_id": { "$ref": "#/$defs/id" },
+        "semantic_flow_path_id": { "$ref": "#/$defs/id" },
+        "lower_zone_id": { "$ref": "#/$defs/id" },
+        "upper_zone_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "level": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "level_number", "name", "elevation", "height", "vertices", "walls", "openings", "zone_regions", "flow_path_anchors", "underlays"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "level_number": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "elevation": { "type": ["integer", "null"] },
+        "height": { "type": ["integer", "null"], "minimum": 1 },
+        "vertices": { "type": "array", "items": { "$ref": "#/$defs/vertex" } },
+        "walls": { "type": "array", "items": { "$ref": "#/$defs/wall" } },
+        "openings": { "type": "array", "items": { "$ref": "#/$defs/opening" } },
+        "zone_regions": { "type": "array", "items": { "$ref": "#/$defs/zone_region" } },
+        "flow_path_anchors": { "type": "array", "items": { "$ref": "#/$defs/flow_path_anchor" } },
+        "underlays": { "type": "array", "maxItems": 1, "items": { "$ref": "#/$defs/plan_underlay" } }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "object_id"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "severity": { "enum": ["warning", "error"] },
+        "object_id": { "type": ["string", "null"], "maxLength": 128 }
+      }
+    }
+  }
+}

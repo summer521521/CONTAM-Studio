@@ -12,6 +12,7 @@ import { LoadingState } from "../ui/LoadingState";
 import { Disclosure } from "../ui/Disclosure";
 import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
 import type { SemanticNode, SemanticOperationRequest, SemanticState } from "../../app/semantic-state";
+import type { GeometryVisionDraftController } from "../../app/runtime/useGeometryVisionDraft";
 import { SemanticPropertyPanel } from "./SemanticPropertyPanel";
 
 const CodexAssistantPanel = lazy(async () => ({
@@ -76,6 +77,8 @@ interface ContextSidebarProps {
   onAttachmentSelect?: (attachment: AttachmentView, selected: boolean) => void;
   onAttachmentPreview?: () => void;
   onAttachmentRemove?: (attachment: AttachmentView) => void;
+  geometryVisionDraft?: GeometryVisionDraftController;
+  geometryAvailable?: boolean;
   semanticState?: SemanticState;
   selectedSemanticNode?: SemanticNode | null;
   selectedSemanticNodes?: SemanticNode[];
@@ -145,6 +148,8 @@ export function ContextSidebar({
   onAttachmentSelect = () => undefined,
   onAttachmentPreview = () => undefined,
   onAttachmentRemove = () => undefined,
+  geometryVisionDraft,
+  geometryAvailable = false,
   semanticState,
   selectedSemanticNode = null,
   selectedSemanticNodes = [],
@@ -334,6 +339,8 @@ export function ContextSidebar({
           onAttachmentSelect={onAttachmentSelect}
           onAttachmentPreview={onAttachmentPreview}
           onAttachmentRemove={onAttachmentRemove}
+          geometryVisionDraft={geometryVisionDraft}
+          geometryAvailable={geometryAvailable}
         />
         </Suspense>
       )}

@@ -44,6 +44,10 @@ from .semantic_patch import (
     plan_zone_transaction,
     stable_zone_id,
 )
+from .semantic_authoring_export import (
+    SemanticAuthoringExportError,
+    export_semantic_authoring_draft_to_copy,
+)
 from .study_engine import (
     StudyError,
     StudyParameter,
@@ -66,13 +70,14 @@ OPERATION_IMPORT_ATTACHMENT = "import_attachment"
 OPERATION_READ_SEMANTIC_PROJECT = "read_semantic_project"
 OPERATION_PLAN_SEMANTIC_PATCH = "plan_semantic_patch"
 OPERATION_APPLY_SEMANTIC_PATCH = "apply_semantic_patch_to_copy"
+OPERATION_EXPORT_SEMANTIC_AUTHORING_DRAFT = "export_semantic_authoring_draft_to_copy"
 OPERATION_CREATE_STUDY_PLAN = "create_study_plan"
 OPERATION_RUN_STUDY = "run_study"
 OPERATION_CANCEL_STUDY = "cancel_study"
 OPERATION_PAGE_STUDY_RESULTS = "page_study_results"
 OPERATION_ANALYZE_STUDY_RESULTS = "analyze_study_results"
 OPERATION_EXPORT_STUDY_REPORT = "export_study_report"
-MAX_REQUEST_BYTES = 128 * 1024
+MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_REQUEST_ID_LENGTH = 128
 MAX_SOURCE_PATH_LENGTH = 32_768
 MAX_VOLUME_TOKEN_LENGTH = 80
@@ -209,6 +214,7 @@ def _require_common(payload: object) -> tuple[dict[str, Any], str, str]:
         OPERATION_READ_SEMANTIC_PROJECT,
         OPERATION_PLAN_SEMANTIC_PATCH,
         OPERATION_APPLY_SEMANTIC_PATCH,
+        OPERATION_EXPORT_SEMANTIC_AUTHORING_DRAFT,
         OPERATION_CREATE_STUDY_PLAN,
         OPERATION_RUN_STUDY,
         OPERATION_CANCEL_STUDY,
@@ -1261,6 +1267,30 @@ def handle_request(payload: object) -> dict[str, object]:
                     },
                 },
             )
+        if operation == OPERATION_EXPORT_SEMANTIC_AUTHORING_DRAFT:
+            _require_object(
+                request,
+                "request",
+                {
+                    "protocol_version",
+                    "request_id",
+                    "operation",
+                    "source_path",
+                    "output_path",
+                    "semantic_draft",
+                },
+                request_id,
+            )
+            source_path = Path(_require_string(request["source_path"], "source_path", request_id))
+            output_path = Path(_require_string(request["output_path"], "output_path", request_id))
+            if not isinstance(request["semantic_draft"], dict):
+                _fail_request("semantic_draft_contract_invalid", "语义草稿不是对象。", request_id)
+            result = export_semantic_authoring_draft_to_copy(
+                source_path,
+                output_path,
+                request["semantic_draft"],
+            )
+            return _success_envelope(request_id, result.to_dict())
         if operation == OPERATION_CREATE_STUDY_PLAN:
             allowed = {
                 "protocol_version",
@@ -1696,6 +1726,10 @@ def handle_request(payload: object) -> dict[str, object]:
             _cleanup_verified_output(*created_output)
         return _error_envelope(request_id, error.diagnostic)
     except SemanticPatchError as error:
+        if created_output:
+            _cleanup_verified_output(*created_output)
+        return _error_envelope(request_id, _diagnostic(error.code, str(error)))
+    except SemanticAuthoringExportError as error:
         if created_output:
             _cleanup_verified_output(*created_output)
         return _error_envelope(request_id, _diagnostic(error.code, str(error)))

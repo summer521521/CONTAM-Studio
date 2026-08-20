@@ -329,6 +329,28 @@ function Check-Docs {
     Invoke-Tool "R1-03 visual model contract" "node" @("scripts\tests\test-r1-03-visual-model-contract.mjs", $Root) | Out-Null
     Invoke-Tool "R1-04 results evidence AI contract" "node" @("scripts\tests\test-r1-04-results-evidence-ai-contract.mjs", $Root) | Out-Null
     Invoke-Tool "R1-05 final UAT release readiness contract" "node" @("scripts\tests\test-r1-05-final-uat-release-readiness-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Workbench foundation contract" "node" @("scripts\tests\test-geometry-workbench-foundation-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Editor Integration contract" "node" @("scripts\tests\test-geometry-editor-integration-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Spatial Command Deck contract" "node" @("scripts\tests\test-spatial-command-deck-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Vision to Geometry Draft contract" "node" @("scripts\tests\test-vision-to-geometry-draft-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Assistant Vision Integration contract" "node" @("scripts\tests\test-geometry-assistant-vision-integration-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Assistant Draft Evidence contract" "node" @("scripts\tests\test-geometry-assistant-draft-evidence-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Assistant Selective Approval contract" "node" @("scripts\tests\test-geometry-assistant-selective-approval-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Assistant Dependency-aware Selection contract" "node" @("scripts\tests\test-geometry-assistant-dependency-aware-selection-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Verified SketchPad Icon Round Trip contract" "node" @("scripts\tests\test-verified-sketchpad-icon-round-trip-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Project Geometry Document and SketchPad Preview contract" "node" @("scripts\tests\test-project-geometry-document-and-sketchpad-preview-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "SketchPad Projection Safe Draft Application contract" "node" @("scripts\tests\test-sketchpad-projection-safe-draft-application-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Direct Manipulation contract" "node" @("scripts\tests\test-geometry-direct-manipulation-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Wall and Opening Direct Manipulation contract" "node" @("scripts\tests\test-wall-opening-direct-manipulation-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Topology-aware Wall Intersections contract" "node" @("scripts\tests\test-topology-aware-wall-intersections-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Zone Boundaries and Room Partitioning contract" "node" @("scripts\tests\test-zone-boundaries-room-partitioning-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Multi-level Navigation and Construction Reuse contract" "node" @("scripts\tests\test-multi-level-navigation-construction-reuse-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Vertical Openings and Cross-level Airflow contract" "node" @("scripts\tests\test-vertical-openings-cross-level-airflow-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Wall Airflow Boundaries and Outdoor Context contract" "node" @("scripts\tests\test-wall-airflow-boundaries-outdoor-context-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Calibrated Plan Underlay and Building Tracing contract" "node" @("scripts\tests\test-calibrated-plan-underlay-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "CONTAM Semantic Authoring and Safe Draft Foundation contract" "node" @("scripts\tests\test-contam-semantic-authoring-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Workbench User Modeling Closure contract" "node" @("scripts\tests\test-geometry-user-modeling-closure-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "SimRead official output compatibility contract" "node" @("scripts\tests\test-simread-official-output-compatibility-contract.mjs", $Root) | Out-Null
 
     $markdownPaths = @(
         (Get-TrackedPaths "*.md")

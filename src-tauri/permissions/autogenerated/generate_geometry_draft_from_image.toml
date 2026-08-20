@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-generate-geometry-draft-from-image"
+description = "Enables the generate_geometry_draft_from_image command without any pre-configured scope."
+commands.allow = ["generate_geometry_draft_from_image"]
+
+[[permission]]
+identifier = "deny-generate-geometry-draft-from-image"
+description = "Denies the generate_geometry_draft_from_image command without any pre-configured scope."
+commands.deny = ["generate_geometry_draft_from_image"]

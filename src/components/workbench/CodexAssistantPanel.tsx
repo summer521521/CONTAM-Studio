@@ -5,6 +5,7 @@ import type { AiContextScope, AiIntent, AiProviderProfile, AiSemanticPatchSugges
 import type { AssistantContextReceipt } from "../../app/assistant-context";
 import type { SemanticSnapshot } from "../../app/semantic-state";
 import { INITIAL_SIMULATION_STATE, type AssistantMode, type SimulationState } from "../../app/simulation-state";
+import type { GeometryVisionDraftController } from "../../app/runtime/useGeometryVisionDraft";
 import { SimulationPlanPanel } from "./SimulationPlanPanel";
 import { AttachmentCenterPanel } from "./AttachmentCenterPanel";
 import { INITIAL_ATTACHMENT_STATE, type AttachmentState, type AttachmentView } from "../../app/attachment-state";
@@ -13,6 +14,7 @@ import { AssistantContextReceiptView } from "./assistant/AssistantContextReceipt
 import { AssistantConversation } from "./assistant/AssistantConversation";
 import { AssistantHeader } from "./assistant/AssistantHeader";
 import { AssistantIntentSelector } from "./assistant/AssistantIntentSelector";
+import { GeometryVisionDraftPanel } from "./assistant/GeometryVisionDraftPanel";
 
 const SCOPES: AiContextScope[] = [
   "project_summary",
@@ -75,6 +77,8 @@ interface CodexAssistantPanelProps {
   onAttachmentSelect?: (attachment: AttachmentView, selected: boolean) => void;
   onAttachmentPreview?: () => void;
   onAttachmentRemove?: (attachment: AttachmentView) => void;
+  geometryVisionDraft?: GeometryVisionDraftController;
+  geometryAvailable?: boolean;
 }
 
 export function CodexAssistantPanel({
@@ -117,6 +121,8 @@ export function CodexAssistantPanel({
   onAttachmentSelect = () => undefined,
   onAttachmentPreview = () => undefined,
   onAttachmentRemove = () => undefined,
+  geometryVisionDraft,
+  geometryAvailable = false,
 }: CodexAssistantPanelProps) {
   const { t } = useTranslation();
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
@@ -131,6 +137,10 @@ export function CodexAssistantPanel({
   const providerConnectionFailed = !isCodexProvider && Boolean(state.providerIssue);
   const connected = isCodexProvider ? Boolean(state.connection) : providerConfigured;
   const ready = isCodexProvider ? state.status === "available" : providerConfigured && !providerConnectionFailed;
+  const codexVisionReady = isCodexProvider
+    && state.connection?.account.authenticated === true
+    && state.connection.account.auth_mode === "chatgpt"
+    && state.connection.models.some((item) => item.id === "gpt-5.6-luna" && item.available && item.input_modalities.includes("image"));
   const busy = state.status === "probing" || state.status === "installing" || state.status === "connecting" || state.status === "generating" || state.status === "interrupting";
   const providerModels = isCodexProvider
     ? state.connection?.models.filter((item) => item.available).map((item) => ({ id: item.id, display_name: item.display_name })) ?? []
@@ -255,6 +265,17 @@ export function CodexAssistantPanel({
           <HoverHint label={`${isCodexProvider ? t("assistant.networkDisclosure") : t("assistant.providerRequestDisclosure")} ${t("assistant.coreUnaffected")}`} />
         </p>
       </div>
+
+      {geometryAvailable && geometryVisionDraft ? (
+        <GeometryVisionDraftPanel
+          controller={geometryVisionDraft}
+          geometryAvailable={geometryAvailable}
+          codexVisionReady={codexVisionReady}
+          attachmentState={attachmentState}
+          onAttachmentImport={onAttachmentImport}
+          onAttachmentSelect={onAttachmentSelect}
+        />
+      ) : null}
 
       {isCodexProvider && state.status === "not_authenticated" ? <p className="assistant-login-note">{t("assistant.loginInstruction")}</p> : null}
       {state.issue ? (

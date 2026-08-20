@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contam-studio.local/contracts/geometry-document-v1.schema.json",
+  "title": "CONTAM Studio Project Geometry Document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_identity_sha256",
+    "geometry_sha256",
+    "document_revision",
+    "saved_at_unix_ms",
+    "geometry"
+  ],
+  "properties": {
+    "schema_version": { "const": "geometry_document.v1" },
+    "project_identity_sha256": { "$ref": "#/$defs/sha256" },
+    "geometry_sha256": { "$ref": "#/$defs/sha256" },
+    "document_revision": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "saved_at_unix_ms": { "type": "integer", "minimum": 1 },
+    "geometry": {
+      "allOf": [
+        { "$ref": "building-geometry-v1.schema.json" },
+        {
+          "type": "object",
+          "properties": {
+            "status": { "const": "available" },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "source_kind": { "const": "studio_metric_draft" },
+                "application_owned": { "const": true }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "semantic_draft_sha256": { "type": ["string", "null"], "pattern": "^[A-Fa-f0-9]{64}$" },
+    "semantic_draft": {
+      "anyOf": [
+        { "$ref": "../semantic-authoring/contam-semantic-draft-v1.schema.json" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "dependentRequired": {
+    "semantic_draft_sha256": ["semantic_draft"],
+    "semantic_draft": ["semantic_draft_sha256"]
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+  }
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-project-geometry-document"
+description = "Enables the load_project_geometry_document command without any pre-configured scope."
+commands.allow = ["load_project_geometry_document"]
+
+[[permission]]
+identifier = "deny-load-project-geometry-document"
+description = "Denies the load_project_geometry_document command without any pre-configured scope."
+commands.deny = ["load_project_geometry_document"]

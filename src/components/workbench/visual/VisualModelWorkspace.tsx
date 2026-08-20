@@ -28,6 +28,8 @@ import {
   type VisualWorkspacePreferences,
 } from "../../../app/spatial-model";
 import type { SemanticSnapshot } from "../../../app/semantic-state";
+import type { SketchpadProjectionPreview } from "../../../app/geometry/sketchpad-projection-preview";
+import { prepareSketchpadProjectionPatch } from "../../../app/geometry/sketchpad-projection-patch";
 import { EmptyState } from "../../ui/EmptyState";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 import { IconButton } from "../../ui/IconButton";
@@ -42,8 +44,12 @@ export interface VisualModelWorkspaceProps {
   selectedSemanticObjectId: string | null;
   preferences?: VisualWorkspacePreferences;
   onPreferencesChange?: (preferences: VisualWorkspacePreferences) => void;
+  onOpenStudio?: () => void;
+  studioLabel?: string;
   onSelectSemantic: (semanticId: string) => void;
   resultOverlay?: VisualResultOverlay | null;
+  projectionPreview?: SketchpadProjectionPreview | null;
+  onReviewSketchpadProjection?: (preview: SketchpadProjectionPreview) => Promise<boolean>;
 }
 
 export interface VisualResultOverlay {
@@ -192,8 +198,12 @@ export function VisualModelWorkspace({
   selectedSemanticObjectId,
   preferences = DEFAULT_VISUAL_PREFERENCES,
   onPreferencesChange = () => undefined,
+  onOpenStudio,
+  studioLabel,
   onSelectSemantic,
   resultOverlay = null,
+  projectionPreview = null,
+  onReviewSketchpadProjection,
 }: VisualModelWorkspaceProps) {
   const { t } = useTranslation();
   const contextIdentity = projection?.identity_sha256 ?? null;
@@ -206,6 +216,7 @@ export function VisualModelWorkspace({
   // geometry off-screen until the user presses "fit" manually.
   const [command, setCommand] = useState<VisualViewportCommand>({ sequence: 1, action: "fit", contextKey });
   const [objectListOpen, setObjectListOpen] = useState(false);
+  const [projectionReviewBusy, setProjectionReviewBusy] = useState(false);
   const [knownContext, setKnownContext] = useState({ identity: contextIdentity, revision: contextRevision });
   const topology = useMemo(() => snapshot ? buildTopologyLayout(snapshot) : { nodes: [], edges: [], bounds: null }, [snapshot]);
   const selection = useMemo(
@@ -213,6 +224,10 @@ export function VisualModelWorkspace({
     [projection, selectedSemanticObjectId],
   );
   const activeLevel = activeSpatialLevel(projection, activeLevelNumber);
+  const projectionPreparation = useMemo(
+    () => projectionPreview ? prepareSketchpadProjectionPatch(projectionPreview) : null,
+    [projectionPreview],
+  );
 
   const issueCommand = (action: VisualViewportCommand["action"], targetContextKey = contextKey) => {
     setCommand((current) => ({ sequence: current.sequence + 1, action, contextKey: targetContextKey }));
@@ -233,6 +248,10 @@ export function VisualModelWorkspace({
       issueCommand("locate");
     }
   }, [selection?.iconId, selection?.levelNumber, selection?.semanticId]);
+
+  useEffect(() => {
+    setProjectionReviewBusy(false);
+  }, [projectionPreview?.geometry_sha256, projectionPreview?.revision_id]);
 
   const mode = preferences.mode;
   const sketchUnavailable = mode === "sketchpad" && projection?.status !== "available";
@@ -261,6 +280,18 @@ export function VisualModelWorkspace({
       <button type="button" onClick={() => setObjectListOpen(true)}>{t("visual.objectList.open")}</button>
     </InlineNotice>
   );
+  const reviewProjection = async () => {
+    if (!projectionPreview
+      || projectionPreparation?.status !== "ready"
+      || !onReviewSketchpadProjection
+      || projectionReviewBusy) return;
+    setProjectionReviewBusy(true);
+    try {
+      await onReviewSketchpadProjection(projectionPreview);
+    } finally {
+      setProjectionReviewBusy(false);
+    }
+  };
 
   return (
     <section className="visual-model-workspace" aria-label={t("visual.title")}>
@@ -281,6 +312,7 @@ export function VisualModelWorkspace({
           </select>
         </label>
         <div className="visual-mode-switch" aria-label={t("visual.modeLabel")}>
+          {onOpenStudio ? <button type="button" aria-pressed="false" onClick={onOpenStudio}>{studioLabel ?? t("geometry.deck.modes.studio")}</button> : null}
           <button type="button" aria-pressed={mode === "sketchpad"} onClick={() => updateMode("sketchpad")}>{t("visual.modeSketchpad")}</button>
           <button type="button" aria-pressed={mode === "topology"} onClick={() => updateMode("topology")}><Network size={14} aria-hidden="true" />{t("visual.modeTopology")}</button>
         </div>
@@ -305,6 +337,30 @@ export function VisualModelWorkspace({
       </div>
 
       <div className="visual-scale-notice" role="note">{canvasDescription}</div>
+      {mode === "sketchpad" && projectionPreview ? (
+        <div className={`visual-projection-preview-status is-${projectionPreview.status}`} role="note" aria-live="polite">
+          <strong>{t(`geometry.projectionPreview.status.${projectionPreview.status}`)}</strong>
+          <span>{t("geometry.projectionPreview.summary", { count: projectionPreview.moves.filter((move) => move.changed).length })}</span>
+          <small>{t("geometry.projectionPreview.boundary")}</small>
+          {projectionPreparation?.status === "ready" && onReviewSketchpadProjection ? (
+            <div className="visual-projection-preview-actions">
+              <button
+                type="button"
+                className="ui-button is-primary"
+                disabled={projectionReviewBusy}
+                onClick={() => void reviewProjection()}
+              >
+                {projectionReviewBusy
+                  ? t("geometry.projectionPreview.reviewing")
+                  : t("geometry.projectionPreview.review", { count: projectionPreparation.changed_icon_count })}
+              </button>
+              <small>{t("geometry.projectionPreview.reviewBoundary")}</small>
+            </div>
+          ) : projectionPreparation?.diagnostic === "sketchpad_projection_no_change" ? (
+            <small>{t("geometry.projectionPreview.noChange")}</small>
+          ) : null}
+        </div>
+      ) : null}
       <div className={`visual-workspace-body ${objectListOpen ? "has-object-list" : ""}`}>
         <div className="visual-canvas-region" role="region" aria-label={canvasLabel} aria-describedby="visual-canvas-description">
           <span id="visual-canvas-description" className="sr-only">{canvasDescription}</span>
@@ -333,6 +389,7 @@ export function VisualModelWorkspace({
                   onViewportChange={setViewport}
                   onSelectSemantic={onSelectSemantic}
                   resultOverlay={resultOverlay}
+                  projectionPreview={projectionPreview}
                 />
               </Suspense>
             </ErrorBoundary>

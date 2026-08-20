@@ -7,21 +7,23 @@ use std::sync::Mutex;
 const ATTACHMENT_IMPORT_TIMEOUT: Duration = Duration::from_secs(45);
 const MAX_ATTACHMENT_BATCH_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_ATTACHMENT_COUNT: usize = 32;
+const MAX_VISION_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_VISION_IMAGE_PIXELS: u64 = 20_000_000;
 const EVIDENCE_TTL_MS: u128 = 15 * 60 * 1_000;
 static ATTACHMENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AttachmentView {
-    attachment_id: String,
-    display_name: String,
-    category: String,
-    size_bytes: u64,
-    sha256_prefix: String,
-    status: String,
-    risk_summary: String,
-    metadata: BTreeMap<String, Value>,
-    evidence_kind: Option<String>,
-    selected_by_user: bool,
+    pub(super) attachment_id: String,
+    pub(super) display_name: String,
+    pub(super) category: String,
+    pub(super) size_bytes: u64,
+    pub(super) sha256_prefix: String,
+    pub(super) status: String,
+    pub(super) risk_summary: String,
+    pub(super) metadata: BTreeMap<String, Value>,
+    pub(super) evidence_kind: Option<String>,
+    pub(super) selected_by_user: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -117,11 +119,21 @@ struct RawAttachmentEvidence {
 }
 
 #[derive(Clone, Debug)]
-struct StoredAttachment {
-    view: AttachmentView,
-    sha256: String,
-    quarantine_relative_path: String,
+pub(super) struct StoredAttachment {
+    pub(super) view: AttachmentView,
+    pub(super) sha256: String,
+    pub(super) quarantine_relative_path: String,
     evidence: Option<RawAttachmentEvidence>,
+}
+
+pub(crate) struct VisionImageInput {
+    pub(crate) attachment_id: String,
+    pub(crate) display_name: String,
+    pub(crate) sha256: String,
+    pub(crate) mime_type: &'static str,
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+    pub(crate) path: PathBuf,
 }
 
 #[derive(Clone, Debug)]
@@ -151,7 +163,7 @@ impl AttachmentCenterStore {
             .import_active
     }
 
-    fn start_import(&self) -> Result<(), ReaderDiagnostic> {
+    pub(super) fn start_import(&self) -> Result<(), ReaderDiagnostic> {
         let mut state = self.state.lock().expect("attachment center mutex poisoned");
         if state.import_active {
             return Err(attachment_diagnostic(
@@ -163,14 +175,14 @@ impl AttachmentCenterStore {
         Ok(())
     }
 
-    fn finish_import(&self) {
+    pub(super) fn finish_import(&self) {
         self.state
             .lock()
             .expect("attachment center mutex poisoned")
             .import_active = false;
     }
 
-    fn list(&self) -> (Vec<AttachmentView>, bool) {
+    pub(super) fn list(&self) -> (Vec<AttachmentView>, bool) {
         let state = self.state.lock().expect("attachment center mutex poisoned");
         (
             state
@@ -182,7 +194,121 @@ impl AttachmentCenterStore {
         )
     }
 
-    fn insert(&self, attachment: StoredAttachment) {
+    pub(crate) fn inspect_selected_image_for_vision(
+        &self,
+        app: &AppHandle,
+        attachment_id: &str,
+        expected_sha256: Option<&str>,
+    ) -> Result<VisionImageInput, ReaderDiagnostic> {
+        if Uuid::parse_str(attachment_id).is_err() {
+            return Err(attachment_diagnostic(
+                "vision_image_request_invalid",
+                "The selected image request was invalid.",
+            ));
+        }
+        let attachment = {
+            let state = self.state.lock().expect("attachment center mutex poisoned");
+            if state.import_active {
+                return Err(attachment_diagnostic(
+                    "attachment_import_busy",
+                    "Image analysis is unavailable while attachments are importing.",
+                ));
+            }
+            state
+                .attachments
+                .get(attachment_id)
+                .cloned()
+                .ok_or_else(|| {
+                    attachment_diagnostic("attachment_missing", "The attachment is unavailable.")
+                })?
+        };
+        if !attachment.view.selected_by_user
+            || attachment.view.category != "image"
+            || attachment.view.status != "ready"
+            || attachment.view.evidence_kind.as_deref() != Some("image_metadata")
+            || attachment.view.size_bytes == 0
+            || attachment.view.size_bytes > MAX_VISION_IMAGE_BYTES
+        {
+            return Err(attachment_diagnostic(
+                "vision_image_unsupported",
+                "Select one ready PNG or JPEG within the vision size limit.",
+            ));
+        }
+        let width = attachment
+            .view
+            .metadata
+            .get("width")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        let height = attachment
+            .view
+            .metadata
+            .get("height")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        if width == 0
+            || height == 0
+            || width
+                .checked_mul(height)
+                .is_none_or(|pixels| pixels > MAX_VISION_IMAGE_PIXELS)
+        {
+            return Err(attachment_diagnostic(
+                "vision_image_dimensions_invalid",
+                "The selected image dimensions are invalid or too large.",
+            ));
+        }
+        let root = attachment_quarantine_root(app)?;
+        let path = owned_quarantine_path(
+            &root,
+            &attachment.view.attachment_id,
+            &attachment.quarantine_relative_path,
+        )?;
+        let (sha256, size_bytes) = sha256_file(&path).map_err(|_| {
+            attachment_diagnostic(
+                "vision_image_changed",
+                "The Studio-owned image copy could not be verified.",
+            )
+        })?;
+        if size_bytes != attachment.view.size_bytes
+            || !sha256.eq_ignore_ascii_case(&attachment.sha256)
+            || expected_sha256.is_some_and(|expected| !sha256.eq_ignore_ascii_case(expected))
+        {
+            return Err(attachment_diagnostic(
+                "vision_image_changed",
+                "The Studio-owned image copy changed after import.",
+            ));
+        }
+        let bytes = std::fs::read(&path).map_err(|_| {
+            attachment_diagnostic(
+                "vision_image_unavailable",
+                "The Studio-owned image copy could not be read.",
+            )
+        })?;
+        let lower_name = attachment.view.display_name.to_ascii_lowercase();
+        let mime_type = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") && lower_name.ends_with(".png") {
+            "image/png"
+        } else if bytes.starts_with(&[0xff, 0xd8, 0xff])
+            && (lower_name.ends_with(".jpg") || lower_name.ends_with(".jpeg"))
+        {
+            "image/jpeg"
+        } else {
+            return Err(attachment_diagnostic(
+                "vision_image_signature_invalid",
+                "The selected image signature did not match a supported PNG or JPEG.",
+            ));
+        };
+        Ok(VisionImageInput {
+            attachment_id: attachment.view.attachment_id,
+            display_name: attachment.view.display_name,
+            sha256: attachment.sha256,
+            mime_type,
+            width,
+            height,
+            path,
+        })
+    }
+
+    pub(super) fn insert(&self, attachment: StoredAttachment) {
         let mut state = self.state.lock().expect("attachment center mutex poisoned");
         if state.attachments.len() >= MAX_ATTACHMENT_COUNT {
             return;
@@ -193,7 +319,7 @@ impl AttachmentCenterStore {
         invalidate_evidence_locked(&mut state);
     }
 
-    fn can_accept_more(&self) -> bool {
+    pub(super) fn can_accept_more(&self) -> bool {
         self.state
             .lock()
             .expect("attachment center mutex poisoned")
@@ -520,7 +646,7 @@ fn safe_attachment_metadata(metadata: &BTreeMap<String, Value>) -> bool {
         })
 }
 
-fn attachment_quarantine_root(app: &AppHandle) -> Result<PathBuf, ReaderDiagnostic> {
+pub(super) fn attachment_quarantine_root(app: &AppHandle) -> Result<PathBuf, ReaderDiagnostic> {
     let root = app.path().app_local_data_dir().map_err(|_| {
         attachment_diagnostic(
             "attachment_quarantine_unavailable",
@@ -542,7 +668,7 @@ fn attachment_quarantine_root(app: &AppHandle) -> Result<PathBuf, ReaderDiagnost
     })
 }
 
-fn owned_quarantine_path(
+pub(super) fn owned_quarantine_path(
     quarantine_root: &Path,
     attachment_id: &str,
     relative: &str,
@@ -674,7 +800,7 @@ fn attachment_bundle_hash(
     }))
 }
 
-fn import_attachment_with_python(
+pub(super) fn import_attachment_with_python(
     source_path: &Path,
     quarantine_root: &Path,
     request_id: &str,

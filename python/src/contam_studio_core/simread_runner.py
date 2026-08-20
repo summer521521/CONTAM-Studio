@@ -59,6 +59,7 @@ STREAM_CLOSE_JOIN_TIMEOUT_SECONDS = 1
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_STREAM_BYTES = 4 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
+NODE_CONTAMINANT_RESULTS_NOT_AVAILABLE = b"node contaminant results not available"
 ERROR_EXIT_CODES = {
     name: index + 2
     for index, name in enumerate(
@@ -92,6 +93,7 @@ ERROR_EXIT_CODES = {
             "simread_process_termination_failed",
             "simread_stdin_failed",
             "simread_output_missing",
+            "simread_node_air_state_unavailable",
             "simread_output_ambiguous",
             "simread_output_too_large",
             "simread_output_invalid",
@@ -119,6 +121,11 @@ def _fail(code: str, message: str, context: dict[str, str | int] | None = None) 
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _node_air_state_explicitly_unavailable(stdout: bytes) -> bool:
+    """Recognize the official SimRead statement without parsing arbitrary output."""
+    return NODE_CONTAMINANT_RESULTS_NOT_AVAILABLE in stdout.lower()
 
 
 def _hash_size(path: Path, missing_code: str = "result_artifact_missing") -> tuple[str, int]:
@@ -1424,6 +1431,11 @@ def extract_zone_air_state(
         _recheck(evidence)
         nfrs = sorted(workspace.glob("*.nfr"), key=lambda value: value.name.casefold())
         if not nfrs:
+            if _node_air_state_explicitly_unavailable(bytes(stdout_capture.data)):
+                _fail(
+                    "simread_node_air_state_unavailable",
+                    "SimRead已完成，但该运行没有节点空气状态结果。",
+                )
             _fail("simread_output_missing", "SimRead未生成节点结果文件。")
         if len(nfrs) != 1:
             _fail("simread_output_ambiguous", "SimRead生成了多个节点结果文件。")

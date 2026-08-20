@@ -9,6 +9,18 @@ fn primary_fixture() -> PathBuf {
     fixture_path("fixtures/contam/official-contamxpy/test_GetPrjInfo.prj")
 }
 
+#[test]
+fn semantic_patch_operation_allowlist_includes_only_verified_sketchpad_coordinate_fields() {
+    assert!(semantic_operation_is_supported("set_spatial_icon_column"));
+    assert!(semantic_operation_is_supported("set_spatial_icon_row"));
+    assert!(!semantic_operation_is_supported("create_spatial_icon"));
+    assert!(!semantic_operation_is_supported("delete_spatial_icon"));
+    assert!(!semantic_operation_is_supported("set_spatial_icon_type"));
+    assert!(!semantic_operation_is_supported(
+        "set_spatial_object_number"
+    ));
+}
+
 fn test_draft_root(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("contam-studio-{label}-{}", std::process::id()))
 }
@@ -49,6 +61,61 @@ fn active_context(
     );
     let active = store.state.lock().unwrap().active_project.clone().unwrap();
     active
+}
+
+#[test]
+fn semantic_authoring_export_result_requires_exact_ids_and_no_sketchpad_claim() {
+    let fixture = primary_fixture();
+    let envelope = execute_read(&fixture, "semantic-authoring-export-result");
+    let project = envelope.result.unwrap();
+    let active = active_context("semantic-authoring-export-result", fixture, &project);
+    let output_root = test_draft_root("semantic-authoring-export-result-output");
+    fs::create_dir_all(&output_root).unwrap();
+    let output = output_root.join("generated.prj");
+    fs::write(&output, b"generated semantic authoring copy").unwrap();
+    let (output_sha256, output_size_bytes) = sha256_file(&output).unwrap();
+    let zone_ids = BTreeSet::from(["draft-zone-1".to_string()]);
+    let flow_path_ids = BTreeSet::from(["draft-flow-1".to_string()]);
+    let valid = RawSemanticAuthoringExportResult {
+        result_type: "semantic_authoring_export".into(),
+        source_sha256: active.source_sha256.clone(),
+        output_sha256,
+        output_size_bytes,
+        source_unchanged: true,
+        added_zone_count: 1,
+        added_flow_path_count: 1,
+        zone_number_by_id: BTreeMap::from([("draft-zone-1".into(), 8)]),
+        flow_path_number_by_id: BTreeMap::from([("draft-flow-1".into(), 1)]),
+        sketchpad_geometry_written: false,
+    };
+    let summary = validate_semantic_authoring_export_result(
+        &valid,
+        &active,
+        &zone_ids,
+        &flow_path_ids,
+        &output,
+    )
+    .unwrap();
+    assert_eq!(summary.added_zone_count, 1);
+    assert!(!summary.sketchpad_geometry_written);
+
+    let claiming_sketchpad = RawSemanticAuthoringExportResult {
+        sketchpad_geometry_written: true,
+        ..valid.clone()
+    };
+    assert_eq!(
+        validate_semantic_authoring_export_result(
+            &claiming_sketchpad,
+            &active,
+            &zone_ids,
+            &flow_path_ids,
+            &output,
+        )
+        .unwrap_err()
+        .code,
+        "semantic_authoring_export_contract_invalid"
+    );
+    let _ = fs::remove_dir_all(output_root);
 }
 
 fn synthetic_active(
@@ -182,7 +249,7 @@ fn python_discovery_and_timeout_limits_are_explicit() {
     assert_eq!(APPLY_TIMEOUT, Duration::from_secs(15));
     assert_eq!(EXTRACT_TIMEOUT, Duration::from_secs(45));
     assert_eq!(RUN_TIMEOUT, Duration::from_secs(75));
-    assert_eq!(MAX_REQUEST_BYTES, 128 * 1024);
+    assert_eq!(MAX_REQUEST_BYTES, 3 * 1024 * 1024);
 }
 
 #[test]
@@ -1858,6 +1925,11 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         "refresh_codex_account",
         "preview_ai_context",
         "start_readonly_ai_turn",
+        "generate_geometry_draft_from_image",
+        "load_project_geometry_document",
+        "save_project_geometry_document",
+        "select_and_import_geometry_underlay",
+        "read_geometry_underlay_resource",
         "load_ai_conversation_archive",
         "set_ai_conversation_archive_enabled",
         "delete_ai_conversation_archive_entry",
@@ -1879,7 +1951,7 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     ] {
         assert!(build_script.contains(command));
     }
-    assert_eq!(capability["permissions"].as_array().unwrap().len(), 66);
+    assert_eq!(capability["permissions"].as_array().unwrap().len(), 72);
     let forbidden = [
         "sourcePath",
         "outputPath",
@@ -1906,6 +1978,8 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
     assert!(desktop_api.contains("selectAndImportAttachments"));
     assert!(desktop_api.contains("previewAttachmentEvidence"));
     assert!(desktop_api.contains("removeStudioAttachment"));
+    assert!(desktop_api.contains("selectAndImportGeometryUnderlay"));
+    assert!(desktop_api.contains("readGeometryUnderlayResource"));
     assert!(desktop_api.contains("undoProjectDraft"));
     assert!(desktop_api.contains("redoProjectDraft"));
     assert!(desktop_api.contains("exportActiveProjectDraftCopy"));
@@ -1968,6 +2042,10 @@ fn custom_command_acl_and_frontend_path_boundary_are_explicit() {
         (
             include_str!("../../permissions/autogenerated/start_readonly_ai_turn.toml"),
             "start_readonly_ai_turn",
+        ),
+        (
+            include_str!("../../permissions/autogenerated/generate_geometry_draft_from_image.toml"),
+            "generate_geometry_draft_from_image",
         ),
         (
             include_str!("../../permissions/autogenerated/interrupt_readonly_ai_turn.toml"),
@@ -2124,6 +2202,105 @@ fn real_semantic_bridge_returns_validated_spatial_projection_without_writing_sou
     assert!(!semantic_value_has_forbidden_key(spatial));
     assert_eq!(fs::read(fixture).unwrap(), before);
     let _ = fs::remove_dir_all(active.draft_root);
+}
+
+#[test]
+fn real_bridge_round_trips_only_an_existing_sketchpad_icon_column_to_a_new_copy() {
+    let root = test_draft_root("verified-spatial-icon-patch");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let source_path = root.join("source.prj");
+    fs::copy(primary_fixture(), &source_path).unwrap();
+    let source = fs::canonicalize(source_path).unwrap();
+    let source_before = fs::read(&source).unwrap();
+    let project_envelope = execute_read(&source, "spatial-patch-project-read");
+    assert!(project_envelope.ok, "{:?}", project_envelope.error);
+    let project = project_envelope.result.unwrap();
+    let active = active_context("verified-spatial-icon-patch", source.clone(), &project);
+    let revision_id = active.active_revision().revision_id.clone();
+    let read_request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": "spatial-patch-semantic-read",
+        "operation": "read_semantic_project",
+        "source_path": source,
+        "baseline_sha256": active.baseline_source_sha256,
+        "revision_id": revision_id,
+    });
+    let snapshot = execute_bridge_request(
+        &read_request,
+        "spatial-patch-semantic-read",
+        READ_AND_PLAN_TIMEOUT,
+    )
+    .unwrap()
+    .result
+    .unwrap();
+    let icon = &snapshot["spatial_projection"]["levels"][0]["icons"][0];
+    assert_ne!(icon["column"], json!(0));
+    let icon_id = icon["id"].as_str().unwrap();
+    let source_line = icon["evidence"]["source_line"].as_u64().unwrap();
+    let plan_request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": "spatial-patch-plan",
+        "operation": "plan_semantic_patch",
+        "source_path": source,
+        "baseline_sha256": active.baseline_source_sha256,
+        "revision_id": active.active_revision().revision_id,
+        "operations": [{
+            "operation": "set_spatial_icon_column",
+            "object_id": icon_id,
+            "new_value": "0",
+            "unit": "grid_cell"
+        }]
+    });
+    let plan = execute_bridge_request(&plan_request, "spatial-patch-plan", READ_AND_PLAN_TIMEOUT)
+        .unwrap()
+        .result
+        .unwrap();
+    assert_eq!(plan["diff"][0]["field"], json!("column"));
+    let output = root.join("moved.prj");
+    let apply_request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": "spatial-patch-apply",
+        "operation": "apply_semantic_patch_to_copy",
+        "source_path": source,
+        "output_path": output,
+        "transaction": plan["transaction"],
+    });
+    let application = execute_bridge_request(&apply_request, "spatial-patch-apply", APPLY_TIMEOUT)
+        .unwrap()
+        .result
+        .unwrap();
+    assert_eq!(application["source_unchanged"], json!(true));
+    assert_eq!(fs::read(&source).unwrap(), source_before);
+    assert!(output.is_file());
+
+    let reread_request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": "spatial-patch-reread",
+        "operation": "read_semantic_project",
+        "source_path": output,
+        "baseline_sha256": active.baseline_source_sha256,
+        "revision_id": active.active_revision().revision_id,
+    });
+    let reread = execute_bridge_request(
+        &reread_request,
+        "spatial-patch-reread",
+        READ_AND_PLAN_TIMEOUT,
+    )
+    .unwrap()
+    .result
+    .unwrap();
+    let moved = reread["spatial_projection"]["levels"][0]["icons"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|candidate| candidate["evidence"]["source_line"].as_u64() == Some(source_line))
+        .unwrap();
+    assert_eq!(moved["column"], json!(0));
+    assert!(!semantic_value_has_forbidden_key(&application));
+    assert!(!semantic_value_has_forbidden_key(&reread));
+    let _ = fs::remove_dir_all(active.draft_root);
+    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
@@ -2536,6 +2713,9 @@ fn zone_result_dataset_enforces_zone_and_sample_bounds_and_hard_failures() {
         "result_dataset_source_mismatch"
     ));
     assert!(result_dataset_failure_is_hard("active_run_result_mismatch"));
+    assert!(!result_dataset_failure_is_hard(
+        SIMREAD_NODE_AIR_STATE_UNAVAILABLE_DIAGNOSTIC
+    ));
     assert!(!result_dataset_failure_is_hard("simread_zone_failed"));
     let _ = fs::remove_dir_all(active.draft_root);
 }

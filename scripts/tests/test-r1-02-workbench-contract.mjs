@@ -30,7 +30,7 @@ const en = read("src/i18n/locales/en.json");
 const vite = read("vite.config.ts");
 
 assert("App is a small composition root", lineCount(app) <= 80 && app.includes("WorkbenchRuntime"));
-assert("runtime stays within the reviewed responsibility budget", lineCount(runtime) <= 600);
+assert("runtime stays within the reviewed responsibility budget", lineCount(runtime) <= 640 && runtime.includes("geometryVisionDraft"));
 for (const hook of ["useWorkbenchLayout", "useStudioSettings", "useProjectPatchJourney", "useAssistantEvidenceJourney", "useHostStageEvents", "useCloseLifecycle"]) {
   assert(`runtime delegates to ${hook}`, runtime.includes(hook));
 }

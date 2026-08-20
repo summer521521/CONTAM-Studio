@@ -5,6 +5,7 @@ import {
   ZONE_RESULT_DATASET_SCHEMA,
   datasetMetricStatistics,
   datasetAvailableTimes,
+  datasetHasOnlyUnavailableNodeAirState,
   isTrustedResultDataset,
   nearestAvailableResultTime,
   datasetValueAtTime,
@@ -96,6 +97,24 @@ describe("zone result dataset", () => {
     expect(retained.dataset?.status).toBe("ready");
     expect(isTrustedResultDataset(failedDataset)).toBe(false);
     expect(isTrustedResultDataset(dataset({ status: "partial", successful_zone_series: [] }))).toBe(false);
+  });
+
+  it("recognizes a completed SimRead run with no node air-state output as an honest failed dataset", () => {
+    const unavailable = dataset({
+      status: "failed",
+      successful_zone_series: [],
+      per_zone_failures: dataset().requested_zones.map((zone) => ({
+        ...zone,
+        code: "simread_node_air_state_unavailable",
+      })),
+      evidence_summary: { ...dataset().evidence_summary, successful_zone_count: 0, failed_zone_count: 2 },
+    });
+    expect(datasetHasOnlyUnavailableNodeAirState(unavailable)).toBe(true);
+    expect(isTrustedResultDataset(unavailable)).toBe(false);
+    expect(datasetHasOnlyUnavailableNodeAirState({
+      ...unavailable,
+      per_zone_failures: [{ ...unavailable.per_zone_failures[0], code: "simread_output_missing" }],
+    })).toBe(false);
   });
 
   it("does not let a cancelled or late request replace trusted state", () => {

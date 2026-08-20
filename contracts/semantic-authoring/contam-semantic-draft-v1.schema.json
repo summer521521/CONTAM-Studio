@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contam-studio.local/contracts/semantic-authoring/contam-semantic-draft-v1.schema.json",
+  "title": "CONTAM Studio Semantic Authoring Draft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "draft_id",
+    "project_session_id",
+    "identity_sha256",
+    "source_sha256",
+    "revision_id",
+    "draft_revision",
+    "provenance",
+    "zones",
+    "flow_paths"
+  ],
+  "properties": {
+    "schema_version": { "const": "contam_semantic_draft.v1" },
+    "status": { "const": "available" },
+    "draft_id": { "$ref": "#/$defs/id" },
+    "project_session_id": { "$ref": "#/$defs/id" },
+    "identity_sha256": { "$ref": "#/$defs/sha256" },
+    "source_sha256": { "$ref": "#/$defs/sha256" },
+    "revision_id": { "$ref": "#/$defs/id" },
+    "draft_revision": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_kind", "application_owned"],
+      "properties": {
+        "source_kind": { "const": "studio_semantic_draft" },
+        "application_owned": { "const": true }
+      }
+    },
+    "zones": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/zone" }
+    },
+    "flow_paths": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/flow_path" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,160}$" },
+    "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+    "zone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "level_number",
+        "name",
+        "display_name",
+        "volume_litres",
+        "volume_basis",
+        "geometry_region_id",
+        "initial_temperature_millikelvin",
+        "initial_pressure_millipascal"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "level_number": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,15}$" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "volume_litres": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "volume_basis": { "enum": ["explicit", "geometry_estimate_confirmed"] },
+        "geometry_region_id": { "$ref": "#/$defs/id" },
+        "initial_temperature_millikelvin": { "type": "integer", "minimum": 173150, "maximum": 373150 },
+        "initial_pressure_millipascal": { "type": "integer", "minimum": -1000000000, "maximum": 1000000000 }
+      }
+    },
+    "endpoint": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "zone_id"],
+          "properties": {
+            "kind": { "const": "zone" },
+            "zone_id": { "$ref": "#/$defs/id" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "zone_id"],
+          "properties": {
+            "kind": { "const": "outdoor" },
+            "zone_id": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "flow_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "level_number",
+        "opening_id",
+        "from_endpoint",
+        "to_endpoint",
+        "flow_element_id",
+        "multiplier_millionths",
+        "x_mm",
+        "y_mm",
+        "relative_height_mm",
+        "direction_degrees"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "level_number": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "opening_id": { "$ref": "#/$defs/id" },
+        "from_endpoint": { "$ref": "#/$defs/endpoint" },
+        "to_endpoint": { "$ref": "#/$defs/endpoint" },
+        "flow_element_id": { "$ref": "#/$defs/id" },
+        "multiplier_millionths": { "type": "integer", "minimum": 1, "maximum": 1000000000000 },
+        "x_mm": { "type": "integer", "minimum": -1000000000, "maximum": 1000000000 },
+        "y_mm": { "type": "integer", "minimum": -1000000000, "maximum": 1000000000 },
+        "relative_height_mm": { "type": "integer", "minimum": 0, "maximum": 100000000 },
+        "direction_degrees": { "type": "integer", "minimum": -1, "maximum": 359 }
+      }
+    }
+  }
+}

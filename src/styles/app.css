@@ -14,6 +14,7 @@
 @import "./components/feedback.css" layer(components);
 @import "./components/surfaces.css" layer(components);
 @import "./features/project.css" layer(features);
+@import "./features/geometry.css" layer(features);
 @import "./features/run.css" layer(features);
 @import "./features/results.css" layer(features);
 @import "./features/research.css" layer(features);

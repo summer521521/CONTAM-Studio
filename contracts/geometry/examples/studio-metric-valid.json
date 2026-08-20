@@ -1,0 +1,58 @@
+{
+  "schema_version": "building_geometry.v1",
+  "status": "available",
+  "geometry_id": "geometry-1",
+  "project_session_id": "project-1",
+  "identity_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "revision_id": "revision-1",
+  "geometry_revision": 0,
+  "coordinate_space": {
+    "kind": "studio_metric",
+    "unit": "mm",
+    "units_per_grid_cell": null,
+    "y_axis": "up"
+  },
+  "provenance": {
+    "source_kind": "studio_metric_draft",
+    "application_owned": true,
+    "source_schema_version": null
+  },
+  "capabilities": {
+    "geometry_editing": "studio_draft",
+    "prj_round_trip": "unsupported"
+  },
+  "levels": [
+    {
+      "id": "level-1",
+      "level_number": 1,
+      "name": "Level 1",
+      "elevation": 0,
+      "height": 3000,
+      "vertices": [
+        { "id": "v1", "x": 0, "y": 0 },
+        { "id": "v2", "x": 4000, "y": 0 },
+        { "id": "v3", "x": 4000, "y": 3000 },
+        { "id": "v4", "x": 0, "y": 3000 }
+      ],
+      "walls": [
+        { "id": "w1", "start_vertex_id": "v1", "end_vertex_id": "v2", "kind": "exterior", "thickness": 200, "source_icon_id": null },
+        { "id": "w2", "start_vertex_id": "v2", "end_vertex_id": "v3", "kind": "exterior", "thickness": 200, "source_icon_id": null },
+        { "id": "w3", "start_vertex_id": "v3", "end_vertex_id": "v4", "kind": "exterior", "thickness": 200, "source_icon_id": null },
+        { "id": "w4", "start_vertex_id": "v4", "end_vertex_id": "v1", "kind": "exterior", "thickness": 200, "source_icon_id": null }
+      ],
+      "openings": [
+        { "id": "door-1", "wall_id": "w1", "kind": "door", "offset": 1000, "width": 900, "swing": "right", "adjacent_zone_ids": ["zone-1"] }
+      ],
+      "zone_regions": [
+        { "id": "region-1", "semantic_zone_id": "zone-1", "outer_vertex_ids": ["v1", "v2", "v3", "v4"] }
+      ],
+      "flow_path_anchors": [],
+      "underlays": []
+    }
+  ],
+  "vertical_openings": [],
+  "vertical_flow_path_anchors": [],
+  "warnings": [],
+  "unavailable_reason": null
+}

@@ -52,16 +52,10 @@ def _number(token: str, field: str, line: int) -> float:
 
 
 def _numeric_field(token: str, field: str, line: int) -> float:
-    stripped = token.strip(" ")
-    if token != stripped and (token != " " + stripped or token.endswith(" ")):
-        raise ZoneResultError(
-            ResultDiagnostic(
-                "zone_result_contract_invalid",
-                "结果数值空格格式不受支持。",
-                {"field": field, "source_line_number": line},
-            )
-        )
-    return _number(stripped, field, line)
+    # SimRead aligns numeric columns with ASCII spaces. Strip only those field
+    # boundaries; the strict numeric expression below still rejects whitespace
+    # embedded inside a number and every unsupported numeric representation.
+    return _number(token.strip(" "), field, line)
 
 
 def parse_zone_air_state(path: Path, zone_number: int) -> tuple[ZoneAirStateSample, ...]:

@@ -27,7 +27,8 @@ import { useAssistantEvidenceJourney } from "./useAssistantEvidenceJourney";
 import { useHostStageEvents } from "./useHostStageEvents";
 import { useCloseLifecycle } from "./useCloseLifecycle";
 import { useResultAssistantContext } from "./useResultAssistantContext";
-
+import { useGeometryWorkbench } from "./useGeometryWorkbench";
+import { useGeometryVisionDraft } from "./useGeometryVisionDraft";
 export function WorkbenchRuntime() {
   const { t } = useTranslation();
   const {
@@ -61,6 +62,8 @@ export function WorkbenchRuntime() {
   const [simulationState, dispatchSimulation] = useReducer(simulationReducer, INITIAL_SIMULATION_STATE);
   const [attachmentState, dispatchAttachment] = useReducer(attachmentReducer, INITIAL_ATTACHMENT_STATE);
   const [semanticState, dispatchSemantic] = useReducer(semanticReducer, INITIAL_SEMANTIC_STATE);
+  const geometryWorkbench = useGeometryWorkbench(projectState, semanticState.snapshot);
+  const geometryVisionDraft = useGeometryVisionDraft(projectState, geometryWorkbench);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
   const {
     studioSetup,
@@ -78,7 +81,6 @@ export function WorkbenchRuntime() {
     language: workbench.language,
     theme: workbench.theme,
     updateWorkbench,
-    setActiveDestination,
     onNotice: setPlaceholderNotice,
     t,
   });
@@ -92,6 +94,14 @@ export function WorkbenchRuntime() {
     const timer = window.setTimeout(() => setPlaceholderNotice(null), 4800);
     return () => window.clearTimeout(timer);
   }, [placeholderNotice]);
+
+  useEffect(() => {
+    if (activeDestination !== "project" || !projectState.projectSessionId || geometryWorkbench.mode !== "studio") return;
+    projectPanelRef.current?.collapse();
+    contextPanelRef.current?.collapse();
+    bottomPanelRef.current?.collapse();
+    updateWorkbench({ projectCollapsed: true, contextCollapsed: true, bottomCollapsed: true });
+  }, [activeDestination, geometryWorkbench.mode, projectState.projectSessionId]);
 
   useEffect(() => {
     if (!projectState.issue && !patchState.issue) return;
@@ -245,7 +255,7 @@ export function WorkbenchRuntime() {
     selectSemanticObject,
     editSemanticOperations,
     useAiSemanticPatch,
-    planSemanticOperations,
+    planSemanticOperations, reviewSketchpadProjection,
     applySemanticOperations,
     discardSemanticOperations,
   } = useProjectPatchJourney({
@@ -273,6 +283,7 @@ export function WorkbenchRuntime() {
 
   const {
     importAttachments,
+    acceptImportedAttachments,
     selectAttachmentEvidence,
     previewAttachmentDisclosure,
     removeAttachment,
@@ -399,7 +410,7 @@ export function WorkbenchRuntime() {
           visualPreferences: workbench.visualWorkspace,
           onVisualPreferencesChange: (visualWorkspace) => updateWorkbench({ visualWorkspace }),
           onSelectSemantic: (semanticId) => selectSemanticObject(semanticId),
-          onNotice: setPlaceholderNotice,
+          geometryWorkbench, geometryVisionDraft, onNotice: setPlaceholderNotice, onReviewSketchpadProjection: reviewSketchpadProjection,
           onOpenAssistant: () => {
             contextPanelRef.current?.expand();
             updateWorkbench({ contextCollapsed: false, contextTab: "assistant" });
@@ -418,6 +429,7 @@ export function WorkbenchRuntime() {
           onAiProviderSecret: (secret) => void saveSelectedProviderSecret(secret),
           onAiProviderClearSecret: () => void clearSelectedProviderSecret(),
           onAiModelChange: changeAiModel,
+          attachmentState, onAttachmentImport: () => void importAttachments(), onAttachmentsImported: acceptImportedAttachments, onAttachmentSelect: (attachment, selected) => void selectAttachmentEvidence(attachment, selected),
           setup: studioSetup,
           setupBusy: studioSetupBusy,
           onChooseDataDirectory: chooseStudioDataDirectory,
@@ -458,6 +470,8 @@ export function WorkbenchRuntime() {
           onCollapse: toggleContext,
           aiState,
           aiContextAvailable: Boolean(projectState.projectSessionId && projectState.draft && currentZone),
+          geometryVisionDraft,
+          geometryAvailable: Boolean(geometryWorkbench.history),
           assistantReceipt,
           onAiIntentChange: (intent) => {
             dispatchAi({ type: "intent_changed", intent });

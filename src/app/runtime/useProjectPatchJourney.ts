@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject } from "react";
 import type { TFunction } from "i18next";
 import {
   applySemanticPatchToDraft,
@@ -16,8 +16,17 @@ import { zoneSelectionKey, type ProjectAction, type ProjectState, type ZoneRecor
 import type { ResultAction } from "../result-state";
 import type { ResultExportAction } from "../result-export-state";
 import type { RunAction } from "../run-state";
-import { findSemanticNode, semanticReducer, type SemanticOperationRequest, type SemanticState } from "../semantic-state";
+import {
+  findSemanticNode,
+  semanticApplyResponseIssue,
+  semanticPlanResponseIssue,
+  semanticReducer,
+  type SemanticOperationRequest,
+  type SemanticState,
+} from "../semantic-state";
 import type { SimulationActionState } from "../simulation-state";
+import type { SketchpadProjectionPreview } from "../geometry/sketchpad-projection-preview";
+import { prepareSketchpadProjectionPatch } from "../geometry/sketchpad-projection-patch";
 
 interface UseProjectPatchJourneyOptions {
   commandAvailability: CommandAvailability;
@@ -65,6 +74,22 @@ export function useProjectPatchJourney(options: UseProjectPatchJourneyOptions) {
     onOpenInspector,
     t,
   } = options;
+
+  const snapshotSourceSha256 = semanticState.snapshot?.source_sha256 ?? null;
+  const snapshotIdentitySha256 = semanticState.snapshot?.identity_sha256 ?? snapshotSourceSha256;
+  const semanticContextKey = projectState.projectSessionId
+    && projectState.draft?.revision_id
+    && snapshotSourceSha256
+    && snapshotIdentitySha256
+    ? `${projectState.projectSessionId}:${projectState.draft.revision_id}:${snapshotSourceSha256.toLowerCase()}:${snapshotIdentitySha256.toLowerCase()}`
+    : null;
+  const activeSemanticContextRef = useRef<string | null>(semanticContextKey);
+  const semanticPlanOriginRef = useRef<"manual" | "sketchpad_projection">("manual");
+  activeSemanticContextRef.current = semanticContextKey;
+
+  useEffect(() => {
+    semanticPlanOriginRef.current = "manual";
+  }, [semanticContextKey]);
 
   useEffect(() => {
     const sessionId = projectState.projectSessionId;
@@ -227,33 +252,127 @@ export function useProjectPatchJourney(options: UseProjectPatchJourneyOptions) {
     onOpenInspector();
   }, [dispatchSemantic, editSemanticOperations, onOpenInspector, onProjectDestination, semanticState.snapshot]);
 
-  const planSemanticOperations = useCallback(async () => {
-    if (!projectState.projectSessionId || !projectState.draft || !semanticState.operations.length || ["planning", "applying"].includes(semanticState.status)) return;
+  const planSemanticOperationSet = useCallback(async (
+    operations: SemanticOperationRequest[],
+    origin: "manual" | "sketchpad_projection",
+  ): Promise<boolean> => {
+    const projectSessionId = projectState.projectSessionId;
+    const revisionId = projectState.draft?.revision_id;
+    const snapshot = semanticState.snapshot;
+    const sourceSha256 = snapshot?.source_sha256;
+    const identitySha256 = snapshot?.identity_sha256 ?? sourceSha256;
+    const contextKey = activeSemanticContextRef.current;
+    if (!projectSessionId
+      || !revisionId
+      || !snapshot
+      || !sourceSha256
+      || !identitySha256
+      || !contextKey
+      || !operations.length
+      || operations.length > 128
+      || ["planning", "applying", "review"].includes(semanticState.status)) return false;
     const requestId = crypto.randomUUID();
+    semanticPlanOriginRef.current = origin;
+    if (origin === "sketchpad_projection") dispatchSemantic({ type: "edit", operations });
     dispatchSemantic({ type: "plan_started" });
     try {
-      const response = await planSemanticPatch(requestId, projectState.projectSessionId, projectState.draft.revision_id, semanticState.operations);
-      if (!mounted.current) return;
-      if (response.request_id !== requestId || response.error || !response.patch_id || !response.diff) {
-        dispatchSemantic({ type: "failed", issue: response.error ?? { code: "semantic_plan_invalid", message: "Semantic patch plan invalid", source_line_number: null, context: {} } });
-        return;
+      const response = await planSemanticPatch(requestId, projectSessionId, revisionId, operations);
+      if (!mounted.current || activeSemanticContextRef.current !== contextKey) return false;
+      const issue = semanticPlanResponseIssue(response, {
+        requestId,
+        projectSessionId,
+        revisionId,
+        sourceSha256,
+        operationCount: operations.length,
+      });
+      if (issue) {
+        semanticPlanOriginRef.current = "manual";
+        dispatchSemantic({ type: "failed", issue });
+        if (origin === "sketchpad_projection") {
+          onProjectDestination();
+          onOpenInspector();
+        }
+        return false;
       }
       dispatchSemantic({ type: "plan_received", plan: response });
+      if (origin === "sketchpad_projection") {
+        onProjectDestination();
+        onOpenInspector();
+      }
+      return true;
     } catch {
-      if (mounted.current) dispatchSemantic({ type: "failed", issue: { code: "semantic_plan_failed", message: "Semantic patch plan failed", source_line_number: null, context: {} } });
+      if (mounted.current && activeSemanticContextRef.current === contextKey) {
+        semanticPlanOriginRef.current = "manual";
+        dispatchSemantic({ type: "failed", issue: { code: "semantic_plan_failed", message: "Semantic patch plan failed", source_line_number: null, context: {} } });
+        if (origin === "sketchpad_projection") {
+          onProjectDestination();
+          onOpenInspector();
+        }
+      }
+      return false;
     }
-  }, [dispatchSemantic, mounted, projectState.draft, projectState.projectSessionId, semanticState.operations, semanticState.status]);
+  }, [dispatchSemantic, mounted, onOpenInspector, onProjectDestination, projectState.draft?.revision_id, projectState.projectSessionId, semanticState.snapshot, semanticState.status]);
+
+  const planSemanticOperations = useCallback(async () => {
+    if (!semanticState.operations.length) return false;
+    return planSemanticOperationSet(semanticState.operations, "manual");
+  }, [planSemanticOperationSet, semanticState.operations]);
+
+  const reviewSketchpadProjection = useCallback(async (
+    preview: SketchpadProjectionPreview,
+  ): Promise<boolean> => {
+    const prepared = prepareSketchpadProjectionPatch(preview);
+    const snapshot = semanticState.snapshot;
+    const identitySha256 = snapshot?.identity_sha256 ?? snapshot?.source_sha256;
+    const contextMatches = prepared.status === "ready"
+      && preview.project_session_id === projectState.projectSessionId
+      && preview.revision_id === projectState.draft?.revision_id
+      && preview.source_sha256.toLowerCase() === snapshot?.source_sha256.toLowerCase()
+      && preview.source_sha256.toLowerCase() === projectState.project?.source_sha256.toLowerCase()
+      && preview.identity_sha256.toLowerCase() === identitySha256?.toLowerCase();
+    const busy = simulationBusy || attachmentBusy || semanticState.operations.length > 0 || semanticState.status !== "idle";
+    if (!contextMatches || busy) {
+      const code = !contextMatches
+        ? prepared.diagnostic ?? "sketchpad_projection_context_stale"
+        : "sketchpad_projection_review_busy";
+      dispatchSemantic({ type: "failed", issue: { code, message: code, source_line_number: null, context: {} } });
+      onProjectDestination();
+      onOpenInspector();
+      return false;
+    }
+    if (prepared.selected_semantic_zone_id) {
+      dispatchSemantic({ type: "object_selected", objectId: prepared.selected_semantic_zone_id });
+    }
+    return planSemanticOperationSet(prepared.operations, "sketchpad_projection");
+  }, [attachmentBusy, dispatchSemantic, onOpenInspector, onProjectDestination, planSemanticOperationSet, projectState.draft?.revision_id, projectState.project?.source_sha256, projectState.projectSessionId, semanticState.operations.length, semanticState.snapshot, semanticState.status, simulationBusy]);
 
   const applySemanticOperations = useCallback(async () => {
     const plan = semanticState.plan;
-    if (!plan?.patch_id || semanticState.status !== "review" || !projectState.projectSessionId) return;
+    const projectSessionId = projectState.projectSessionId;
+    const revisionId = projectState.draft?.revision_id;
+    const sourceSha256 = semanticState.snapshot?.source_sha256;
+    const contextKey = activeSemanticContextRef.current;
+    if (!plan?.patch_id || semanticState.status !== "review" || !projectSessionId || !revisionId || !sourceSha256 || !contextKey) return;
+    const currentPlanIssue = semanticPlanResponseIssue(plan, {
+      requestId: plan.request_id,
+      projectSessionId,
+      revisionId,
+      sourceSha256,
+      operationCount: semanticState.operations.length,
+    });
+    if (currentPlanIssue) {
+      dispatchSemantic({ type: "failed", issue: currentPlanIssue });
+      return;
+    }
     const requestId = crypto.randomUUID();
+    const patchId = plan.patch_id;
     dispatchSemantic({ type: "apply_started" });
     try {
-      const response = await applySemanticPatchToDraft(requestId, projectState.projectSessionId, plan.patch_id);
-      if (!mounted.current) return;
-      if (response.request_id !== requestId || response.error || !response.project || !response.draft || !response.project_session_id) {
-        dispatchSemantic({ type: "failed", issue: response.error ?? { code: "semantic_apply_invalid", message: "Semantic patch application invalid", source_line_number: null, context: {} } });
+      const response = await applySemanticPatchToDraft(requestId, projectSessionId, patchId);
+      if (!mounted.current || activeSemanticContextRef.current !== contextKey) return;
+      const issue = semanticApplyResponseIssue(response, { requestId, projectSessionId, patchId });
+      if (issue || !response.project || !response.draft || !response.project_session_id) {
+        dispatchSemantic({ type: "failed", issue: issue ?? { code: "semantic_apply_invalid", message: "Semantic patch application invalid", source_line_number: null, context: {} } });
         return;
       }
       dispatchProject({ type: "draft_replaced", project: response.project, projectSessionId: response.project_session_id, targetZoneId: currentZone?.zone_id ?? response.project.zones[0]?.zone_id ?? "", draft: response.draft });
@@ -264,17 +383,24 @@ export function useProjectPatchJourney(options: UseProjectPatchJourneyOptions) {
       dispatchRun({ type: "project_changed" });
       dispatchAi({ type: "context_changed" });
       dispatchSimulation({ type: "context_changed" });
-      onNotice(t("patch.draftAppliedSuccess", { revision: response.draft.revision_number }));
+      const noticeKey = semanticPlanOriginRef.current === "sketchpad_projection"
+        ? "geometry.projectionPreview.applied"
+        : "patch.draftAppliedSuccess";
+      semanticPlanOriginRef.current = "manual";
+      onNotice(t(noticeKey, { revision: response.draft.revision_number }));
     } catch {
-      if (mounted.current) dispatchSemantic({ type: "failed", issue: { code: "semantic_apply_failed", message: "Semantic patch application failed", source_line_number: null, context: {} } });
+      if (mounted.current && activeSemanticContextRef.current === contextKey) {
+        dispatchSemantic({ type: "failed", issue: { code: "semantic_apply_failed", message: "Semantic patch application failed", source_line_number: null, context: {} } });
+      }
     }
-  }, [currentZone?.zone_id, dispatchAi, dispatchPatch, dispatchProject, dispatchResult, dispatchResultExport, dispatchRun, dispatchSemantic, dispatchSimulation, mounted, onNotice, projectState.projectSessionId, semanticState.plan, semanticState.status, t]);
+  }, [currentZone?.zone_id, dispatchAi, dispatchPatch, dispatchProject, dispatchResult, dispatchResultExport, dispatchRun, dispatchSemantic, dispatchSimulation, mounted, onNotice, projectState.draft?.revision_id, projectState.projectSessionId, semanticState.operations.length, semanticState.plan, semanticState.snapshot?.source_sha256, semanticState.status, t]);
 
   const discardSemanticOperations = useCallback(async () => {
     const plan = semanticState.plan;
     if (plan?.patch_id && projectState.projectSessionId) {
       try { await discardSemanticPatch(crypto.randomUUID(), projectState.projectSessionId, plan.patch_id); } catch { /* Local discard still clears the review. */ }
     }
+    semanticPlanOriginRef.current = "manual";
     dispatchSemantic({ type: "discarded" });
   }, [dispatchSemantic, projectState.projectSessionId, semanticState.plan]);
 
@@ -289,6 +415,7 @@ export function useProjectPatchJourney(options: UseProjectPatchJourneyOptions) {
     editSemanticOperations,
     useAiSemanticPatch,
     planSemanticOperations,
+    reviewSketchpadProjection,
     applySemanticOperations,
     discardSemanticOperations,
   };

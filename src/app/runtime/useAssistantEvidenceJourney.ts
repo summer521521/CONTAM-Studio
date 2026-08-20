@@ -176,5 +176,13 @@ export function useAssistantEvidenceJourney(options: UseAssistantEvidenceJourney
     }
   }, [currentZone, dispatchAi, dispatchPatch, dispatchProject, dispatchResult, dispatchResultExport, dispatchRun, dispatchSimulation, mounted, projectState.draft?.revision_id, projectState.projectSessionId, simulationState.plan, simulationState.status, simulationState.timeline]);
 
-  return { importAttachments, selectAttachmentEvidence, previewAttachmentDisclosure, removeAttachment, createSimulationPlan, approveAndRunSimulation };
+  return {
+    importAttachments,
+    acceptImportedAttachments: updateAttachments,
+    selectAttachmentEvidence,
+    previewAttachmentDisclosure,
+    removeAttachment,
+    createSimulationPlan,
+    approveAndRunSimulation,
+  };
 }

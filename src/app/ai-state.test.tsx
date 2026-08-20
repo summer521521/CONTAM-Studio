@@ -26,6 +26,7 @@ const connection: CodexConnectionView = {
     display_name: "Model A",
     is_default: true,
     available: true,
+    input_modalities: ["text", "image"],
     reasoning_efforts: [{ id: "low", description: "Low" }, { id: "high", description: "High" }],
     default_reasoning_effort: "low",
   }],

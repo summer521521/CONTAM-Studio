@@ -1371,6 +1371,16 @@ fn storage_category_paths(
     Ok(vec![
         ("EBWebView", "cache", root.join("EBWebView")),
         ("project-drafts", "user_data", root.join("project-drafts")),
+        (
+            "geometry-documents",
+            "user_data",
+            root.join("geometry-documents"),
+        ),
+        (
+            "geometry-underlays",
+            "user_data",
+            root.join("geometry-underlays"),
+        ),
         ("runs", "user_data", root.join("runs")),
         (
             "result-extractions",

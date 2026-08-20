@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_SEMANTIC_STATE, semanticReducer, semanticNodeId, type SemanticSnapshot } from "./semantic-state";
+import {
+  INITIAL_SEMANTIC_STATE,
+  semanticApplyResponseIssue,
+  semanticNodeId,
+  semanticPlanResponseIssue,
+  semanticReducer,
+  type DesktopSemanticApplyResponse,
+  type DesktopSemanticPatchPlanResponse,
+  type SemanticSnapshot,
+} from "./semantic-state";
 
 const snapshot: SemanticSnapshot = {
   result_type: "semantic_project_snapshot", source_sha256: "a".repeat(64), revision_state: "baseline_editable",
@@ -22,6 +31,8 @@ describe("semantic state", () => {
     expect(state.status).toBe("review");
     state = semanticReducer(state, { type: "context_changed" });
     expect(state.plan).toBeNull();
+    expect(state.operations).toEqual([]);
+    expect(state.snapshot).toBeNull();
   });
 
   it("supports undo and redo without exposing paths", () => {
@@ -33,5 +44,62 @@ describe("semantic state", () => {
     expect(state.operations[0].new_value).toBe("Two");
     expect(JSON.stringify(state)).not.toMatch(/[A-Za-z]:\\|source_path|output_path/);
     expect(semanticNodeId(snapshot.zones[0])).toBe("zone-a");
+  });
+
+  it("stages the verified existing-icon coordinate subset as two explicit fields", () => {
+    const operations = [
+      { operation: "set_spatial_icon_column" as const, object_id: "icon-a", new_value: "12", unit: "grid_cell" },
+      { operation: "set_spatial_icon_row" as const, object_id: "icon-a", new_value: "18", unit: "grid_cell" },
+    ];
+    const state = semanticReducer(INITIAL_SEMANTIC_STATE, { type: "edit", operations });
+    expect(state.operations).toEqual(operations);
+    expect(state.status).toBe("editing");
+  });
+
+  it("rejects semantic plan and apply responses from a stale project context", () => {
+    const plan: DesktopSemanticPatchPlanResponse = {
+      request_id: "request-1",
+      project_session_id: "session-1",
+      revision_id: "revision-1",
+      patch_id: "patch-1",
+      source_sha256: "a".repeat(64),
+      patch_sha256: "b".repeat(64),
+      diff: [{
+        operation: "set_spatial_icon_column",
+        operation_id: "operation-1",
+        object_id: "icon-1",
+        field: "column",
+        old_value: "1",
+        new_value: "2",
+        unit: "grid_cell",
+        evidence_span: [1, 2],
+        source_sha256: "a".repeat(64),
+      }],
+      error: null,
+    };
+    const expectation = {
+      requestId: "request-1",
+      projectSessionId: "session-1",
+      revisionId: "revision-1",
+      sourceSha256: "a".repeat(64),
+      operationCount: 1,
+    };
+    expect(semanticPlanResponseIssue(plan, expectation)).toBeNull();
+    expect(semanticPlanResponseIssue({ ...plan, revision_id: "revision-stale" }, expectation)?.code)
+      .toBe("semantic_plan_invalid");
+    expect(semanticPlanResponseIssue({ ...plan, diff: [] }, expectation)?.code)
+      .toBe("semantic_plan_invalid");
+
+    const apply: DesktopSemanticApplyResponse = {
+      request_id: "apply-1",
+      project_session_id: "session-1",
+      project: {} as DesktopSemanticApplyResponse["project"],
+      draft: {} as DesktopSemanticApplyResponse["draft"],
+      patch_id: "patch-1",
+      error: null,
+    };
+    expect(semanticApplyResponseIssue(apply, { requestId: "apply-1", projectSessionId: "session-1", patchId: "patch-1" })).toBeNull();
+    expect(semanticApplyResponseIssue({ ...apply, project_session_id: "session-stale" }, { requestId: "apply-1", projectSessionId: "session-1", patchId: "patch-1" })?.code)
+      .toBe("semantic_apply_invalid");
   });
 });

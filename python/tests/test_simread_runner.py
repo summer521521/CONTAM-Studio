@@ -46,6 +46,7 @@ def test_simread_tool_contract_is_structured() -> None:
 
 def test_result_root_conflict_diagnostic_code_is_stable() -> None:
     assert "result_root_conflicts_with_source" in simread_runner.ERROR_EXIT_CODES
+    assert "simread_node_air_state_unavailable" in simread_runner.ERROR_EXIT_CODES
 
 
 def test_result_process_stability_uses_bounded_metadata() -> None:
@@ -450,7 +451,15 @@ class _FakeSimReadProcess:
         return None
 
 
-def _patch_fake_simread(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, calls: list) -> Path:
+def _patch_fake_simread(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    calls: list,
+    *,
+    stdout: bytes = b"simread stdout",
+    writes_nfr: bool = True,
+    writes_lfr: bool = False,
+) -> Path:
     tool_path = tmp_path / "tools" / "simread.exe"
     tool_path.parent.mkdir()
     tool_path.write_bytes(b"fake-simread")
@@ -470,14 +479,17 @@ def _patch_fake_simread(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, calls: 
     def popen(args, **kwargs):
         calls.append((args, kwargs))
         workspace = Path(kwargs["cwd"])
-        (workspace / "model.nfr").write_text(
-            "Date\tTime\tNode\tT (C)\tP (Pa)\tD (kg/m3)\n"
-            "1/1\t00:00:00\t1\t20.000\t-1.4222e+00\t1.2041\n",
-            encoding="ascii",
-            newline="\n",
-        )
+        if writes_nfr:
+            (workspace / "model.nfr").write_text(
+                "Date\tTime\tNode\tT (C)\tP (Pa)\tD (kg/m3)\n"
+                "1/1\t00:00:00\t1\t20.000\t-1.4222e+00\t1.2041\n",
+                encoding="ascii",
+                newline="\n",
+            )
         (workspace / "model.xrf").write_bytes(b"xrf")
-        process = _FakeSimReadProcess()
+        if writes_lfr:
+            (workspace / "model.lfr").write_bytes(b"lfr")
+        process = _FakeSimReadProcess(stdout=stdout)
         calls.append(process)
         return process
 
@@ -643,6 +655,60 @@ def test_parse_failure_preserves_process_and_generated_evidence(
     assert payload["stdout"]["size_bytes"] > 0
     assert payload["stderr"]["size_bytes"] > 0
     assert payload["stdout"]["capture_complete"] is True
+
+
+def test_node_air_state_unavailable_preserves_successful_simread_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(
+        monkeypatch,
+        tmp_path,
+        calls,
+        stdout=(
+            b"Node contaminant results not available\r\n"
+            b"Node flow results available\r\n"
+            b"Link flow results available\r\n"
+        ),
+        writes_nfr=False,
+        writes_lfr=True,
+    )
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_node_air_state_unavailable"
+    result_manifests = list((tmp_path / "results").rglob("result-manifest.json"))
+    assert len(result_manifests) == 1
+    payload = json.loads(result_manifests[0].read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert payload["exit_code"] == 0
+    assert payload["process"]["process_started"] is True
+    assert payload["diagnostics"][0]["code"] == "simread_node_air_state_unavailable"
+    assert {item["suffix"] for item in payload["generated_outputs"]} == {".lfr", ".xrf"}
+    assert (result_manifests[0].parent / "stdout.bin").read_bytes().startswith(
+        b"Node contaminant results not available"
+    )
+
+
+def test_missing_nfr_without_official_unavailable_marker_remains_output_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, _, _, _ = _orchestration_fixture(tmp_path)
+    calls: list = []
+    tool_path = _patch_fake_simread(
+        monkeypatch,
+        tmp_path,
+        calls,
+        stdout=b"SimRead completed without the expected selected-node output\n",
+        writes_nfr=False,
+    )
+    with pytest.raises(simread_runner.SimReadError) as error:
+        simread_runner.extract_zone_air_state(
+            manifest, simread_path=tool_path, result_root=tmp_path / "results", zone_number=1
+        )
+    assert error.value.diagnostic.code == "simread_output_missing"
 
 
 def test_phase4_snapshot_fields_and_diagnostics_are_required(tmp_path: Path) -> None:

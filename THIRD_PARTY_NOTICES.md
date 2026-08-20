@@ -40,6 +40,13 @@ and locked to the exact versions in `package.json` and `pnpm-lock.yaml`:
 the project currently uses React 19.2.7. Konva is lazy-loaded only by the
 ProjectPage visual workspace and is not part of the initial application entry.
 
+Calibrated plan underlays add `pdfjs-dist 6.2.108`, the official prebuilt
+distribution of Mozilla PDF.js, under Apache License 2.0:
+https://github.com/mozilla/pdf.js
+
+PDF.js and its worker are dynamically loaded only when a user opens a PDF plan
+underlay. They are not used to parse CONTAM results or to modify a PRJ file.
+
 JavaScript、Rust、Python测试和冻结Worker构建依赖的精确版本分别由`pnpm-lock.yaml`、`src-tauri/Cargo.lock`、`python/requirements-ci.lock`和`python/requirements-worker.lock`锁定。依赖保留各自许可证。主要直接依赖包括Apache ECharts、React、Tauri、i18next及其生态组件；完整依赖树应在每次发布前由锁文件重新审计。
 
 Phase 6B新增或显式启用的主要Rust依赖及其许可证为：`reqwest 0.13.4`（MIT OR Apache-2.0）、`rustls 0.23.42`（Apache-2.0 OR ISC OR MIT）、`ring 0.17.14`（Apache-2.0 AND ISC）、`keyring 4.1.5`（MIT OR Apache-2.0）、`zeroize 1.9.0`（Apache-2.0 OR MIT）、`futures-util 0.3.32`（MIT OR Apache-2.0）、`url 2.5.8`（MIT OR Apache-2.0）、`tokio 1.52.4`（MIT）和`uuid 1.24.0`（Apache-2.0 OR MIT）。实际传递依赖和版本以`src-tauri/Cargo.lock`为准。

@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../app/command-availability";
 import type { ResultExportState } from "../../app/result-export-state";
 import {
+  isSimReadNodeAirStateUnavailable,
   resultIsOlderThanActiveRun,
   type ResultState,
   type ZoneAirStateResult,
@@ -147,10 +148,11 @@ export function ZoneAirStateResults({
     }
     if (state.status === "error") {
       const solveSucceeded = Boolean(activeRunId);
+      const nodeAirStateUnavailable = isSimReadNodeAirStateUnavailable(state.issue?.code);
       return (
         <section className="results-surface results-error" role="alert">
-          <strong>{solveSucceeded ? t("results.solveSucceededReadFailed") : t("results.errorTitle")}</strong>
-          <p>{solveSucceeded ? t("results.solveSucceededReadFailedBody") : t("results.errorTitle")}</p>
+          <strong>{solveSucceeded ? t(nodeAirStateUnavailable ? "results.nodeAirStateUnavailableTitle" : "results.solveSucceededReadFailed") : t("results.errorTitle")}</strong>
+          <p>{solveSucceeded ? t(nodeAirStateUnavailable ? "results.nodeAirStateUnavailableBody" : "results.solveSucceededReadFailedBody") : t("results.errorTitle")}</p>
           {state.issue ? (
             <details className="result-evidence-details">
               <summary>{t("results.evidenceDetails")}</summary>

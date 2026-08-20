@@ -60,6 +60,7 @@ export interface CodexModelView {
   display_name: string;
   is_default: boolean;
   available: boolean;
+  input_modalities: Array<"text" | "image">;
   reasoning_efforts: CodexReasoningEffortView[];
   default_reasoning_effort: string;
 }

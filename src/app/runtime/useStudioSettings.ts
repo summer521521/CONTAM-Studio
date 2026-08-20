@@ -26,12 +26,11 @@ interface UseStudioSettingsOptions {
   language: WorkbenchState["language"];
   theme: WorkbenchState["theme"];
   updateWorkbench: (patch: Partial<WorkbenchState>) => void;
-  setActiveDestination: (destination: WorkbenchDestination) => void;
   onNotice: (message: string) => void;
   t: TFunction;
 }
 
-export function useStudioSettings({ activeDestination, language, theme, updateWorkbench, setActiveDestination, onNotice, t }: UseStudioSettingsOptions) {
+export function useStudioSettings({ activeDestination, language, theme, updateWorkbench, onNotice, t }: UseStudioSettingsOptions) {
   const [studioSetup, setStudioSetup] = useState<StudioSetup | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsageView | null>(null);
   const [studioSetupBusy, setStudioSetupBusy] = useState(false);
@@ -41,14 +40,13 @@ export function useStudioSettings({ activeDestination, language, theme, updateWo
     void getStudioSetup(crypto.randomUUID()).then((response) => {
       if (disposed || response.error || !isSafeStudioSetup(response.setup)) return;
       setStudioSetup(response.setup);
-      if (!response.setup.first_run_complete) setActiveDestination("settings");
       updateWorkbench({
         language: response.setup.language === "en" ? "en" : "zh-CN",
         theme: response.setup.theme === "dark" ? "dark" : "light",
       });
     }).catch(() => undefined);
     return () => { disposed = true; };
-  }, [setActiveDestination, updateWorkbench]);
+  }, [updateWorkbench]);
 
   useEffect(() => {
     if (activeDestination !== "settings") return undefined;

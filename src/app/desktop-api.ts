@@ -37,6 +37,12 @@ import type {
   DesktopToolProbeResponse,
   DesktopStorageUsageResponse,
 } from "./release-state";
+import type { BuildingGeometry } from "./geometry/geometry-model";
+import type { DesktopGeometryAiDraftResponse } from "./geometry/geometry-ai-draft";
+import type { DesktopGeometryDocumentResponse } from "./geometry/geometry-document";
+import type { ContamSemanticDraft } from "./geometry/contam-semantic-draft";
+import type { DesktopSemanticAuthoringExportResponse } from "./geometry/semantic-authoring-export";
+import type { DesktopGeometryUnderlayImportResponse } from "./geometry/geometry-plan-underlay";
 
 export interface DesktopAiProviderProfilesResponse {
   request_id: string;
@@ -261,6 +267,18 @@ export async function runStudy(
     projectSessionId,
     revisionId,
     plan,
+  });
+}
+
+export async function exportSemanticAuthoringDraftCopy(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+): Promise<DesktopSemanticAuthoringExportResponse> {
+  return invoke<DesktopSemanticAuthoringExportResponse>("export_semantic_authoring_draft_copy", {
+    requestId,
+    projectSessionId,
+    revisionId,
   });
 }
 
@@ -592,6 +610,91 @@ export async function saveStudioPreferences(
   dataDirectory: string,
 ): Promise<DesktopSetupResponse> {
   return invoke<DesktopSetupResponse>("save_studio_setup", { requestId, language, theme, dataDirectory });
+}
+
+export async function generateGeometryDraftFromImage(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  attachmentId: string,
+  geometry: BuildingGeometry,
+  prompt: string,
+  language: "zh-CN" | "en",
+): Promise<DesktopGeometryAiDraftResponse> {
+  return invoke<DesktopGeometryAiDraftResponse>("generate_geometry_draft_from_image", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    attachmentId,
+    geometry,
+    prompt,
+    language,
+  });
+}
+
+export async function loadProjectGeometryDocument(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+): Promise<DesktopGeometryDocumentResponse> {
+  return invoke<DesktopGeometryDocumentResponse>("load_project_geometry_document", {
+    requestId,
+    projectSessionId,
+    revisionId,
+  });
+}
+
+export async function saveProjectGeometryDocument(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  geometry: BuildingGeometry,
+  semanticDraft: ContamSemanticDraft | null,
+  expectedDocumentRevision: number | null,
+): Promise<DesktopGeometryDocumentResponse> {
+  return invoke<DesktopGeometryDocumentResponse>("save_project_geometry_document", {
+    requestId,
+    projectSessionId,
+    revisionId,
+    geometry,
+    semanticDraft,
+    expectedDocumentRevision,
+  });
+}
+
+export async function selectAndImportGeometryUnderlay(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+): Promise<DesktopGeometryUnderlayImportResponse> {
+  return invoke<DesktopGeometryUnderlayImportResponse>("select_and_import_geometry_underlay", {
+    requestId,
+    projectSessionId,
+    revisionId,
+  });
+}
+
+export async function readGeometryUnderlayResource(
+  requestId: string,
+  projectSessionId: string,
+  revisionId: string,
+  resourceId: string,
+  sha256: string,
+  mimeType: string,
+): Promise<Uint8Array> {
+  const payload = await invoke<ArrayBuffer | Uint8Array | number[]>("read_geometry_underlay_resource", {
+    request: {
+      requestId,
+      projectSessionId,
+      revisionId,
+      resourceId,
+      sha256,
+      mimeType,
+    },
+  });
+  if (payload instanceof Uint8Array) return payload;
+  if (payload instanceof ArrayBuffer) return new Uint8Array(payload);
+  return new Uint8Array(payload);
 }
 
 export async function selectDataDirectory(requestId: string): Promise<DesktopDirectoryResponse> {

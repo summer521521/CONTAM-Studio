@@ -20,6 +20,7 @@ import {
 } from "../../../app/spatial-model";
 import type { VisualViewportCommand } from "./VisualModelWorkspace";
 import type { VisualResultOverlay } from "./VisualModelWorkspace";
+import type { SketchpadProjectionPreview } from "../../../app/geometry/sketchpad-projection-preview";
 
 export interface VisualCanvasKonvaProps {
   mode: VisualWorkspaceMode;
@@ -33,6 +34,7 @@ export interface VisualCanvasKonvaProps {
   onViewportChange: (viewport: VisualViewport) => void;
   onSelectSemantic: (semanticId: string) => void;
   resultOverlay?: VisualResultOverlay | null;
+  projectionPreview?: SketchpadProjectionPreview | null;
 }
 
 export interface HandledViewportCommand {
@@ -203,6 +205,7 @@ export default function VisualCanvasKonva({
   onViewportChange,
   onSelectSemantic,
   resultOverlay = null,
+  projectionPreview = null,
 }: VisualCanvasKonvaProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -224,6 +227,12 @@ export default function VisualCanvasKonva({
   const lowerLevelIcons = useMemo(
     () => visibleIcons(lowerLevel?.icons ?? [], layers, viewport, size),
     [layers, lowerLevel?.icons, size, viewport],
+  );
+  const projectionMoves = useMemo(
+    () => mode === "sketchpad" && activeLevel
+      ? (projectionPreview?.moves ?? []).filter((move) => move.level_number === activeLevel.level_number)
+      : [],
+    [activeLevel, mode, projectionPreview?.moves],
   );
   const topologyNodeById = useMemo(
     () => new Map(topology.nodes.map((node) => [node.id, node])),
@@ -400,6 +409,22 @@ export default function VisualCanvasKonva({
         {drawSketch ? (
           <>
             <Layer listening={false}><Shape sceneFunc={wallScene(walls)} stroke={palette.wall} strokeWidth={2} /></Layer>
+            {projectionMoves.length ? (
+              <Layer listening={false} opacity={projectionPreview?.status === "blocked" ? 0.55 : 0.8}>
+                {projectionMoves.map((move) => {
+                  const fromX = move.from_column * VISUAL_GRID_SIZE;
+                  const fromY = move.from_row * VISUAL_GRID_SIZE;
+                  const toX = move.to_column * VISUAL_GRID_SIZE;
+                  const toY = move.to_row * VISUAL_GRID_SIZE;
+                  return (
+                    <Group key={`projection:${move.icon_id}`}>
+                      {move.changed ? <Arrow points={[fromX, fromY, toX, toY]} stroke={palette.selection} fill={palette.selection} strokeWidth={1.5} pointerLength={6} pointerWidth={6} dash={[5, 4]} /> : null}
+                      <Circle x={toX} y={toY} radius={11} stroke={palette.selection} strokeWidth={2} dash={[4, 3]} />
+                    </Group>
+                  );
+                })}
+              </Layer>
+            ) : null}
             <Layer>
               {selectableIcons.map((icon) => {
                 const kind = classifySpatialIconType(icon.icon_type);

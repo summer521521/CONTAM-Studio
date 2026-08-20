@@ -1,6 +1,6 @@
 # CONTAM Studio Renewal R1
 
-> 当前研发事实源：CONTAM Studio 可视化科学工作台重构 R1。
+> 历史事实源：R1 已随 v0.5.0 发布完成。当前研发事实源为 [Geometry Workbench](../geometry-workbench/README.md)。
 
 R1 将现有 CONTAM 桌面程序收敛为面向学生、教师、研究人员和工程分析人员的 Windows 优先、本地优先、联网增强、中文优先且支持英文的可视化科学工作台。R1 先建立可信工程基础，再逐步加入空间、拓扑、结果和证据视图；不会用界面演示替代 PRJ 领域证据。
 

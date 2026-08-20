@@ -1,0 +1,48 @@
+{
+  "schema_version": "contam_semantic_draft.v1",
+  "status": "available",
+  "draft_id": "semantic-draft-1",
+  "project_session_id": "session-1",
+  "identity_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "revision_id": "revision-1",
+  "draft_revision": 2,
+  "provenance": {
+    "source_kind": "studio_semantic_draft",
+    "application_owned": true
+  },
+  "zones": [
+    {
+      "id": "draft-zone-1",
+      "level_number": 1,
+      "name": "Office_1",
+      "display_name": "办公室 1",
+      "volume_litres": 48000,
+      "volume_basis": "geometry_estimate_confirmed",
+      "geometry_region_id": "region-1",
+      "initial_temperature_millikelvin": 293150,
+      "initial_pressure_millipascal": 0
+    }
+  ],
+  "flow_paths": [
+    {
+      "id": "draft-flow-1",
+      "level_number": 1,
+      "opening_id": "opening-1",
+      "from_endpoint": {
+        "kind": "zone",
+        "zone_id": "draft-zone-1"
+      },
+      "to_endpoint": {
+        "kind": "zone",
+        "zone_id": "existing-zone-1"
+      },
+      "flow_element_id": "flow-element-1",
+      "multiplier_millionths": 1000000,
+      "x_mm": 4000,
+      "y_mm": 2000,
+      "relative_height_mm": 1500,
+      "direction_degrees": -1
+    }
+  ]
+}

@@ -4,6 +4,8 @@
 
 Tauri 2、React+TypeScript、Python和官方ContamX构成已批准的首选方向。Phase 2C已验证一次性Python进程可完成严格Zone读取；Phase 3B在同一显式协议中加入Zone体积Patch。Phase 3C由Rust管理不可变草稿Revision、确定性Zone UUID和Undo/Redo，Python仍只承担严格读取与单字段副本应用。Phase 6A增加用户主动启用的本地Codex App Server适配器，AI只读取Rust披露的结构化上下文。Phase 6C将产品定位收敛为“Windows优先、本地优先、联网增强”，并将官方模型目录、NIST工具资源和本地数据透明度接入当前运行时。当前职责、可信身份、错误和所有权以[ADR-011](../adr/ADR-011-freeze-layer-responsibilities-and-trust-boundaries.md)和[ADR-018](../adr/ADR-018-adopt-user-first-online-enhanced-runtime.md)为准。
 
+v0.5.0 发布后的当前研发目标是 [Geometry Workbench](../initiatives/geometry-workbench/README.md)。`building_geometry.v1` 将 CONTAM SketchPad 只读投影与 Studio 自有毫米几何草稿分开，编辑必须经过哈希绑定命令、确定性验证和不可变历史；`geometry_document.v1` 在 Rust 管理的应用数据中提供项目级恢复，`sketchpad_projection_preview.v1` 只提供有损且不可应用的图标位置比较，当前不承诺 Studio 建筑构造的 PRJ 几何写回。详见 [Geometry Workbench 架构](geometry-workbench.md)、[ADR-021](../adr/ADR-021-separate-studio-building-geometry-from-contam-sketchpad.md)和[ADR-023](../adr/ADR-023-store-project-geometry-as-app-owned-document.md)。
+
 ## 概念架构
 
 ```text
@@ -30,7 +32,7 @@ Rust可信上下文快照
 用户ChatGPT订阅
 ```
 
-Codex不能读取项目目录、PRJ、草稿、运行或结果文件，也不能调用工具、运行ContamX或生成可应用Patch。详见[Codex只读AI助手](codex-readonly-assistant.md)。
+普通 Codex 助手不能读取项目目录、PRJ、草稿、运行或结果文件，也不能调用工具、运行 ContamX 或直接应用 Patch。Geometry Workbench 另有一次性、用户明确选择的隔离图片输入；Luna 只返回需经本地验证和第二次确认的几何建议，仍不获得文件写入或 PRJ 修改能力。详见[Codex只读AI助手](codex-readonly-assistant.md)与[Geometry Workbench 架构](geometry-workbench.md)。
 
 Phase 6C 的 Provider 路径保持身份分离：
 

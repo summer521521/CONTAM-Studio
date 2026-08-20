@@ -1,8 +1,24 @@
 # 当前状态
 
-记录日期：2026-07-30。
+记录日期：2026-08-13。
 
-当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。Renewal R1 的本地候选版本为 0.5.0，桌面纵向路径以“项目、运行、结果、研究”四个用户任务入口组织，并增加只读 SketchPad/气流拓扑、多 Zone 时间序列、空间结果、Evidence Lineage 和 AI Context Receipt。该候选来自尚未提交的累积工作树，不是正式发布资产。
+当前能力、证据维度和未知状态以[唯一能力状态矩阵](capability-status-matrix.json)为准；本文保留历史阶段作为证据导航，不再把阶段名当作产品名称。Renewal R1 已随 v0.5.0 正式发布；当前研发事实源为 [Geometry Workbench](initiatives/geometry-workbench/README.md)。项目页已接入 Studio 自有毫米建筑草稿、确定性编辑命令、全画布 Spatial Command Deck 和三套主题，但没有新增 PRJ 几何写回能力。
+
+## Geometry Workbench
+
+- `spatial_projection.v1` 继续是 CONTAM SketchPad 的只读可信图标投影。新增 `building_geometry.v1` 只把已验证墙图标投影为半网格墙段，明确不推断 Zone 房间多边形。
+- Studio 自有 `studio_metric_draft` 使用毫米整数坐标，与 SketchPad 投影通过 provenance/capability 分离；当前 `prj_round_trip=unsupported`。
+- `geometry_document.v1` 将用户确认的 Studio metric 几何保存到 Rust 固定管理的应用本地数据目录，以原始 PRJ 基线 SHA-256 作为不暴露路径的项目身份，提供哈希、乐观修订、串行原子保存和一代已验证备份。重新打开同一项目时恢复快照，命令历史从该快照重新开始；几何不写入 localStorage 或 PRJ 相邻 sidecar。
+- 校准建筑底图支持每个 Level 一张 PNG、JPEG 或 PDF 页面。Rust 先复用附件隔离检查，再把二进制保存到项目身份限定的 `geometry-underlays`；React 只接收资源 ID、哈希、MIME 和字节，不接收路径。用户可明确解锁并设置原点、旋转、不透明度，或在画布选择两点并输入实际毫米距离，随后沿底图使用既有墙体、门窗和 Zone 工具描图。
+- 底图状态通过 `set/update/remove_plan_underlay` 进入同一几何哈希、undo/redo 和自动保存链路；它不是 CONTAM SketchPad 事实，也不写入原始 PRJ。图片导入会出现在附件中心，但默认不允许 AI 使用；用户另行授权后才复用既有 Codex 读图草案与二次确认链路。
+- `sketchpad_projection_preview.v1` 将同一 Level 的 Studio Zone 质心相对位置归一化到已有绑定 Zone 图标边界，只显示虚线和幽灵锚点，且始终 `lossy=true`、`can_apply=false`。独立候选准备边界在用户点击后重新校验项目上下文、坐标、碰撞与操作上限，再进入现有 Semantic Patch Diff；只有检查器中的第二次确认才能写入新的应用草稿副本，原始 PRJ 不修改。
+- 编辑由 `geometry_edit_command.v1` 绑定项目、geometry、Revision、基线 geometry hash 和 sequence；候选必须通过确定性验证才可进入 undo/redo 历史。
+- `floating_workbench_layout.v1` 继续兼容旧七面板偏好并保存工程蓝图、建筑纸张、夜间实验室主题；当前命令台只消费主题，不让旧面板坐标重新控制界面，也不保存模型、PRJ、路径、凭据或结果正文。
+- 项目工作区提供选择、平移、250 mm 捕捉、正交墙、矩形 Zone、门窗、FlowPath、临时尺寸、门扇示意、真实 Zone 面积、比例尺和北向标记；每个绘制手势作为一个批次整体撤销/重做。
+- 楼层/Zone、工具和检查器分别收敛为左上、底部中央、右上三个上下文浮岛；图层、主题、证据和 AI 草稿按需展开。Browser Design QA 已覆盖 1488×1056、1280×720、1024×720、主题切换、建模工具和草稿对比；真实 Tauri、系统缩放和用户验收仍单独记录。
+- 首次启动保持在项目任务，不因未完成偏好设置而强制跳转；顶栏明确标记 Studio 草稿尚未写入 PRJ。左侧导航可切换到墙、开口、Zone 区域、FlowPath 锚点和顶点的完整可搜索、分页 DOM 对象路径，并与画布和属性检查器共用 selection。
+- AI 图纸入口仅使用用户现有的 Codex 订阅登录与固定 `gpt-5.6-luna`：用户明确选择隔离 PNG/JPEG 并点击生成后，Rust 验证图片，并在发送像素前使用绑定项目、Revision、附件哈希、60 秒期限且单次消费的原生 Yes/No 授权，再通过 Codex App Server `localImage` 交付一次。Luna 在无工具、只读沙箱中返回有界结构化几何草案；用户二次确认形成绑定来源请求、附件哈希、项目、Revision、geometry、基线哈希和精确操作指纹的批准，只有本地预览与确定性验证通过后才进入可撤销历史。无批准、过期、篡改和重放均拒绝；不接入 Gemini、DeepSeek 或额外 API Key，也不直接写 PRJ。
+- 自动测试和 Browser 视觉检查不能替代真实工具、远程 CI、打包、发布或用户验收。
 
 0.4.0将冻结Python Worker和哈希锁定的NIST ContamX工具作为Tauri资源和便携目录的一部分，不再从Release二进制使用`CARGO_MANIFEST_DIR`或仓库`.venv`。Python、ContamX、SimRead、Codex App Server和受控探测/安装命令的后代由Windows Job Object收口。便携版、NSIS、MSI、签名、独立干净机和公开发布状态以[0.4.0发布说明](release/CONTAM-Studio-0.4.0-release-notes.md)、[发布包](release/release-kit-v3.md)及本轮任务记录为准，不能从源码实现状态推断。
 
@@ -255,7 +271,7 @@ pnpm-lock.yaml        唯一的Node依赖锁文件
 
 ## 尚未实现
 
-桌面GUI已接入受限多对象Diff审阅、不可变草稿Revision、稳定对象UUID、撤销/重做、安全副本、官方ContamX/SimRead、结果可视化/报告、附件证据、受审批仿真以及多Provider只读AI。Beta-2/Archive v2只保存经验证的已完成问答，不能恢复远程Thread、自动继续聊天或自动重放给模型。尚未实现任意PRJ完整无损编辑、Schedule/Species参数化、跨重启草稿恢复、通用AI写入、图片像素远程协议、自动更新、云协作或非Windows发行；既有切片不得解释为自主Agent或通用BIM平台。
+桌面GUI已接入受限多对象Diff审阅、不可变草稿Revision、稳定对象UUID、撤销/重做、安全副本、官方ContamX/SimRead、结果可视化/报告、附件证据、受审批仿真以及多Provider只读AI。Beta-2/Archive v2只保存经验证的已完成问答，不能恢复远程Thread、自动继续聊天或自动重放给模型。当前唯一图片像素远程链路是用户显式触发的 Codex Luna 几何草案；Studio 自有建筑几何现可跨重启恢复，但尚未实现任意附件视觉问答、任意PRJ完整无损编辑、Schedule/Species参数化、完整 PRJ 语义草稿跨重启恢复、通用AI写入、自动更新、云协作或非Windows发行；既有切片不得解释为自主Agent或通用BIM平台。
 
 ## 待验证问题
 

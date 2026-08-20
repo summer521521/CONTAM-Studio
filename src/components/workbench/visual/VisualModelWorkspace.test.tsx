@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import i18n from "../../../i18n";
 import { DEFAULT_VISUAL_PREFERENCES, SPATIAL_SCHEMA_VERSION, type SpatialProjection } from "../../../app/spatial-model";
 import type { SemanticSnapshot } from "../../../app/semantic-state";
+import type { SketchpadProjectionPreview } from "../../../app/geometry/sketchpad-projection-preview";
 import { AccessibleObjectExplorer, VisualModelWorkspace, type ExplorerItem } from "./VisualModelWorkspace";
 
 const projection: SpatialProjection = {
@@ -56,6 +57,24 @@ beforeAll(async () => {
 });
 
 describe("R1-03 visual model workspace", () => {
+  it("keeps a visible path back to the Studio construction workspace", () => {
+    const markup = renderToStaticMarkup(
+      <VisualModelWorkspace
+        snapshot={snapshot}
+        projection={projection}
+        selectedSemanticObjectId="zone-1"
+        preferences={{ ...DEFAULT_VISUAL_PREFERENCES, mode: "topology" }}
+        onOpenStudio={() => undefined}
+        studioLabel="构造"
+        onSelectSemantic={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('aria-pressed="false"');
+    expect(markup).toContain("构造");
+    expect(markup).toContain("气流拓扑");
+  });
+
   it("exposes native toolbar controls, scale evidence, and an accessible canvas region", () => {
     const markup = renderToStaticMarkup(
       <VisualModelWorkspace
@@ -120,5 +139,47 @@ describe("R1-03 visual model workspace", () => {
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("未绑定语义对象");
     expect(markup).toContain("第 1 / 1 页");
+  });
+
+  it("offers candidate review without presenting the lossy preview as directly applicable", () => {
+    const preview: SketchpadProjectionPreview = {
+      schema_version: "sketchpad_projection_preview.v1",
+      status: "preview",
+      method: "zone_centroid_normalized_to_existing_icon_bounds",
+      lossy: true,
+      can_apply: false,
+      project_session_id: "session-1",
+      geometry_id: "geometry-1",
+      geometry_sha256: "c".repeat(64),
+      identity_sha256: projection.identity_sha256,
+      source_sha256: projection.source_sha256,
+      revision_id: projection.revision_id,
+      moves: [{
+        icon_id: "icon-zone-1",
+        semantic_zone_id: "zone-1",
+        level_number: 1,
+        from_column: 6,
+        from_row: 5,
+        to_column: 7,
+        to_row: 5,
+        changed: true,
+      }],
+      diagnostics: ["sketchpad_projection_lossy"],
+    };
+    const markup = renderToStaticMarkup(
+      <VisualModelWorkspace
+        snapshot={snapshot}
+        projection={projection}
+        projectionPreview={preview}
+        selectedSemanticObjectId="zone-1"
+        preferences={DEFAULT_VISUAL_PREFERENCES}
+        onSelectSemantic={() => undefined}
+        onReviewSketchpadProjection={async () => true}
+      />,
+    );
+
+    expect(markup).toContain("审查 1 个候选移动");
+    expect(markup).toContain("仍需在检查器中再次确认");
+    expect(markup).not.toContain("直接应用");
   });
 });

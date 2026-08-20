@@ -1,7 +1,8 @@
-import { FolderOpen, Play, ShieldCheck } from "lucide-react";
+import { FolderOpen, ShieldCheck } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import type { CommandAvailability } from "../../../app/command-availability";
+import type { AttachmentState, AttachmentView } from "../../../app/attachment-state";
 import { projectFileName, selectedZone, type ProjectState, type ReaderDiagnostic } from "../../../app/project-state";
 import type { ResultState } from "../../../app/result-state";
 import type { RunState } from "../../../app/run-state";
@@ -9,15 +10,16 @@ import type { StudioSetup } from "../../../app/release-state";
 import type { SemanticSnapshot, SemanticStatus } from "../../../app/semantic-state";
 import { DEFAULT_VISUAL_PREFERENCES, type VisualWorkspacePreferences } from "../../../app/spatial-model";
 import type { WorkbenchDestination } from "../../../app/workbench-state";
+import type { GeometryWorkbenchController } from "../../../app/runtime/useGeometryWorkbench";
+import type { GeometryVisionDraftController } from "../../../app/runtime/useGeometryVisionDraft";
+import type { SketchpadProjectionPreview } from "../../../app/geometry/sketchpad-projection-preview";
 import { Button } from "../../ui/Button";
 import { Disclosure } from "../../ui/Disclosure";
 import { InlineNotice } from "../../ui/InlineNotice";
 import { LoadingState } from "../../ui/LoadingState";
-import { PageHeader } from "../../ui/PageHeader";
-import { StatusTag } from "../../ui/StatusTag";
 
-const VisualModelWorkspace = lazy(async () => ({
-  default: (await import("../visual/VisualModelWorkspace")).VisualModelWorkspace,
+const GeometryWorkbench = lazy(async () => ({
+  default: (await import("../geometry/GeometryWorkbench")).GeometryWorkbench,
 }));
 
 export interface ProjectPageProps {
@@ -35,6 +37,14 @@ export interface ProjectPageProps {
   visualPreferences?: VisualWorkspacePreferences;
   onVisualPreferencesChange?: (preferences: VisualWorkspacePreferences) => void;
   onSelectSemantic?: (semanticId: string) => void;
+  geometryWorkbench?: GeometryWorkbenchController;
+  geometryVisionDraft?: GeometryVisionDraftController;
+  attachmentState?: AttachmentState;
+  onAttachmentImport?: () => void;
+  onAttachmentsImported?: (attachments: AttachmentView[]) => void;
+  onAttachmentSelect?: (attachment: AttachmentView, selected: boolean) => void;
+  onOpenAssistant?: () => void;
+  onReviewSketchpadProjection?: (preview: SketchpadProjectionPreview) => Promise<boolean>;
 }
 
 function engineStatus(setup: StudioSetup | null, t: (key: string, options?: Record<string, unknown>) => string) {
@@ -47,8 +57,6 @@ function engineStatus(setup: StudioSetup | null, t: (key: string, options?: Reco
 
 export function ProjectPage({
   projectState,
-  runState,
-  resultState,
   setup,
   availability,
   onOpenProject,
@@ -60,6 +68,14 @@ export function ProjectPage({
   visualPreferences = DEFAULT_VISUAL_PREFERENCES,
   onVisualPreferencesChange = () => undefined,
   onSelectSemantic = () => undefined,
+  geometryWorkbench,
+  geometryVisionDraft,
+  attachmentState,
+  onAttachmentImport = () => undefined,
+  onAttachmentsImported = () => undefined,
+  onAttachmentSelect = () => undefined,
+  onOpenAssistant = () => undefined,
+  onReviewSketchpadProjection,
 }: ProjectPageProps) {
   const { t } = useTranslation();
   const project = projectState.project;
@@ -88,60 +104,37 @@ export function ProjectPage({
     );
   }
 
-  const zone = selectedZone(projectState);
-  const sameRun = runState.projectSessionId === projectState.projectSessionId;
-  const resultCurrent = resultState.projectSessionId === projectState.projectSessionId && Boolean(resultState.result);
   const draft = projectState.draft;
-  const runLabel = !sameRun || runState.status === "idle"
-    ? t("journeys.project.notRun")
-    : runState.status === "error"
-      ? t("journeys.project.runFailed")
-      : runState.status === "running"
-        ? t("journeys.run.running")
-        : t("journeys.project.runSucceeded");
-  const nextAction = !zone ? t("journeys.project.selectZone") : resultCurrent ? t("journeys.goResults") : t("journeys.project.startRun");
+  const accessibilityZone = selectedZone(projectState);
 
   return (
-    <section className="journey-page project-journey project-visual-page" aria-labelledby="project-page-title">
-      <PageHeader
-        eyebrow={t("journeys.project.eyebrow")}
-        title={projectFileName(project.source_path)}
-        description={t("journeys.project.description")}
-        meta={(
-          <>
-            <StatusTag>{t("journeys.project.source")}</StatusTag>
-            <StatusTag tone={draft && draft.revision_number > 0 ? "warning" : "neutral"}>
-              {draft && draft.revision_number > 0 ? t("journeys.project.draft", { revision: draft.revision_number }) : t("journeys.project.original")}
-            </StatusTag>
-            <StatusTag tone={draft ? "success" : "neutral"}>{draft ? t("journeys.project.editable") : t("journeys.project.readonly")}</StatusTag>
-          </>
-        )}
-        actions={<Button icon={<FolderOpen size={16} aria-hidden="true" />} disabled={!availability.openProject} onClick={onOpenProject}>{t("project.openAnother")}</Button>}
-      />
-
+    <section className="journey-page project-journey project-visual-page geometry-project-page" aria-label={t("geometry.editor.title")}>
+      <div className="sr-only" aria-label={t("project.summary")}>
+        <span>{projectFileName(project.source_path)}</span>
+        <span>{draft && draft.revision_number > 0 ? t("journeys.project.draft", { revision: draft.revision_number }) : t("journeys.project.original")}</span>
+        <span>{accessibilityZone?.name ?? t("journeys.project.noZone")}</span>
+        <span>{t("journeys.project.nextAction")}</span>
+      </div>
       {draft?.dirty && !draft.exported ? <InlineNotice tone="warning">{t("journeys.project.draftUnsaved")}</InlineNotice> : null}
 
-      <div className="project-visual-summary" aria-label={t("project.summary")}>
-        <div><span>{t("journeys.project.zoneCount")}</span><strong>{project.zones.length}</strong></div>
-        <div><span>{t("journeys.project.selectedZone")}</span><strong>{zone ? `${zone.name} · ${zone.contam_number}` : t("journeys.project.noZone")}</strong></div>
-        <div><span>{t("journeys.project.runSummary")}</span><strong>{runLabel}</strong></div>
-        <div><span>{t("journeys.project.resultsSummary")}</span><strong>{resultCurrent ? t("journeys.project.resultReady") : t("journeys.project.noResults")}</strong></div>
-        <div className="project-visual-next"><span>{t("journeys.project.nextAction")}</span><strong>{nextAction}</strong>{resultCurrent ? (
-          <Button variant="primary" onClick={() => onNavigate("results")}>{t("journeys.goResults")}</Button>
-        ) : (
-          <Button variant="primary" icon={<Play size={16} aria-hidden="true" />} disabled={!zone || !availability.runProject} onClick={() => onNavigate("run")}>{t("journeys.goRun")}</Button>
-        )}</div>
-      </div>
-
-      {semanticSnapshot ? (
+      {semanticSnapshot && geometryWorkbench && geometryVisionDraft ? (
         <Suspense fallback={<LoadingState label={t("visual.loading")} />}>
-          <VisualModelWorkspace
+          <GeometryWorkbench
+            projectState={projectState}
             snapshot={semanticSnapshot}
-            projection={semanticSnapshot.spatial_projection}
+            controller={geometryWorkbench}
+            geometryVisionDraft={geometryVisionDraft}
             selectedSemanticObjectId={selectedSemanticObjectId}
-            preferences={visualPreferences}
-            onPreferencesChange={onVisualPreferencesChange}
+            visualPreferences={visualPreferences}
+            onVisualPreferencesChange={onVisualPreferencesChange}
             onSelectSemantic={onSelectSemantic}
+            onNavigate={onNavigate}
+            onOpenAssistant={onOpenAssistant}
+            attachmentState={attachmentState}
+            onAttachmentImport={onAttachmentImport}
+            onAttachmentsImported={onAttachmentsImported}
+            onAttachmentSelect={onAttachmentSelect}
+            onReviewSketchpadProjection={onReviewSketchpadProjection}
           />
         </Suspense>
       ) : semanticStatus === "loading" ? <LoadingState label={t("visual.loading")} /> : (

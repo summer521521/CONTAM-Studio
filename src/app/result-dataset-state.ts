@@ -1,5 +1,9 @@
 import type { ReaderDiagnostic } from "./project-state";
-import type { ZoneAirStateResult, ZoneAirStateSample } from "./result-state";
+import {
+  isSimReadNodeAirStateUnavailable,
+  type ZoneAirStateResult,
+  type ZoneAirStateSample,
+} from "./result-state";
 
 export const ZONE_RESULT_DATASET_SCHEMA = "zone_result_dataset.v1" as const;
 export const MAX_DATASET_ZONES = 64;
@@ -138,6 +142,15 @@ function defaultZones(dataset: ZoneResultDataset): string[] {
 export function isTrustedResultDataset(dataset: ZoneResultDataset): boolean {
   return dataset.status === "ready"
     || (dataset.status === "partial" && dataset.successful_zone_series.length > 0);
+}
+
+export function datasetHasOnlyUnavailableNodeAirState(dataset: ZoneResultDataset | null): boolean {
+  return Boolean(
+    dataset
+    && dataset.successful_zone_series.length === 0
+    && dataset.per_zone_failures.length > 0
+    && dataset.per_zone_failures.every((failure) => isSimReadNodeAirStateUnavailable(failure.code)),
+  );
 }
 
 export function datasetAvailableTimes(

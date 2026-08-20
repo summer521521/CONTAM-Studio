@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contam-studio.local/contracts/geometry-validation-v1.schema.json",
+  "title": "CONTAM Studio Geometry Validation Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "geometry_id", "revision_id", "geometry_hash", "status", "diagnostics"],
+  "properties": {
+    "schema_version": { "const": "geometry_validation.v1" },
+    "geometry_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "revision_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "geometry_hash": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+    "status": { "enum": ["valid", "invalid", "unavailable"] },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "severity", "object_id"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "severity": { "enum": ["warning", "error"] },
+          "object_id": { "type": ["string", "null"], "maxLength": 128 }
+        }
+      }
+    }
+  }
+}

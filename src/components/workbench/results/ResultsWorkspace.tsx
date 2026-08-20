@@ -6,8 +6,10 @@ import { projectFileName, type ProjectState } from "../../../app/project-state";
 import {
   RESULT_TABLE_PAGE_SIZE,
   datasetAvailableTimes,
+  datasetHasOnlyUnavailableNodeAirState,
   datasetMetricStatistics,
   datasetValueAtTime,
+  isTrustedResultDataset,
   nearestAvailableResultTime,
   resultColorForValue,
   resultColorScale,
@@ -15,7 +17,7 @@ import {
   type ResultMetricKey,
 } from "../../../app/result-dataset-state";
 import type { ResultExportState } from "../../../app/result-export-state";
-import type { ResultState } from "../../../app/result-state";
+import { isSimReadNodeAirStateUnavailable, type ResultState } from "../../../app/result-state";
 import type { RunState } from "../../../app/run-state";
 import type { SemanticSnapshot } from "../../../app/semantic-state";
 import type { VisualWorkspacePreferences } from "../../../app/spatial-model";
@@ -52,24 +54,36 @@ function availableTimes(state: ResultDatasetState): number[] {
   return state.dataset ? datasetAvailableTimes(state.dataset, state.selectedZoneIds) : [];
 }
 
-function ResultsOverview({ projectState, runState, state, onRead, onGoRun }: {
+function ResultsOverview({ projectState, runState, state, resultState, onRead, onGoRun }: {
   projectState: ProjectState;
   runState: RunState;
   state: ResultDatasetState;
+  resultState: ResultState;
   onRead: () => void;
   onGoRun: () => void;
 }) {
   const { t } = useTranslation();
   const dataset = state.dataset;
   const solveSucceeded = runState.status === "succeeded" && runState.projectSessionId === projectState.projectSessionId;
+  const trustedDataset = dataset && isTrustedResultDataset(dataset);
+  // The compatibility reader exposes the same SimRead evidence, but must not
+  // override a multi-Zone dataset that has already been loaded.
+  const compatibilityIssue = !dataset && resultState.status === "error" ? resultState.issue : null;
+  const readIssue = state.issue ?? compatibilityIssue;
+  const nodeAirStateUnavailable = datasetHasOnlyUnavailableNodeAirState(dataset)
+    || isSimReadNodeAirStateUnavailable(readIssue?.code);
+  const readFailed = solveSucceeded && (state.status === "failed" || compatibilityIssue !== null);
+  const effectiveReadStatus = compatibilityIssue ? "failed" : state.status;
+  const failureTitle = t(nodeAirStateUnavailable ? "results.nodeAirStateUnavailableTitle" : "results.solveSucceededReadFailed");
+  const failureBody = t(nodeAirStateUnavailable ? "results.nodeAirStateUnavailableBody" : "results.solveSucceededReadFailedBody");
   return (
     <section className="results-overview" aria-labelledby="results-overview-title">
       <h2 id="results-overview-title">{t("resultsWorkspace.overview.title")}</h2>
       <div className="results-status-row">
         <div><span>{t("resultsWorkspace.solveStatus")}</span><StatusTag tone={solveSucceeded ? "success" : runState.status === "error" ? "error" : "neutral"}>{t(`resultsWorkspace.solve.${solveSucceeded ? "succeeded" : runState.status}`)}</StatusTag></div>
-        <div><span>{t("resultsWorkspace.readStatus")}</span><StatusTag tone={state.status === "ready" ? "success" : state.status === "partial" || state.status === "stale" ? "warning" : state.status === "failed" ? "error" : "neutral"}>{t(`resultsWorkspace.status.${state.status}`)}</StatusTag></div>
+        <div><span>{t("resultsWorkspace.readStatus")}</span><StatusTag tone={effectiveReadStatus === "ready" ? "success" : effectiveReadStatus === "partial" || effectiveReadStatus === "stale" ? "warning" : effectiveReadStatus === "failed" ? "error" : "neutral"}>{t(`resultsWorkspace.status.${effectiveReadStatus}`)}</StatusTag></div>
       </div>
-      {dataset ? (
+      {trustedDataset ? (
         <dl className="results-overview-summary">
           <div><dt>{t("resultsWorkspace.zonesSucceeded")}</dt><dd>{dataset.evidence_summary.successful_zone_count}</dd></div>
           <div><dt>{t("resultsWorkspace.zonesFailed")}</dt><dd>{dataset.evidence_summary.failed_zone_count}</dd></div>
@@ -78,13 +92,13 @@ function ResultsOverview({ projectState, runState, state, onRead, onGoRun }: {
           <div><dt>{t("resultsWorkspace.metrics")}</dt><dd>{dataset.metric_definitions.length}</dd></div>
         </dl>
       ) : solveSucceeded ? (
-        <EmptyState title={t("resultsWorkspace.empty.title")} description={t("resultsWorkspace.empty.afterRun")} action={<Button variant="primary" onClick={onRead}>{t("resultsWorkspace.read")}</Button>} />
+        <EmptyState title={readFailed ? failureTitle : t("resultsWorkspace.empty.title")} description={readFailed ? failureBody : t("resultsWorkspace.empty.afterRun")} action={<Button variant="primary" onClick={onRead}>{t("resultsWorkspace.read")}</Button>} />
       ) : (
         <EmptyState title={t("journeys.results.noRun")} description={t("resultsWorkspace.empty.beforeRun")} action={<Button variant="primary" onClick={onGoRun}>{t("journeys.goRun")}</Button>} />
       )}
       {state.status === "stale" && state.refreshIssue ? <InlineNotice tone="warning">{t("resultsWorkspace.refreshRetained")}</InlineNotice> : null}
       {state.status === "partial" ? <InlineNotice tone="warning">{t("resultsWorkspace.partialNotice", { count: dataset?.per_zone_failures.length ?? 0 })}</InlineNotice> : null}
-      {state.status === "failed" && solveSucceeded ? <InlineNotice tone="error" role="alert">{t("results.solveSucceededReadFailed")}</InlineNotice> : null}
+      {readFailed ? <InlineNotice tone="error" role="alert">{failureTitle}</InlineNotice> : null}
     </section>
   );
 }
@@ -319,14 +333,14 @@ export function ResultsWorkspace({ projectState, runState, state, resultState, r
       {state.status === "stale" ? <InlineNotice tone="warning"><AlertTriangle size={15} />{t("resultsWorkspace.refreshRetained")}</InlineNotice> : null}
       <ResultsTabs activeTab={tab} onChange={setTab} />
       <div id={`results-panel-${tab}`} role="tabpanel" aria-labelledby={`results-tab-${tab}`} className="results-tab-panel">
-        {tab === "overview" ? <ResultsOverview projectState={projectState} runState={runState} state={state} onRead={onRead} onGoRun={onGoRun} /> : null}
+        {tab === "overview" ? <ResultsOverview projectState={projectState} runState={runState} state={state} resultState={resultState} onRead={onRead} onGoRun={onGoRun} /> : null}
         {tab === "timeseries" ? <TimeSeriesWorkspace state={state} theme={theme} onMetricChange={onMetricChange} onTimeChange={onTimeChange} onZonesChange={onZonesChange} onSelectSemantic={onSelectSemantic} /> : null}
         {tab === "spatial" ? <SpatialResults state={state} snapshot={semanticSnapshot} selectedSemanticObjectId={selectedSemanticObjectId} preferences={visualPreferences} onPreferencesChange={onVisualPreferencesChange} onSelectSemantic={onSelectSemantic} /> : null}
         {tab === "evidence" ? <EvidenceLineage projectState={projectState} runState={runState} state={state} /> : null}
       </div>
       <Disclosure label={t("resultsWorkspace.singleZoneCompatibility")}>
         <div className="results-compat-actions"><Button onClick={onSelectManifest}><FileSearch size={14} />{t("results.selectManifest")}</Button>{resultState.result ? <Button onClick={onExportSingle}><Download size={14} />{t("results.export.action")}</Button> : null}</div>
-        {resultState.result ? <ZoneAirStateResults state={resultState} exportState={resultExportState} activeRunId={runState.summary?.run_id ?? null} theme={theme} onLoadLatest={onReadSingle} onSelectManifest={onSelectManifest} onExport={onExportSingle} /> : null}
+        {resultState.result || resultState.status === "selecting" || resultState.status === "loading" || resultState.status === "cancelled" || resultState.status === "error" ? <ZoneAirStateResults state={resultState} exportState={resultExportState} activeRunId={runState.summary?.run_id ?? null} theme={theme} onLoadLatest={onReadSingle} onSelectManifest={onSelectManifest} onExport={onExportSingle} /> : null}
       </Disclosure>
     </div>
   );

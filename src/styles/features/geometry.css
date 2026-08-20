@@ -1,0 +1,3557 @@
+/* Spatial Command Deck: canvas-first geometry workflow selected by the user. */
+.editor-surface.is-immersive-project .journey-scroll.is-immersive {
+  overflow: hidden;
+}
+
+.editor-surface.is-immersive-project .journey-scroll.is-immersive,
+.editor-surface.is-immersive-project .geometry-project-page,
+.editor-surface.is-immersive-project .geometry-workbench {
+  min-height: 0;
+}
+
+.geometry-command-deck {
+  --deck-surface: color-mix(in srgb, var(--geometry-panel) 94%, transparent);
+  --deck-surface-strong: color-mix(in srgb, var(--geometry-panel) 98%, transparent);
+  --deck-border: color-mix(in srgb, var(--geometry-panel-border) 88%, transparent);
+  --deck-shadow: 0 18px 48px color-mix(in srgb, var(--geometry-line) 15%, transparent), 0 2px 8px color-mix(in srgb, var(--geometry-line) 8%, transparent);
+  --deck-radius: 14px;
+  position: relative;
+  height: 100%;
+  min-height: 620px;
+  color: var(--geometry-panel-text);
+  background: var(--geometry-canvas);
+}
+
+.geometry-deck-commandbar {
+  position: relative;
+  z-index: 70;
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto auto;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 14px 0 16px;
+  border-bottom: 1px solid var(--deck-border);
+  background: var(--deck-surface-strong);
+  box-shadow: 0 1px 10px color-mix(in srgb, var(--geometry-line) 6%, transparent);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.geometry-deck-brand,
+.geometry-deck-breadcrumb,
+.geometry-deck-status-cluster,
+.geometry-deck-saved,
+.geometry-deck-actions,
+.geometry-deck-action,
+.geometry-level-select,
+.geometry-deck-navigator > header,
+.geometry-deck-zone-list button,
+.geometry-deck-inspector > header,
+.geometry-deck-details-toggle,
+.geometry-deck-inspector-actions,
+.geometry-ai-draft-dialog > header,
+.geometry-ai-draft-dialog > header > div,
+.geometry-ai-receipt,
+.geometry-ai-receipt > div > span,
+.geometry-ai-secondary-actions,
+.geometry-deck-status,
+.geometry-deck-evidence > header {
+  display: flex;
+  align-items: center;
+}
+
+.geometry-deck-brand {
+  gap: 9px;
+  padding-right: 17px;
+  border-right: 1px solid var(--deck-border);
+  white-space: nowrap;
+}
+
+.geometry-deck-brand strong {
+  font-size: 0.86rem;
+  letter-spacing: -0.015em;
+}
+
+.geometry-deck-logo {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  color: var(--geometry-selection);
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 28%, var(--deck-border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--geometry-selection) 8%, transparent);
+}
+
+.geometry-deck-breadcrumb {
+  min-width: 0;
+  gap: 6px;
+  padding-inline: 16px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.72rem;
+}
+
+.geometry-deck-breadcrumb span,
+.geometry-deck-breadcrumb strong {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-deck-breadcrumb strong {
+  color: var(--geometry-panel-text);
+  font-weight: 700;
+}
+
+.geometry-deck-saved {
+  gap: 5px;
+  padding-right: 12px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+}
+
+.geometry-deck-status-cluster {
+  min-width: 0;
+  gap: 9px;
+}
+
+.geometry-deck-draft-status {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 210px;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--geometry-panel-muted);
+  font-size: 0.66rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-deck-draft-status svg {
+  flex: 0 0 auto;
+  color: var(--geometry-opening);
+}
+
+.geometry-deck-draft-status.is-teaching {
+  color: var(--geometry-flow);
+}
+
+.geometry-deck-draft-status.is-teaching svg {
+  color: var(--geometry-flow);
+}
+
+.geometry-deck-saved:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.geometry-deck-saved.is-error {
+  color: var(--status-danger);
+  cursor: pointer;
+}
+
+.geometry-deck-saved.is-saving svg,
+.geometry-deck-saved.is-loading svg {
+  color: var(--geometry-selection);
+}
+
+.geometry-deck-saved svg {
+  color: var(--geometry-opening);
+}
+
+.geometry-persistence-error {
+  max-width: 560px;
+  margin: 12px auto 0;
+  color: var(--status-danger);
+  font-size: 0.78rem;
+}
+
+.geometry-deck-actions {
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.geometry-command-deck .geometry-deck-actions .ui-icon-button {
+  width: 32px;
+  height: 32px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  background: transparent;
+}
+
+.geometry-command-deck .geometry-deck-actions .ui-icon-button:hover:not(:disabled) {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 8%, transparent);
+}
+
+.geometry-deck-divider {
+  width: 1px;
+  height: 22px;
+  margin-inline: 5px;
+  background: var(--deck-border);
+}
+
+.geometry-deck-action {
+  min-height: 34px;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.72rem;
+}
+
+.geometry-deck-action:hover,
+.geometry-deck-action.is-active {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 9%, transparent);
+}
+
+.geometry-deck-ai {
+  color: var(--geometry-selection);
+  font-weight: 700;
+}
+
+.geometry-deck-overflow {
+  position: relative;
+}
+
+.geometry-deck-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 90;
+  display: grid;
+  width: 220px;
+  padding: 7px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 11px;
+  background: var(--deck-surface-strong);
+  box-shadow: var(--deck-shadow);
+}
+
+.geometry-deck-menu > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px 5px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.geometry-deck-menu button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 8px;
+  color: var(--geometry-panel-muted);
+  text-align: left;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 0.7rem;
+}
+
+.geometry-deck-menu button:hover,
+.geometry-deck-menu button[aria-checked="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 9%, transparent);
+}
+
+.geometry-theme-dot {
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--deck-border);
+  border-radius: 50%;
+  background: var(--geometry-selection);
+}
+
+.geometry-theme-dot.theme-engineering-blueprint { background: #2c78a3; }
+.geometry-theme-dot.theme-architectural-paper { background: #d9d1c4; }
+.geometry-theme-dot.theme-night-laboratory { background: #25313a; }
+
+.geometry-command-deck .geometry-stage-shell {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--geometry-canvas);
+}
+
+.geometry-deck-island,
+.geometry-ai-draft-dialog,
+.geometry-deck-evidence {
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  background: var(--deck-surface);
+  box-shadow: var(--deck-shadow);
+  backdrop-filter: blur(18px) saturate(118%);
+}
+
+.geometry-deck-island {
+  position: absolute;
+  z-index: 24;
+  border-radius: var(--deck-radius);
+}
+
+.geometry-deck-navigator {
+  top: 22px;
+  left: 24px;
+  width: 224px;
+  overflow: visible;
+}
+
+.geometry-deck-navigator > header {
+  gap: 6px;
+  min-height: 48px;
+  padding: 7px 8px 7px 12px;
+  border-bottom: 1px solid var(--deck-border);
+}
+
+.geometry-level-select {
+  flex: 1 1 auto;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 32px;
+  color: var(--geometry-panel-text);
+  border: 0;
+  background: transparent;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.geometry-level-select select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 22px 0 0;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  border: 0;
+  outline: none;
+  appearance: none;
+  background: transparent;
+  font: inherit;
+}
+
+.geometry-level-select svg {
+  margin-left: -18px;
+  pointer-events: none;
+}
+
+.geometry-command-deck .geometry-deck-navigator .ui-icon-button,
+.geometry-command-deck .geometry-deck-inspector .ui-icon-button,
+.geometry-command-deck .geometry-ai-draft-dialog .ui-icon-button,
+.geometry-command-deck .geometry-deck-evidence .ui-icon-button {
+  width: 30px;
+  height: 30px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  background: transparent;
+}
+
+.geometry-command-deck .ui-icon-button:hover:not(:disabled) {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 9%, transparent);
+}
+
+.geometry-navigator-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 5px 7px 0;
+}
+
+.geometry-navigator-tabs button {
+  min-height: 27px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.geometry-navigator-tabs button[aria-selected="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 10%, transparent);
+}
+
+.geometry-deck-zone-list {
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+}
+
+.geometry-semantic-zone-actions {
+  display: flex;
+  padding: 0 2px 4px;
+}
+
+.geometry-deck-zone-list .geometry-semantic-zone-actions > button {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  color: var(--geometry-panel-text);
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 38%, var(--deck-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--geometry-selection) 9%, var(--geometry-panel));
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.geometry-deck-zone-list .geometry-semantic-zone-actions > button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--geometry-selection) 65%, var(--deck-border));
+  background: color-mix(in srgb, var(--geometry-selection) 14%, var(--geometry-panel));
+}
+
+.geometry-semantic-zone-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 5px;
+  padding: 10px;
+  border: 1px solid var(--deck-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--geometry-panel) 91%, var(--geometry-canvas));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--geometry-selection) 65%, transparent);
+}
+
+.geometry-semantic-zone-form > label,
+.geometry-semantic-volume-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 6px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.59rem;
+  font-weight: 680;
+}
+
+.geometry-semantic-zone-form > label > span {
+  grid-column: 1 / -1;
+}
+
+.geometry-semantic-zone-form input[type="text"],
+.geometry-semantic-zone-form input:not([type]) {
+  width: 100%;
+}
+
+.geometry-semantic-zone-form input:not([type="radio"]) {
+  min-width: 0;
+  height: 31px;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+}
+
+.geometry-semantic-zone-form input:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 20%, transparent);
+}
+
+.geometry-semantic-zone-form fieldset {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+}
+
+.geometry-semantic-zone-form legend {
+  padding: 0 4px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.58rem;
+  font-weight: 680;
+}
+
+.geometry-semantic-zone-form fieldset label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  color: var(--geometry-panel-text);
+  font-size: 0.59rem;
+  line-height: 1.35;
+}
+
+.geometry-semantic-zone-form fieldset input {
+  margin-top: 2px;
+  accent-color: var(--geometry-selection);
+}
+
+.geometry-semantic-zone-form > small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.57rem;
+  line-height: 1.45;
+}
+
+.geometry-semantic-zone-form > div {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 6px;
+}
+
+.geometry-deck-zone-list .geometry-semantic-zone-form button,
+.geometry-deck-zone-list .geometry-semantic-zone-pending button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  background: var(--geometry-panel);
+  font-size: 0.59rem;
+  font-weight: 680;
+}
+
+.geometry-deck-zone-list .geometry-semantic-zone-form button[type="submit"] {
+  color: var(--geometry-canvas);
+  border-color: var(--geometry-selection);
+  background: var(--geometry-selection);
+}
+
+.geometry-semantic-zone-pending {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  padding: 8px;
+  border: 1px dashed color-mix(in srgb, var(--geometry-selection) 55%, var(--deck-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--geometry-selection) 8%, transparent);
+}
+
+.geometry-semantic-zone-pending > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 7px;
+  min-width: 0;
+}
+
+.geometry-semantic-zone-pending i {
+  grid-row: 1 / 3;
+  width: 9px;
+  height: 9px;
+  align-self: center;
+  border-radius: 3px;
+  background: var(--geometry-selection);
+}
+
+.geometry-semantic-zone-pending strong,
+.geometry-semantic-zone-pending small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-semantic-zone-pending strong {
+  color: var(--geometry-panel-text);
+  font-size: 0.64rem;
+}
+
+.geometry-semantic-zone-pending small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.56rem;
+}
+
+.geometry-zone-picker {
+  display: grid;
+  gap: 4px;
+  padding: 2px 2px 5px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.6rem;
+  font-weight: 650;
+}
+
+.geometry-zone-picker select {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--geometry-panel-text);
+  text-overflow: ellipsis;
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+}
+
+.geometry-zone-picker select:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 20%, transparent);
+}
+
+.geometry-deck-zone-list button {
+  position: relative;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px 8px;
+  color: var(--geometry-panel-muted);
+  text-align: left;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.geometry-deck-zone-list button:hover,
+.geometry-deck-zone-list button[aria-pressed="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 9%, transparent);
+}
+
+.geometry-deck-zone-list button[aria-pressed="true"]::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--geometry-selection);
+  content: "";
+}
+
+.geometry-deck-zone-list button > i {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--geometry-opening) 55%, var(--deck-border));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--geometry-opening) 22%, transparent);
+}
+
+.geometry-deck-zone-list button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.geometry-deck-zone-list strong,
+.geometry-deck-zone-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-deck-zone-list strong {
+  font-size: 0.71rem;
+  font-weight: 650;
+}
+
+.geometry-deck-zone-list small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+}
+
+.geometry-deck-zone-list svg {
+  margin-left: auto;
+  opacity: 0.72;
+}
+
+.geometry-object-navigator {
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+}
+
+.geometry-object-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+  color: var(--geometry-panel-muted);
+  border: 1px solid var(--deck-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--geometry-canvas) 38%, transparent);
+}
+
+.geometry-object-search input {
+  min-width: 0;
+  height: 30px;
+  color: var(--geometry-panel-text);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.68rem;
+}
+
+.geometry-object-count,
+.geometry-object-empty {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+}
+
+.geometry-object-count {
+  padding: 0 3px;
+}
+
+.geometry-object-list {
+  display: grid;
+  gap: 2px;
+  max-height: min(330px, 42vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.geometry-object-list > button {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 5px 7px;
+  color: var(--geometry-panel-muted);
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.geometry-object-list > button:hover,
+.geometry-object-list > button[aria-pressed="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 10%, transparent);
+}
+
+.geometry-object-kind {
+  overflow: hidden;
+  color: var(--geometry-selection);
+  font-size: 0.58rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-object-list > button > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.geometry-object-list strong,
+.geometry-object-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-object-list strong {
+  font-size: 0.67rem;
+}
+
+.geometry-object-list small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.58rem;
+}
+
+.geometry-object-empty {
+  padding: 12px 5px;
+  text-align: center;
+}
+
+.geometry-object-pagination {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  align-items: center;
+  gap: 4px;
+}
+
+.geometry-object-pagination button {
+  width: 28px;
+  height: 26px;
+  color: var(--geometry-panel-muted);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  background: transparent;
+}
+
+.geometry-object-pagination span {
+  color: var(--geometry-panel-muted);
+  text-align: center;
+  font-size: 0.59rem;
+}
+
+.geometry-deck-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 5px;
+  border-top: 1px solid var(--deck-border);
+}
+
+.geometry-deck-mode-tabs button {
+  min-height: 28px;
+  padding: 0 4px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.62rem;
+}
+
+.geometry-deck-mode-tabs button[aria-selected="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 11%, transparent);
+  font-weight: 700;
+}
+
+.geometry-deck-layer-popover {
+  position: absolute;
+  top: 54px;
+  left: calc(100% + 8px);
+  display: grid;
+  width: 292px;
+  max-height: min(660px, calc(100vh - 190px));
+  overflow-y: auto;
+  padding: 7px;
+  border: 1px solid var(--deck-border);
+  border-radius: 10px;
+  background: var(--deck-surface-strong);
+  box-shadow: var(--deck-shadow);
+}
+
+.geometry-deck-layer-popover label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 7px;
+  color: var(--geometry-panel-muted);
+  border-radius: 6px;
+  font-size: 0.67rem;
+}
+
+.geometry-deck-layer-popover label:hover {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 8%, transparent);
+}
+
+.geometry-deck-layer-popover input {
+  accent-color: var(--geometry-selection);
+}
+
+.geometry-underlay-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 10px 7px;
+  border-block: 1px solid var(--deck-border);
+}
+
+.geometry-underlay-controls > header,
+.geometry-underlay-actions,
+.geometry-underlay-page,
+.geometry-underlay-calibration > form > label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.geometry-underlay-controls > header {
+  color: var(--geometry-panel-text);
+  font-size: 0.69rem;
+}
+
+.geometry-underlay-controls button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--geometry-panel) 88%, transparent);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 680;
+}
+
+.geometry-underlay-controls button:hover:not(:disabled),
+.geometry-underlay-controls button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--geometry-selection) 45%, var(--deck-border));
+  background: color-mix(in srgb, var(--geometry-selection) 10%, var(--geometry-panel));
+}
+
+.geometry-underlay-controls button:disabled,
+.geometry-underlay-controls input:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.geometry-underlay-file {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--geometry-canvas) 40%, transparent);
+}
+
+.geometry-underlay-file span {
+  overflow: hidden;
+  color: var(--geometry-panel-text);
+  font-size: 0.65rem;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-underlay-file small,
+.geometry-underlay-controls > small,
+.geometry-underlay-calibration p,
+.geometry-underlay-page small {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.58rem;
+  line-height: 1.42;
+}
+
+.geometry-underlay-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.geometry-underlay-transform {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.geometry-underlay-transform label {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+}
+
+.geometry-underlay-transform label > span,
+.geometry-underlay-page > span,
+.geometry-underlay-calibration label > span {
+  color: var(--geometry-panel-muted);
+  font-size: 0.59rem;
+  font-weight: 680;
+}
+
+.geometry-underlay-transform input,
+.geometry-underlay-page input,
+.geometry-underlay-calibration input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.geometry-underlay-transform input:focus-visible,
+.geometry-underlay-page input:focus-visible,
+.geometry-underlay-calibration input:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 18%, transparent);
+}
+
+.geometry-underlay-transform > button {
+  grid-column: 1 / -1;
+}
+
+.geometry-underlay-page {
+  min-height: 32px;
+  padding: 0;
+}
+
+.geometry-underlay-page input {
+  width: 68px;
+  margin-left: auto;
+}
+
+.geometry-underlay-calibration {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  border: 1px dashed color-mix(in srgb, var(--geometry-selection) 34%, var(--deck-border));
+  border-radius: 8px;
+}
+
+.geometry-underlay-calibration > form {
+  display: grid;
+  gap: 6px;
+}
+
+.geometry-underlay-calibration > form > label {
+  padding: 0;
+}
+
+.geometry-underlay-calibration input {
+  width: 94px;
+  margin-left: auto;
+}
+
+.geometry-underlay-ai {
+  color: var(--geometry-selection) !important;
+}
+
+.geometry-underlay-error {
+  margin: 0;
+  padding: 6px 7px;
+  color: var(--status-danger-text, #991b1b);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--status-danger, #dc2626) 8%, transparent);
+  font-size: 0.6rem;
+}
+
+.geometry-level-reference-controls {
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 9px 7px 3px;
+  border-top: 1px solid var(--deck-border);
+}
+
+.geometry-level-reference-controls label {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+}
+
+.geometry-level-reference-controls select {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 7px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+}
+
+.geometry-level-reference-controls select:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 20%, transparent);
+}
+
+.geometry-level-reference-controls button {
+  min-height: 34px;
+  padding: 0 8px;
+  color: var(--geometry-selection-contrast);
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 70%, var(--deck-border));
+  border-radius: 7px;
+  background: var(--geometry-selection);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.geometry-level-reference-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.geometry-level-reference-controls small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
+.geometry-level-underlay-badge {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(52vw, 420px);
+  min-height: 30px;
+  padding: 0 10px;
+  overflow: hidden;
+  color: var(--geometry-panel-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--deck-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--deck-surface-strong) 92%, transparent);
+  box-shadow: var(--deck-shadow);
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.geometry-plan-underlay-badge {
+  top: 54px;
+}
+
+.geometry-plan-underlay-badge.is-error {
+  color: var(--status-danger-text, #991b1b);
+}
+
+.geometry-tool-dock {
+  bottom: 52px;
+  left: 50%;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px;
+  transform: translateX(-50%);
+}
+
+.geometry-tool-dock button {
+  display: grid;
+  width: 58px;
+  min-height: 54px;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 4px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.geometry-tool-dock button span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.59rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-tool-dock button:hover:not(:disabled),
+.geometry-tool-dock button[aria-pressed="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 10%, transparent);
+}
+
+.geometry-tool-dock button[aria-pressed="true"] {
+  color: var(--geometry-selection);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--geometry-selection) 22%, transparent);
+}
+
+.geometry-tool-divider {
+  width: 1px;
+  margin: 7px 4px;
+  background: var(--deck-border);
+}
+
+.geometry-vertical-tool-options {
+  bottom: 122px;
+  left: 50%;
+  display: grid;
+  width: min(430px, calc(100% - 520px));
+  min-width: 310px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 9px;
+  padding: 11px;
+  transform: translateX(-50%);
+}
+
+.geometry-vertical-tool-options header {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 7px;
+  color: var(--geometry-selection);
+  font-size: 0.72rem;
+}
+
+.geometry-vertical-tool-options label,
+.geometry-vertical-flow-editor > label {
+  display: grid;
+  gap: 4px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+  font-weight: 650;
+}
+
+.geometry-vertical-tool-options select,
+.geometry-vertical-flow-editor select {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+}
+
+.geometry-vertical-tool-options select:focus-visible,
+.geometry-vertical-flow-editor select:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 20%, transparent);
+}
+
+.geometry-vertical-tool-options small {
+  grid-column: 1 / -1;
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.geometry-deck-inspector {
+  top: 22px;
+  right: 24px;
+  width: 246px;
+  overflow: hidden;
+}
+
+.geometry-deck-inspector > header {
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 54px;
+  padding: 9px 9px 9px 13px;
+  border-bottom: 1px solid var(--deck-border);
+}
+
+.geometry-deck-inspector > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.geometry-deck-inspector > header span {
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.geometry-deck-inspector > header strong {
+  overflow: hidden;
+  font-size: 0.71rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-deck-property-list,
+.geometry-deck-evidence dl {
+  margin: 0;
+}
+
+.geometry-deck-property-list > div,
+.geometry-deck-evidence dl > div {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.85fr) minmax(0, 1.15fr);
+  gap: 8px;
+  padding: 9px 13px;
+}
+
+.geometry-deck-property-list dt,
+.geometry-deck-evidence dt {
+  color: var(--geometry-panel-muted);
+  font-size: 0.65rem;
+}
+
+.geometry-deck-property-list dd,
+.geometry-deck-evidence dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--geometry-panel-text);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.geometry-vertex-coordinate-editor {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--deck-border);
+  background: color-mix(in srgb, var(--geometry-selection) 4%, transparent);
+}
+
+.geometry-vertex-coordinate-editor p,
+.geometry-vertex-handle-hint {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.63rem;
+  line-height: 1.45;
+}
+
+.geometry-vertex-handle-hint {
+  padding: 9px 13px;
+  border-top: 1px solid var(--deck-border);
+}
+
+.geometry-vertex-coordinate-editor > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+}
+
+.geometry-vertex-coordinate-editor label {
+  display: flex;
+  gap: 3px;
+  color: var(--geometry-panel-text);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.geometry-vertex-coordinate-editor label span {
+  color: var(--geometry-panel-muted);
+  font-weight: 500;
+}
+
+.geometry-vertex-coordinate-editor input {
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+  font-size: 0.67rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.geometry-vertex-coordinate-editor input:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 22%, transparent);
+}
+
+.geometry-vertex-coordinate-editor button {
+  min-height: 30px;
+  color: var(--geometry-selection-contrast);
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 72%, var(--deck-border));
+  border-radius: 6px;
+  background: var(--geometry-selection);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.geometry-zone-topology-actions {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--deck-border);
+  background: color-mix(in srgb, var(--geometry-selection) 4%, transparent);
+}
+
+.geometry-zone-topology-actions p,
+.geometry-zone-topology-actions small {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.63rem;
+  line-height: 1.45;
+}
+
+.geometry-zone-topology-actions > label {
+  display: grid;
+  gap: 4px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+  font-weight: 650;
+}
+
+.geometry-zone-topology-actions select {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+}
+
+.geometry-zone-topology-actions select:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 20%, transparent);
+}
+
+.geometry-zone-topology-actions > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.geometry-zone-topology-actions button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 7px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 6px;
+  background: var(--geometry-panel);
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.geometry-zone-topology-actions button:hover:not(:disabled),
+.geometry-zone-topology-actions button[aria-pressed="true"] {
+  color: var(--geometry-selection);
+  border-color: color-mix(in srgb, var(--geometry-selection) 48%, var(--deck-border));
+  background: color-mix(in srgb, var(--geometry-selection) 10%, var(--geometry-panel));
+}
+
+.geometry-vertical-flow-editor {
+  display: grid;
+  gap: 9px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--deck-border);
+  background: color-mix(in srgb, var(--geometry-flow) 5%, transparent);
+}
+
+.geometry-vertical-flow-editor dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.geometry-vertical-flow-editor dl > div {
+  display: grid;
+  grid-template-columns: minmax(68px, 0.8fr) minmax(0, 1.2fr);
+  gap: 7px;
+  font-size: 0.63rem;
+}
+
+.geometry-vertical-flow-editor dt {
+  color: var(--geometry-panel-muted);
+}
+
+.geometry-vertical-flow-editor dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--geometry-panel-text);
+}
+
+.geometry-vertical-flow-editor > button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--geometry-selection-contrast);
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 70%, var(--deck-border));
+  border-radius: 7px;
+  background: var(--geometry-selection);
+  font-size: 0.63rem;
+  font-weight: 700;
+}
+
+.geometry-vertical-flow-editor > button:disabled {
+  opacity: 0.48;
+}
+
+.geometry-vertical-flow-editor > small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.geometry-vertical-flow-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 7px;
+  align-items: center;
+  padding: 8px;
+  color: var(--geometry-flow);
+  border: 1px solid color-mix(in srgb, var(--geometry-flow) 30%, var(--deck-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--geometry-flow) 8%, transparent);
+  font-size: 0.62rem;
+}
+
+.geometry-vertical-flow-status svg {
+  grid-row: 1 / 3;
+}
+
+.geometry-vertical-flow-status strong {
+  overflow-wrap: anywhere;
+  color: var(--geometry-panel-text);
+}
+
+.geometry-vertical-flow-status button {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 4px;
+  color: var(--geometry-panel-text);
+  border: 1px solid color-mix(in srgb, var(--geometry-flow) 36%, var(--deck-border));
+  border-radius: 6px;
+  background: var(--geometry-panel);
+  font: inherit;
+  font-weight: 700;
+}
+
+.geometry-wall-flow-editor {
+  display: grid;
+  gap: 9px;
+  padding: 11px 12px 12px;
+  border-top: 1px solid var(--deck-border);
+  background: color-mix(in srgb, var(--geometry-flow) 5%, transparent);
+}
+
+.geometry-wall-flow-editor > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.geometry-wall-flow-editor > header > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--geometry-flow);
+  border: 1px solid color-mix(in srgb, var(--geometry-flow) 32%, var(--deck-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--geometry-flow) 10%, var(--geometry-panel));
+}
+
+.geometry-wall-flow-editor > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.geometry-wall-flow-editor > header strong {
+  color: var(--geometry-panel-text);
+  font-size: 0.68rem;
+}
+
+.geometry-wall-flow-editor > header small,
+.geometry-wall-flow-binding small {
+  overflow: hidden;
+  color: var(--geometry-panel-muted);
+  font-size: 0.6rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-wall-flow-endpoints {
+  margin: 0;
+  padding: 8px 9px;
+  overflow-wrap: anywhere;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  background: var(--geometry-panel);
+  font-size: 0.65rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.geometry-wall-flow-picker,
+.geometry-wall-flow-binding {
+  display: grid;
+  gap: 7px;
+}
+
+.geometry-wall-flow-picker label {
+  display: grid;
+  gap: 4px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+  font-weight: 650;
+}
+
+.geometry-wall-flow-picker select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+}
+
+.geometry-wall-flow-picker select:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-selection) 20%, transparent);
+}
+
+.geometry-wall-flow-picker > button,
+.geometry-wall-flow-binding > button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--geometry-selection-contrast);
+  border: 1px solid color-mix(in srgb, var(--geometry-flow) 52%, var(--deck-border));
+  border-radius: 7px;
+  background: var(--geometry-flow);
+  font-size: 0.63rem;
+  font-weight: 750;
+}
+
+.geometry-wall-flow-picker > button:disabled {
+  opacity: 0.45;
+}
+
+.geometry-wall-flow-picker p,
+.geometry-wall-flow-blocked {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.geometry-wall-flow-binding > div {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--geometry-flow) 32%, var(--deck-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--geometry-flow) 8%, var(--geometry-panel));
+}
+
+.geometry-wall-flow-binding span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--geometry-flow);
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.geometry-wall-flow-binding strong {
+  overflow-wrap: anywhere;
+  color: var(--geometry-panel-text);
+  font-size: 0.66rem;
+}
+
+.geometry-wall-flow-binding.is-invalid > div {
+  border-color: color-mix(in srgb, var(--color-danger) 48%, var(--deck-border));
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--geometry-panel));
+}
+
+.geometry-wall-flow-binding.is-invalid span,
+.geometry-wall-flow-editor.is-unresolved > header > span {
+  color: var(--color-danger);
+}
+
+.geometry-semantic-flow-creator {
+  display: grid;
+  gap: 7px;
+  margin: 0 9px 10px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--geometry-flow) 28%, var(--deck-border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--geometry-flow) 5%, var(--geometry-panel));
+}
+
+.geometry-semantic-flow-creator > button,
+.geometry-semantic-flow-creator form button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: var(--geometry-panel-text);
+  border: 1px solid color-mix(in srgb, var(--geometry-flow) 35%, var(--deck-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--geometry-flow) 8%, var(--geometry-panel));
+  font: inherit;
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.geometry-semantic-flow-creator form {
+  display: grid;
+  gap: 8px;
+}
+
+.geometry-semantic-flow-direction {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+}
+
+.geometry-semantic-flow-direction span {
+  overflow: hidden;
+  padding: 6px;
+  color: var(--geometry-panel-text);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--geometry-canvas) 36%, transparent);
+  font-size: 0.59rem;
+  font-weight: 650;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-semantic-flow-direction button {
+  width: 30px;
+  padding: 0;
+}
+
+.geometry-semantic-flow-creator form > label,
+.geometry-semantic-flow-values label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.58rem;
+  font-weight: 680;
+}
+
+.geometry-semantic-flow-creator form > label > span,
+.geometry-semantic-flow-values label > span {
+  grid-column: 1 / -1;
+}
+
+.geometry-semantic-flow-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.geometry-semantic-flow-creator select,
+.geometry-semantic-flow-creator input {
+  min-width: 0;
+  height: 31px;
+  padding: 0 7px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--geometry-panel);
+  font: inherit;
+}
+
+.geometry-semantic-flow-creator select:focus-visible,
+.geometry-semantic-flow-creator input:focus-visible {
+  border-color: var(--geometry-flow);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--geometry-flow) 18%, transparent);
+}
+
+.geometry-semantic-flow-creator form > p,
+.geometry-semantic-flow-creator > small,
+.geometry-semantic-flow-creator form > small {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.56rem;
+  line-height: 1.45;
+}
+
+.geometry-semantic-flow-creator form > p {
+  color: var(--color-danger);
+}
+
+.geometry-semantic-flow-creator form > div:last-child {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 6px;
+}
+
+.geometry-semantic-flow-creator form > div:last-child button[type="submit"] {
+  color: var(--geometry-canvas);
+  border-color: var(--geometry-flow);
+  background: var(--geometry-flow);
+}
+
+.geometry-deck-details-toggle {
+  justify-content: space-between;
+  width: calc(100% - 18px);
+  min-height: 34px;
+  margin: 3px 9px 8px;
+  padding: 0 7px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-top: 1px solid var(--deck-border);
+  background: transparent;
+  font-size: 0.66rem;
+}
+
+.geometry-deck-details-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.geometry-deck-details {
+  border-top: 1px solid var(--deck-border);
+}
+
+.geometry-deck-details .geometry-inspector-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 4px;
+  border-bottom: 1px solid var(--deck-border);
+}
+
+.geometry-deck-details .geometry-inspector-tabs button {
+  min-height: 28px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 0.59rem;
+}
+
+.geometry-deck-details .geometry-inspector-tabs button[aria-selected="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 10%, transparent);
+}
+
+.geometry-deck-details .geometry-flow-list label,
+.geometry-deck-details .geometry-validation-summary {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.geometry-deck-details select {
+  width: 100%;
+  min-height: 32px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 6px;
+  background: var(--geometry-panel);
+}
+
+.geometry-deck-inspector .geometry-inspector-empty {
+  margin: 0;
+  padding: 13px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+.geometry-deck-inspector-actions {
+  justify-content: flex-end;
+  padding: 7px 9px;
+  border-top: 1px solid var(--deck-border);
+}
+
+.geometry-deck-inspector-actions button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 29px;
+  padding: 0 8px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.63rem;
+}
+
+.geometry-deck-inspector-actions button:hover:not(:disabled) {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 9%, transparent);
+}
+
+.geometry-ai-draft-dialog {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  z-index: 42;
+  width: min(478px, calc(100% - 560px));
+  min-width: 420px;
+  overflow: hidden;
+  border-radius: 15px;
+  transform: translateX(-50%);
+}
+
+.geometry-ai-draft-dialog > header {
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 7px 9px 7px 14px;
+  border-bottom: 1px solid var(--deck-border);
+}
+
+.geometry-ai-draft-dialog > header > div {
+  gap: 7px;
+}
+
+.geometry-ai-draft-dialog > header > div > svg {
+  color: var(--geometry-selection);
+}
+
+.geometry-ai-draft-dialog > header strong {
+  font-size: 0.76rem;
+}
+
+.geometry-ai-draft-dialog > header span {
+  padding: 2px 5px;
+  color: var(--geometry-selection);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--geometry-selection) 11%, transparent);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.geometry-ai-draft-body {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 15px;
+  padding: 14px;
+}
+
+.geometry-ai-source {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.geometry-ai-source img,
+.geometry-ai-source-placeholder {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border: 1px solid var(--deck-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--geometry-canvas) 80%, var(--geometry-panel));
+}
+
+.geometry-ai-source img {
+  display: block;
+  object-fit: cover;
+  filter: saturate(0.65) contrast(0.92);
+}
+
+.geometry-ai-source-placeholder {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: 10px;
+  color: var(--geometry-panel-muted);
+  text-align: center;
+}
+
+.geometry-ai-source-placeholder span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.61rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-ai-source > button {
+  min-height: 30px;
+  padding: 0 8px;
+  color: var(--geometry-panel-muted);
+  border: 1px solid var(--deck-border);
+  border-radius: 7px;
+  background: transparent;
+  font-size: 0.61rem;
+}
+
+.geometry-ai-source > button:hover {
+  color: var(--geometry-panel-text);
+  border-color: color-mix(in srgb, var(--geometry-selection) 32%, var(--deck-border));
+}
+
+.geometry-ai-intent {
+  display: grid;
+  gap: 8px;
+}
+
+.geometry-ai-intent > label {
+  color: var(--geometry-panel-muted);
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.geometry-ai-intent textarea {
+  width: 100%;
+  min-height: 54px;
+  resize: none;
+  padding: 8px 9px;
+  color: var(--geometry-panel-text);
+  border: 1px solid var(--deck-border);
+  border-radius: 8px;
+  outline: none;
+  background: color-mix(in srgb, var(--geometry-canvas) 48%, var(--geometry-panel));
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.geometry-ai-intent textarea:focus-visible {
+  border-color: var(--geometry-selection);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--geometry-selection) 14%, transparent);
+}
+
+.geometry-ai-receipt {
+  gap: 7px;
+}
+
+.geometry-ai-receipt > div {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 0;
+  gap: 2px;
+}
+
+.geometry-ai-receipt > div > span {
+  min-width: 0;
+  gap: 4px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.57rem;
+}
+
+.geometry-ai-receipt > div > strong {
+  overflow: hidden;
+  color: var(--geometry-panel-muted);
+  font-size: 0.58rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-ai-receipt > div.is-ready > span,
+.geometry-ai-receipt > div.is-ready > strong {
+  color: var(--geometry-opening);
+}
+
+.geometry-ai-receipt > svg {
+  flex: 0 0 auto;
+  color: var(--geometry-panel-muted);
+}
+
+.geometry-ai-boundary {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.59rem;
+  line-height: 1.35;
+}
+
+.geometry-ai-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 8px;
+  color: var(--status-danger-text, #991b1b);
+  background: color-mix(in srgb, var(--status-danger, #dc2626) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger, #dc2626) 22%, transparent);
+  border-radius: 8px;
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.geometry-ai-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.geometry-ai-review {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  background: color-mix(in srgb, var(--geometry-selection) 6%, var(--geometry-panel-bg));
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 20%, var(--deck-border));
+  border-radius: 10px;
+}
+
+.geometry-ai-review > div,
+.geometry-ai-review dl,
+.geometry-ai-review dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.geometry-ai-review strong {
+  min-width: 0;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.geometry-ai-review span,
+.geometry-ai-review dt,
+.geometry-ai-review dd,
+.geometry-ai-review li {
+  color: var(--geometry-panel-muted);
+  font-size: 0.62rem;
+}
+
+.geometry-ai-review dl,
+.geometry-ai-review dd,
+.geometry-ai-review ul {
+  margin: 0;
+}
+
+.geometry-ai-review dl {
+  align-items: stretch;
+}
+
+.geometry-ai-review dl > div {
+  flex: 1;
+  padding-top: 5px;
+  border-top: 1px solid var(--deck-border);
+}
+
+.geometry-ai-review ul {
+  display: grid;
+  gap: 3px;
+  padding-left: 17px;
+}
+
+.geometry-ai-intent > .ui-button-primary {
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  color: white;
+  border-color: var(--geometry-selection);
+  border-radius: 8px;
+  background: var(--geometry-selection);
+  font-size: 0.68rem;
+}
+
+.geometry-ai-intent > .ui-button-primary:disabled {
+  color: var(--geometry-panel-muted);
+  border-color: var(--deck-border);
+  background: color-mix(in srgb, var(--geometry-panel-muted) 9%, transparent);
+}
+
+.geometry-ai-secondary-actions {
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.geometry-ai-secondary-actions button {
+  min-height: 28px;
+  padding: 0 8px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.59rem;
+}
+
+.geometry-ai-secondary-actions button:hover:not(:disabled) {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 8%, transparent);
+}
+
+.geometry-ai-secondary-actions button.is-confirm:not(:disabled) {
+  color: #fff;
+  background: var(--geometry-selection);
+  border-color: var(--geometry-selection);
+}
+
+.geometry-deck-status {
+  position: absolute;
+  bottom: 14px;
+  left: 24px;
+  z-index: 27;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 11px;
+  color: var(--geometry-panel-muted);
+  border: 1px solid var(--deck-border);
+  border-radius: 10px;
+  background: var(--deck-surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--geometry-line) 10%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.geometry-deck-status > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--geometry-opening);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--geometry-opening) 12%, transparent);
+}
+
+.geometry-deck-status.has-issue > i {
+  background: var(--geometry-flow);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--geometry-flow) 12%, transparent);
+}
+
+.geometry-deck-status strong,
+.geometry-deck-status span {
+  font-size: 0.61rem;
+}
+
+.geometry-deck-status strong {
+  color: var(--geometry-panel-text);
+}
+
+.geometry-deck-status span {
+  padding-left: 8px;
+  border-left: 1px solid var(--deck-border);
+}
+
+.geometry-deck-evidence {
+  position: absolute;
+  bottom: 54px;
+  left: 24px;
+  z-index: 44;
+  width: 280px;
+  overflow: hidden;
+  border-radius: 11px;
+}
+
+.geometry-deck-evidence > header {
+  min-height: 40px;
+  gap: 7px;
+  padding: 5px 6px 5px 11px;
+  border-bottom: 1px solid var(--deck-border);
+}
+
+.geometry-deck-evidence > header strong {
+  flex: 1 1 auto;
+  font-size: 0.7rem;
+}
+
+.geometry-semantic-export {
+  display: grid;
+  gap: 7px;
+  padding: 11px 13px 13px;
+  border-top: 1px solid var(--deck-border);
+}
+
+.geometry-semantic-export .ui-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.geometry-semantic-export p,
+.geometry-semantic-export-status {
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.geometry-semantic-export-status.is-success {
+  color: var(--status-success);
+}
+
+.geometry-semantic-export-status.is-error {
+  color: var(--status-danger);
+}
+
+.geometry-semantic-export-next-step {
+  margin: 5px 0 0;
+  color: var(--geometry-panel-muted);
+  font-size: 0.64rem;
+  line-height: 1.35;
+}
+
+.geometry-ai-draft-badge {
+  position: absolute;
+  top: 52%;
+  left: 50%;
+  z-index: 20;
+  padding: 5px 8px;
+  color: #6043dc;
+  border: 1px solid color-mix(in srgb, #7658f3 44%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, #f4f0ff 88%, transparent);
+  box-shadow: 0 6px 18px rgb(81 57 169 / 12%);
+  font-size: 0.61rem;
+  font-weight: 750;
+  pointer-events: none;
+}
+
+.geometry-command-deck .geometry-canvas-scale {
+  right: 24px;
+  bottom: 16px;
+  min-width: 104px;
+  color: var(--geometry-panel-muted);
+  border: 0;
+  background: transparent;
+}
+
+.geometry-command-deck .geometry-canvas-orientation {
+  right: 30px;
+  bottom: 64px;
+}
+
+.geometry-command-deck .geometry-empty-draft {
+  z-index: 18;
+  border-color: var(--deck-border);
+  border-radius: var(--deck-radius);
+  background: var(--deck-surface-strong);
+  box-shadow: var(--deck-shadow);
+}
+
+.geometry-command-deck .geometry-empty-draft .ui-button-primary {
+  color: white;
+  border-color: var(--geometry-selection);
+  background: var(--geometry-selection);
+}
+
+.geometry-command-deck .geometry-readonly-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+  background: var(--geometry-canvas);
+}
+
+@media (max-width: 1180px) {
+  .geometry-deck-commandbar {
+    grid-template-columns: auto minmax(120px, 1fr) auto;
+  }
+
+  .geometry-deck-saved {
+    display: none;
+  }
+
+  .geometry-deck-draft-status {
+    max-width: 150px;
+  }
+
+  .geometry-deck-breadcrumb span:nth-of-type(1),
+  .geometry-deck-breadcrumb svg:nth-of-type(1) {
+    display: none;
+  }
+
+  .geometry-deck-action {
+    padding-inline: 7px;
+  }
+
+  .geometry-deck-navigator {
+    left: 14px;
+    width: 205px;
+  }
+
+  .geometry-deck-inspector {
+    right: 14px;
+    width: 220px;
+  }
+
+  .geometry-ai-draft-dialog {
+    width: min(430px, calc(100% - 470px));
+    min-width: 390px;
+  }
+
+  .geometry-tool-dock button {
+    width: 51px;
+  }
+}
+
+@media (max-width: 900px) {
+  .geometry-command-deck {
+    min-height: 720px;
+  }
+
+  .geometry-deck-commandbar {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .geometry-deck-breadcrumb {
+    display: none;
+  }
+
+  .geometry-deck-brand {
+    border-right: 0;
+  }
+
+  .geometry-deck-action {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .geometry-deck-action svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .geometry-deck-navigator {
+    top: 12px;
+    left: 12px;
+    width: 188px;
+  }
+
+  .geometry-deck-zone-list button:nth-of-type(n + 4) {
+    display: none;
+  }
+
+  .geometry-deck-inspector {
+    top: 12px;
+    right: 12px;
+    width: 205px;
+  }
+
+  .geometry-ai-draft-dialog {
+    top: 184px;
+    width: min(440px, calc(100% - 48px));
+    min-width: 0;
+  }
+
+  .geometry-tool-dock {
+    bottom: 48px;
+    max-width: calc(100% - 24px);
+    overflow-x: auto;
+  }
+
+  .geometry-tool-dock button {
+    width: 48px;
+    flex: 0 0 48px;
+  }
+
+  .geometry-vertical-tool-options {
+    bottom: 112px;
+    width: min(390px, calc(100% - 430px));
+    min-width: 300px;
+  }
+}
+
+@media (max-width: 640px) {
+  .geometry-deck-brand strong {
+    display: none;
+  }
+
+  .geometry-deck-divider,
+  .geometry-deck-actions > .ui-icon-button:first-child,
+  .geometry-deck-actions > .ui-icon-button:nth-child(2) {
+    display: none;
+  }
+
+  .geometry-deck-navigator {
+    width: 176px;
+  }
+
+  .geometry-deck-inspector {
+    display: none;
+  }
+
+  .geometry-vertical-tool-options {
+    right: 12px;
+    bottom: 112px;
+    left: 12px;
+    width: auto;
+    min-width: 0;
+    transform: none;
+  }
+
+  .geometry-ai-draft-dialog {
+    top: 164px;
+  }
+
+  .geometry-ai-draft-body {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .geometry-ai-receipt {
+    display: grid;
+  }
+
+  .geometry-ai-receipt > svg {
+    transform: rotate(90deg);
+  }
+
+  .geometry-deck-status span {
+    display: none;
+  }
+
+  .geometry-deck-draft-status {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geometry-command-deck *,
+  .geometry-command-deck *::before,
+  .geometry-command-deck *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .geometry-deck-commandbar,
+  .geometry-deck-island,
+  .geometry-ai-draft-dialog,
+  .geometry-deck-status,
+  .geometry-deck-evidence,
+  .geometry-deck-menu,
+  .geometry-deck-layer-popover {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .geometry-tool-dock button[aria-pressed="true"],
+  .geometry-deck-zone-list button[aria-pressed="true"],
+  .geometry-deck-mode-tabs button[aria-selected="true"] {
+    color: HighlightText;
+    background: Highlight;
+  }
+}
+
+/* Geometry Workbench: the selected floating-canvas composition. */
+.geometry-project-page {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.geometry-quality-harness {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-app);
+}
+
+.geometry-quality-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.geometry-quality-layout > .geometry-workbench {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.geometry-quality-assistant {
+  width: 380px;
+  max-width: 40vw;
+  height: 100%;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 40;
+}
+
+.geometry-quality-assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.geometry-quality-assistant-header strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.geometry-quality-assistant-header button {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.geometry-quality-assistant-header button:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.geometry-project-page > .ui-inline-notice {
+  flex: 0 0 auto;
+  margin: 8px 12px 0;
+}
+
+.geometry-project-page > .ui-disclosure {
+  flex: 0 0 auto;
+  margin: 0 12px 10px;
+}
+
+.geometry-workbench {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 620px;
+  overflow: hidden;
+  color: var(--geometry-panel-text);
+  background: var(--geometry-canvas);
+}
+
+.geometry-workbench-header {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 16px;
+  flex: 0 0 58px;
+  padding: 7px 14px;
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-panel) 96%, var(--geometry-canvas));
+  border-bottom: 1px solid var(--geometry-panel-border);
+  box-shadow: 0 2px 18px color-mix(in srgb, var(--geometry-line) 8%, transparent);
+}
+
+.geometry-project-identity,
+.geometry-header-actions,
+.geometry-mode-tabs,
+.geometry-panel-header,
+.geometry-command-line,
+.geometry-canvas-footer,
+.geometry-project-identity > div {
+  display: flex;
+  align-items: center;
+}
+
+.geometry-project-identity {
+  min-width: 0;
+  gap: 10px;
+}
+
+.geometry-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--geometry-selection);
+  border: 1px solid var(--geometry-panel-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--geometry-canvas) 55%, transparent);
+}
+
+.geometry-project-identity > div {
+  align-items: flex-start;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.geometry-project-identity strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-project-identity span,
+.geometry-command-line small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.69rem;
+}
+
+.geometry-mode-tabs {
+  justify-content: center;
+  padding: 3px;
+  background: color-mix(in srgb, var(--geometry-canvas) 46%, transparent);
+  border: 1px solid var(--geometry-panel-border);
+  border-radius: 10px;
+}
+
+.geometry-mode-tabs button {
+  min-height: 30px;
+  padding: 0 12px;
+  color: var(--geometry-panel-muted);
+  background: transparent;
+  border-radius: 7px;
+  font-size: 0.76rem;
+}
+
+.geometry-mode-tabs button[aria-selected="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 15%, var(--geometry-panel));
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--geometry-line) 10%, transparent);
+  font-weight: 700;
+}
+
+.geometry-header-actions {
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 3px;
+}
+
+.geometry-workbench .ui-icon-button,
+.geometry-workbench .ui-button {
+  color: var(--geometry-panel-text);
+  border-color: transparent;
+  background: transparent;
+}
+
+.geometry-workbench .ui-icon-button:hover:not(:disabled),
+.geometry-workbench .ui-button:hover:not(:disabled) {
+  color: var(--geometry-panel-text);
+  border-color: var(--geometry-panel-border);
+  background: color-mix(in srgb, var(--geometry-selection) 12%, transparent);
+}
+
+.geometry-review-button.ui-button {
+  min-height: 32px;
+  margin-left: 6px;
+  padding-inline: 11px;
+  border-color: color-mix(in srgb, var(--geometry-selection) 48%, var(--geometry-panel-border));
+  background: color-mix(in srgb, var(--geometry-selection) 12%, var(--geometry-panel));
+  font-size: 0.76rem;
+}
+
+.geometry-stage-shell {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.geometry-konva-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  outline: none;
+  cursor: crosshair;
+}
+
+.geometry-konva-root[data-tool="select"] {
+  cursor: default;
+}
+
+.geometry-konva-root[data-tool="pan"] {
+  cursor: grab;
+}
+
+.geometry-konva-root[data-tool="calibrate_underlay"] {
+  cursor: crosshair;
+}
+
+.geometry-konva-root[data-tool="pan"]:active {
+  cursor: grabbing;
+}
+
+.geometry-konva-root:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--geometry-selection);
+}
+
+.geometry-canvas-scale {
+  position: absolute;
+  right: 18px;
+  bottom: 42px;
+  z-index: 3;
+  display: grid;
+  justify-items: end;
+  min-width: 92px;
+  padding: 5px 8px 7px;
+  color: var(--geometry-panel-muted);
+  background: color-mix(in srgb, var(--geometry-panel) 78%, transparent);
+  border: 1px solid var(--geometry-panel-border);
+  border-radius: 5px;
+  font-size: 0.66rem;
+  pointer-events: none;
+}
+
+.geometry-scale-caption {
+  margin-bottom: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.geometry-scale-line {
+  display: block;
+  max-width: 180px;
+  min-width: 40px;
+  height: 7px;
+  border: solid var(--geometry-panel-text);
+  border-width: 0 1px 1px;
+}
+
+.geometry-canvas-orientation {
+  position: absolute;
+  right: 24px;
+  bottom: 92px;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  color: var(--geometry-panel-text);
+  font-size: 0.64rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.geometry-canvas-orientation svg {
+  transform: rotate(-45deg);
+}
+
+.geometry-empty-draft {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  width: min(480px, calc(100% - 80px));
+  justify-items: center;
+  padding: 30px 34px;
+  text-align: center;
+  background: color-mix(in srgb, var(--geometry-panel) 94%, transparent);
+  border: 1px solid var(--geometry-panel-border);
+  border-radius: 14px;
+  box-shadow: var(--geometry-panel-shadow);
+  transform: translate(-50%, -50%);
+}
+
+.geometry-empty-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  color: var(--geometry-selection);
+  background: color-mix(in srgb, var(--geometry-selection) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 35%, transparent);
+  border-radius: 14px;
+}
+
+.geometry-empty-draft h2 {
+  margin: 16px 0 7px;
+  color: var(--geometry-panel-text);
+  font-size: 1.2rem;
+}
+
+.geometry-empty-draft p {
+  max-width: 390px;
+  margin: 0;
+  color: var(--geometry-panel-muted);
+  line-height: 1.55;
+}
+
+.geometry-empty-draft > div:not(.geometry-empty-icon) {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.geometry-empty-draft .ui-button-primary {
+  color: var(--geometry-panel);
+  border-color: var(--geometry-selection);
+  background: var(--geometry-selection);
+}
+
+.geometry-empty-draft small {
+  margin-top: 14px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.69rem;
+}
+
+.geometry-floating-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 56px);
+  overflow: hidden;
+  color: var(--geometry-panel-text);
+  background: var(--geometry-panel);
+  border: 1px solid var(--geometry-panel-border);
+  border-radius: 11px;
+  box-shadow: var(--geometry-panel-shadow);
+  backdrop-filter: blur(15px) saturate(118%);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.geometry-floating-panel:focus-within,
+.geometry-floating-panel:hover {
+  border-color: color-mix(in srgb, var(--geometry-selection) 38%, var(--geometry-panel-border));
+}
+
+.geometry-floating-panel.is-collapsed {
+  height: 42px;
+}
+
+.geometry-panel-header {
+  justify-content: flex-start;
+  gap: 7px;
+  flex: 0 0 41px;
+  min-width: 0;
+  padding: 0 7px 0 11px;
+  border-bottom: 1px solid var(--geometry-panel-border);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.geometry-panel-header:active {
+  cursor: grabbing;
+}
+
+.geometry-panel-header > span {
+  display: grid;
+  place-items: center;
+  color: var(--geometry-selection);
+}
+
+.geometry-panel-header strong {
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-panel-header > svg {
+  color: var(--geometry-panel-muted);
+}
+
+.geometry-panel-header .ui-icon-button {
+  width: 26px;
+  height: 26px;
+}
+
+.geometry-panel-header .is-rotated {
+  transform: rotate(-90deg);
+}
+
+.geometry-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.geometry-panel-modeling-tools .geometry-panel-header {
+  display: none;
+}
+
+.geometry-panel-modeling-tools .geometry-panel-body {
+  overflow: hidden;
+}
+
+.geometry-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(52px, 1fr));
+  gap: 2px;
+  padding: 6px;
+}
+
+.geometry-tool-grid button {
+  display: grid;
+  min-width: 0;
+  min-height: 57px;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  color: var(--geometry-panel-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.geometry-tool-grid button span {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-tool-grid button:hover:not(:disabled),
+.geometry-tool-grid button[aria-pressed="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 12%, transparent);
+  border-color: color-mix(in srgb, var(--geometry-selection) 30%, transparent);
+}
+
+.geometry-tool-grid button[aria-pressed="true"] {
+  box-shadow: inset 0 -2px var(--geometry-selection);
+}
+
+.geometry-panel-section + .geometry-panel-section {
+  border-top: 1px solid var(--geometry-panel-border);
+}
+
+.geometry-section-label {
+  display: block;
+  padding: 9px 11px 5px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.geometry-level-list,
+.geometry-zone-list,
+.geometry-layer-list,
+.geometry-theme-list,
+.geometry-flow-list,
+.geometry-validation-summary,
+.geometry-evidence {
+  display: grid;
+}
+
+.geometry-level-list button,
+.geometry-zone-list button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  color: var(--geometry-panel-muted);
+  text-align: left;
+  background: transparent;
+  border-left: 3px solid transparent;
+}
+
+.geometry-level-list button:hover,
+.geometry-zone-list button:hover,
+.geometry-level-list button[aria-pressed="true"],
+.geometry-zone-list button[aria-pressed="true"] {
+  color: var(--geometry-panel-text);
+  background: color-mix(in srgb, var(--geometry-selection) 10%, transparent);
+}
+
+.geometry-level-list button[aria-pressed="true"],
+.geometry-zone-list button[aria-pressed="true"] {
+  border-left-color: var(--geometry-selection);
+}
+
+.geometry-level-list button small,
+.geometry-zone-list button small {
+  margin-left: auto;
+  color: var(--geometry-panel-muted);
+  font-size: 0.63rem;
+}
+
+.geometry-zone-list button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-zone-list button small.is-bound {
+  color: var(--geometry-opening);
+}
+
+.geometry-level-list p {
+  margin: 7px 11px 12px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.72rem;
+}
+
+.geometry-layer-list {
+  gap: 1px;
+  padding: 8px;
+}
+
+.geometry-layer-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 5px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.72rem;
+}
+
+.geometry-layer-list input {
+  accent-color: var(--geometry-selection);
+}
+
+.geometry-theme-list {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  padding: 7px;
+}
+
+.geometry-theme-list button {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px;
+  color: var(--geometry-panel-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 0.59rem;
+  line-height: 1.2;
+}
+
+.geometry-theme-list button[aria-pressed="true"] {
+  color: var(--geometry-panel-text);
+  border-color: var(--geometry-selection);
+  background: color-mix(in srgb, var(--geometry-selection) 9%, transparent);
+}
+
+.geometry-theme-swatch {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  width: 100%;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid var(--geometry-panel-border);
+  border-radius: 4px;
+}
+
+.geometry-theme-swatch i {
+  display: block;
+}
+
+.geometry-inspector-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--geometry-panel-border);
+}
+
+.geometry-inspector-tabs button {
+  min-height: 32px;
+  padding: 0 3px;
+  color: var(--geometry-panel-muted);
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  font-size: 0.65rem;
+}
+
+.geometry-inspector-tabs button[aria-selected="true"] {
+  color: var(--geometry-panel-text);
+  border-bottom-color: var(--geometry-selection);
+}
+
+.geometry-property-list {
+  margin: 0;
+}
+
+.geometry-property-list > div,
+.geometry-evidence > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.8fr) minmax(0, 1.2fr);
+  gap: 9px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--geometry-panel-border);
+}
+
+.geometry-property-list dt,
+.geometry-evidence span {
+  color: var(--geometry-panel-muted);
+  font-size: 0.68rem;
+}
+
+.geometry-property-list dd,
+.geometry-evidence code,
+.geometry-evidence strong {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--geometry-panel-text);
+  font-size: 0.7rem;
+}
+
+.geometry-inspector-empty,
+.geometry-flow-list p,
+.geometry-evidence p {
+  margin: 0;
+  padding: 13px 11px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.geometry-flow-list label {
+  display: grid;
+  gap: 6px;
+  padding: 11px;
+  color: var(--geometry-panel-muted);
+  font-size: 0.7rem;
+}
+
+.geometry-flow-list select {
+  width: 100%;
+  min-height: 32px;
+  padding-inline: 7px;
+  color: var(--geometry-panel-text);
+  background: var(--geometry-panel);
+  border: 1px solid var(--geometry-panel-border);
+  border-radius: 6px;
+}
+
+.geometry-validation-summary {
+  gap: 7px;
+  padding: 12px 11px;
+}
+
+.geometry-validation-summary > svg {
+  color: var(--geometry-selection);
+}
+
+.geometry-validation-summary strong {
+  font-size: 0.77rem;
+}
+
+.geometry-validation-summary span,
+.geometry-validation-summary code {
+  color: var(--geometry-panel-muted);
+  font-size: 0.67rem;
+}
+
+.geometry-inspector-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px;
+  border-top: 1px solid var(--geometry-panel-border);
+}
+
+.geometry-command-line {
+  gap: 9px;
+  min-height: 100%;
+  padding: 10px 12px;
+}
+
+.geometry-command-line > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--geometry-opening);
+  background: color-mix(in srgb, var(--geometry-opening) 11%, transparent);
+  border-radius: 50%;
+}
+
+.geometry-command-line.has-issue > span {
+  color: var(--geometry-flow);
+  background: color-mix(in srgb, var(--geometry-flow) 12%, transparent);
+}
+
+.geometry-command-line > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.geometry-command-line strong {
+  overflow: hidden;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-canvas-footer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 12;
+  gap: 16px;
+  min-height: 30px;
+  padding: 0 14px;
+  color: var(--geometry-panel-muted);
+  background: color-mix(in srgb, var(--geometry-panel) 91%, transparent);
+  border-top: 1px solid var(--geometry-panel-border);
+  backdrop-filter: blur(12px);
+  font-size: 0.65rem;
+}
+
+.geometry-canvas-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.geometry-canvas-footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin-left: auto;
+  color: var(--geometry-panel-muted);
+  background: transparent;
+}
+
+.geometry-canvas-footer button + button {
+  margin-left: 0;
+}
+
+.geometry-readonly-view {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+  background: var(--surface-subtle);
+}
+
+.geometry-readonly-view .visual-model-workspace {
+  position: relative;
+  min-height: 0;
+  border-radius: 10px;
+}
+
+.geometry-readonly-view .visual-projection-preview-status {
+  position: absolute;
+  z-index: 6;
+  top: 82px;
+  left: 12px;
+  display: grid;
+  width: min(360px, calc(100% - 24px));
+  gap: 3px;
+  padding: 10px 12px;
+  color: var(--geometry-panel-text);
+  border: 1px solid color-mix(in srgb, var(--geometry-selection) 26%, var(--deck-border));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--deck-surface-strong) 94%, transparent);
+  box-shadow: var(--deck-shadow);
+  backdrop-filter: blur(16px) saturate(120%);
+  pointer-events: auto;
+}
+
+.geometry-readonly-view .visual-projection-preview-status strong {
+  font-size: 0.78rem;
+}
+
+.geometry-readonly-view .visual-projection-preview-status span,
+.geometry-readonly-view .visual-projection-preview-status small {
+  color: var(--geometry-panel-muted);
+  font-size: 0.7rem;
+}
+
+.geometry-readonly-view .visual-projection-preview-status.is-blocked {
+  border-color: color-mix(in srgb, var(--status-warning) 48%, var(--deck-border));
+}
+
+.geometry-readonly-view .visual-projection-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 5px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--deck-border) 72%, transparent);
+}
+
+.geometry-readonly-view .visual-projection-preview-actions .ui-button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
+
+.geometry-readonly-view .visual-projection-preview-actions small {
+  line-height: 1.35;
+}
+
+@media (max-width: 1180px) {
+  .geometry-workbench-header {
+    grid-template-columns: minmax(170px, 1fr) auto;
+  }
+
+  .geometry-mode-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+  }
+
+  .geometry-workbench-header {
+    flex-basis: 92px;
+  }
+
+  .geometry-header-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .geometry-panel-modeling-tools {
+    width: min(520px, calc(100% - 40px)) !important;
+  }
+}
+
+@media (max-width: 840px) {
+  .geometry-workbench {
+    min-height: 720px;
+    overflow: auto;
+  }
+
+  .geometry-workbench-header {
+    position: sticky;
+    top: 0;
+    grid-template-columns: minmax(0, 1fr);
+    flex-basis: auto;
+    padding: 8px;
+  }
+
+  .geometry-project-identity,
+  .geometry-header-actions,
+  .geometry-mode-tabs {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .geometry-header-actions {
+    justify-content: flex-start;
+  }
+
+  .geometry-stage-shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    flex: 0 0 auto;
+    min-height: 940px;
+    overflow: visible;
+  }
+
+  .geometry-konva-root {
+    position: relative;
+    min-height: 500px;
+  }
+
+  .geometry-floating-panel {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    z-index: auto !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 42px !important;
+    max-height: none;
+    margin: 8px 10px 0;
+  }
+
+  .geometry-panel-modeling-tools {
+    grid-row: 1;
+  }
+
+  .geometry-tool-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .geometry-canvas-footer {
+    position: relative;
+    flex-wrap: wrap;
+    min-height: 42px;
+    margin-top: 8px;
+    padding-block: 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geometry-workbench *,
+  .geometry-workbench *::before,
+  .geometry-workbench *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .geometry-workbench,
+  .geometry-workbench-header,
+  .geometry-floating-panel,
+  .geometry-empty-draft,
+  .geometry-canvas-footer {
+    color: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+    backdrop-filter: none;
+  }
+
+  .geometry-tool-grid button[aria-pressed="true"],
+  .geometry-mode-tabs button[aria-selected="true"],
+  .geometry-theme-list button[aria-pressed="true"] {
+    color: HighlightText;
+    background: Highlight;
+    border-color: HighlightText;
+  }
+}
+
+/* Command Deck legibility overrides must follow the retained legacy canvas primitives. */
+.geometry-command-deck .geometry-ai-intent > .ui-button-primary {
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  color: #fff;
+  border-color: var(--geometry-selection);
+  border-radius: 8px;
+  background: var(--geometry-selection);
+  font-size: 0.72rem;
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--geometry-selection) 22%, transparent);
+}
+
+.geometry-command-deck .geometry-ai-intent > .ui-button-primary:hover:not(:disabled) {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--geometry-selection) 80%, black);
+  background: color-mix(in srgb, var(--geometry-selection) 88%, black);
+}
+
+.geometry-command-deck .geometry-ai-intent > .ui-button-primary:disabled {
+  color: var(--geometry-panel-muted);
+  border-color: var(--deck-border);
+  background: color-mix(in srgb, var(--geometry-panel-muted) 9%, var(--geometry-panel));
+  box-shadow: none;
+}
+
+.geometry-command-deck .geometry-deck-zone-list small,
+.geometry-command-deck .geometry-deck-mode-tabs button,
+.geometry-command-deck .geometry-tool-dock button span,
+.geometry-command-deck .geometry-deck-inspector > header span,
+.geometry-command-deck .geometry-deck-property-list dt,
+.geometry-command-deck .geometry-deck-details-toggle,
+.geometry-command-deck .geometry-ai-intent > label,
+.geometry-command-deck .geometry-ai-secondary-actions button,
+.geometry-command-deck .geometry-deck-status strong,
+.geometry-command-deck .geometry-deck-status span,
+.geometry-command-deck .geometry-ai-draft-badge {
+  font-size: 0.66rem;
+}
+
+.geometry-command-deck .geometry-deck-property-list dd,
+.geometry-command-deck .geometry-ai-intent textarea {
+  font-size: 0.72rem;
+}
+
+.geometry-command-deck .geometry-ai-receipt > div > span,
+.geometry-command-deck .geometry-ai-receipt > div > strong,
+.geometry-command-deck .geometry-ai-boundary,
+.geometry-command-deck .geometry-ai-source-placeholder span,
+.geometry-command-deck .geometry-ai-source > button {
+  font-size: 0.64rem;
+}
+
+.geometry-command-deck .geometry-ai-draft-dialog > header span {
+  font-size: 0.62rem;
+}

@@ -395,7 +395,7 @@ def test_volume_token_and_request_size_limits_are_enforced() -> None:
     envelope = handle_request(request)
     assert envelope["ok"] is False
     assert envelope["error"]["code"] == "bridge_request_invalid"
-    assert MAX_REQUEST_BYTES == 128 * 1024
+    assert MAX_REQUEST_BYTES == 3 * 1024 * 1024
 
 
 def test_semantic_snapshot_is_path_free_and_includes_supported_tree() -> None:

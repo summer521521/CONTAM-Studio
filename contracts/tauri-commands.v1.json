@@ -78,6 +78,41 @@
       "payload_keys": ["requestId", "projectSessionId", "revisionId"]
     },
     {
+      "command": "export_semantic_authoring_draft_copy",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "exportSemanticAuthoringDraftCopy",
+      "permission": "allow-export-semantic-authoring-draft-copy",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId"]
+    },
+    {
+      "command": "load_project_geometry_document",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "loadProjectGeometryDocument",
+      "permission": "allow-load-project-geometry-document",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId"]
+    },
+    {
+      "command": "save_project_geometry_document",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "saveProjectGeometryDocument",
+      "permission": "allow-save-project-geometry-document",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "geometry", "semanticDraft", "expectedDocumentRevision"]
+    },
+    {
+      "command": "select_and_import_geometry_underlay",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "selectAndImportGeometryUnderlay",
+      "permission": "allow-select-and-import-geometry-underlay",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId"]
+    },
+    {
+      "command": "read_geometry_underlay_resource",
+      "rust_module": "zone_bridge",
+      "ts_wrapper": "readGeometryUnderlayResource",
+      "permission": "allow-read-geometry-underlay-resource",
+      "payload_keys": ["request"]
+    },
+    {
       "command": "select_and_extract_zone_air_state",
       "rust_module": "zone_bridge",
       "ts_wrapper": "selectAndExtractZoneAirState",
@@ -321,6 +356,13 @@
       "ts_wrapper": "startReadonlyAiTurn",
       "permission": "allow-start-readonly-ai-turn",
       "payload_keys": ["requestId", "providerProfileId", "projectSessionId", "revisionId", "zoneId", "previewId", "question", "scopes", "language", "modelId", "reasoningEffort", "analysisSelection"]
+    },
+    {
+      "command": "generate_geometry_draft_from_image",
+      "rust_module": "codex_app_server",
+      "ts_wrapper": "generateGeometryDraftFromImage",
+      "permission": "allow-generate-geometry-draft-from-image",
+      "payload_keys": ["requestId", "projectSessionId", "revisionId", "attachmentId", "geometry", "prompt", "language"]
     },
     {
       "command": "load_ai_conversation_archive",

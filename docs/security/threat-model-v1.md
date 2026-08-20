@@ -30,6 +30,13 @@
 - 多 Zone 结果只由 Rust 通过既有 SimRead 链路生成，并绑定 project session、source hash、Revision、run、manifest 和 extraction identity。Zone、样本和 payload 有明确上限；取消和 late response 不能覆盖当前结果，身份不匹配不能降级为 partial。
 - Evidence Lineage 只消费受控状态和安全短身份，不读取任意 manifest 或显示绝对路径；链路不完整时不能宣称完整验证。AI Context Receipt 明确排除凭据、绝对路径、原始 PRJ 和完整结果序列，dataset fingerprint、指标或时刻不匹配时 fail-closed。
 - AI 意图不扩大权限。AI 建议只进入已有 Semantic Patch Review、Diff、确定性验证和用户确认；结果图、空间画布和助手均不能直接写 PRJ。
+- 几何读图是单独的显式披露：只有用户选中的 Studio 隔离 PNG/JPEG、重新校验的哈希/大小/签名和一次性 `localImage` 会进入 Codex Luna。模型只可返回封闭的加法几何草案；项目/Revision/几何/附件绑定、工具阻断、本地预览和第二次用户确认任一失败都整体丢弃，图片路径和像素不返回 WebView。
+- Studio metric 几何只进入 Rust 固定管理的 `<app-local-data>/geometry-documents`。文件名来自已验证 PRJ 基线 SHA-256，WebView 不能提供路径；严格信封、payload 上限、canonical hash、文档修订、进程内写入串行化、临时文件、写后重读和一代有效备份共同阻止路径注入、部分写入、并发覆盖和损坏主文件取代恢复证据。项目 session、source hash 或 Revision 改变后，迟到 load/save 被拒绝。
+- 建筑底图只允许通过原生对话框导入 PNG、JPEG 或 PDF，并先进入既有附件隔离检查。Rust 使用基线 SHA-256 和 UUID 资源 ID 固定构造 `<app-local-data>/geometry-underlays` 路径；WebView 不能传入路径。导入、读取和几何保存都核验项目 session、Revision、目录边界、普通文件、大小、魔数和 SHA-256。PDF.js 只接收 Rust 返回的有界字节并在本地渲染指定页面，不读取任意 URL。
+- 底图进入附件中心时固定 `selected_by_user=false`。导入、显示或校准均不构成联网披露；只有用户另行选择图片、查看 AI 边界并触发几何草案，既有原生授权、哈希绑定、本地验证和二次确认才允许像素进入 Codex。
+- 墙上和跨层 FlowPath 锚点不能只凭前端几何关系保存。Rust 只在一次成功且仍属于当前 project session、Revision、identity 与 source hash 的语义读取后保留内存证据；保存时重新解析语义 Zone 编号和 FlowPath `from/to`，要求与开口的室内双 Zone 或 exterior Zone—outdoor 边界完全一致。缺少当前证据、重复身份、未知端点或不一致绑定均 fail-closed，语义快照不写入几何文档。
+- Studio 到 SketchPad 的候选投影固定为有损且不可直接应用；它只读取同一身份下已绑定 Zone 图标并检测最终单元碰撞，预览本身不调用 PRJ Patch planner。用户显式审查后，独立准备边界再次校验 session/source/identity/Revision、ID、非负坐标、变化标记、重复目标、最终单元和 128 操作上限，再只生成已验证的既有图标 column/row 操作。精确 Diff 与第二次用户确认缺一不可；项目切换后的迟到 plan/apply 响应被拒绝。恶意或陈旧几何不能借预览扩大为新增、删除、改类型、跨 Level 或直接写原始 PRJ 的权限。
+- 新建 CONTAM Zone/Airflow Path 先进入与 `geometry_document.v1` 同事务保存的 `contam_semantic_draft.v1`，不直接写 PRJ。导出命令不接受前端路径；Rust 通过原生对话框选择不存在的新 `.prj`，重新加载当前持久化语义草稿并绑定 session、identity、source hash 与 Revision。Python Worker 只能编辑已验证的 Zone、Initial Zone Concentration 与 Flow Path 区段；Rust 再核对返回字段、对象 ID/编号、文件 SHA-256/大小、源未变化及草稿未过期。失败后只删除哈希与大小均匹配的本次输出，防止竞态删除他人文件。`sketchpad_geometry_written` 必须为 false，恶意 Worker 不能借“语义导出”宣称或写入未验证的 ContamW 建筑几何。
 - 模型缓存只包含目录元数据并带 TTL/过期标记。Credential Manager 中的 API Key 不进入 Profile、Archive、日志、目录缓存或前端状态；重定向、非白名单端点、超限响应、401/403/429 和超时均由统一 HTTP 边界拒绝或结构化报告。
 - 本地数据统计只访问明确白名单类别，使用符号链接元数据跳过链接，不读取正文，不提供删除按钮；项目草稿、运行记录、研究任务和报告不因统计功能被删除或覆盖。
 
@@ -43,3 +50,4 @@
 2. 清单哈希不匹配时进入 recovery/read-only，不自动删除唯一证据。
 3. 附件解析失败只删除 Studio-owned quarantine 副本，不触碰外部来源。
 4. AI Trace/历史损坏时停止回放，保留原始审计清单并允许用户显式删除。
+5. Studio 几何主文档损坏时只恢复通过完整合同和哈希验证的一代备份；主文件与备份均无效时停止恢复并显示错误，不创建空模型覆盖证据。

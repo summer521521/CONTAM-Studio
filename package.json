@@ -25,6 +25,7 @@
     "i18next": "^26.3.6",
     "konva": "10.3.0",
     "lucide-react": "^1.24.0",
+    "pdfjs-dist": "6.2.108",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.10",

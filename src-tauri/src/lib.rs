@@ -1,7 +1,9 @@
 mod ai_provider;
 mod close_protocol;
 mod codex_app_server;
+mod contam_semantic_contract;
 mod controlled_process;
+mod geometry_contract;
 mod release;
 mod zone_bridge;
 
@@ -28,6 +30,11 @@ pub fn run() {
             zone_bridge::undo_project_draft,
             zone_bridge::redo_project_draft,
             zone_bridge::export_active_project_draft_copy,
+            zone_bridge::export_semantic_authoring_draft_copy,
+            zone_bridge::load_project_geometry_document,
+            zone_bridge::save_project_geometry_document,
+            zone_bridge::select_and_import_geometry_underlay,
+            zone_bridge::read_geometry_underlay_resource,
             zone_bridge::select_and_extract_zone_air_state,
             zone_bridge::extract_active_run_zone_air_state,
             zone_bridge::extract_active_run_zone_air_state_dataset,
@@ -53,6 +60,7 @@ pub fn run() {
             codex_app_server::refresh_codex_account,
             codex_app_server::preview_ai_context,
             codex_app_server::start_readonly_ai_turn,
+            codex_app_server::generate_geometry_draft_from_image,
             codex_app_server::load_ai_conversation_archive,
             codex_app_server::set_ai_conversation_archive_enabled,
             codex_app_server::delete_ai_conversation_archive_entry,

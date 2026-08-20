@@ -20,7 +20,7 @@ def write_nfr(path: Path, body: str) -> Path:
 def test_parse_zone_air_state_converts_units_and_preserves_order(tmp_path: Path) -> None:
     path = write_nfr(
         tmp_path / "model.nfr",
-        "1/1\t00:00:00\t1\t20.000\t -1.4222e+00\t1.2041\n1/1\t00:05:00\t1\t21.000\t0\t1.2\n",
+        "1/1\t00:00:00\t1\t  20.000  \t -1.4222e+00 \t 1.2041 \n1/1\t00:05:00\t1\t21.000\t0\t1.2\n",
     )
     samples = parse_zone_air_state(path, 1)
     assert len(samples) == 2
@@ -70,7 +70,8 @@ def test_diagnostic_is_json_serializable() -> None:
         HEADER + "1/1\t24:01:00\t1\t20\t0\t1\n",
         HEADER + "1/1\t00:00:00\t1\t20\t0\t1\n1/1\t00:00:00\t1\t20\t0\t1\n",
         HEADER + "1/1\t00:05:00\t1\t20\t0\t1\n1/1\t00:00:00\t1\t20\t0\t1\n",
-        HEADER + "1/1\t00:00:00\t1\t20  \t0\t1\n",
+        HEADER + "1/1\t00:00:00\t1\t2 0\t0\t1\n",
+        HEADER + "1/1\t00:00:00\t1\t1 .2\t0\t1\n",
     ],
 )
 def test_parse_zone_air_state_rejects_strict_contract_edges(tmp_path: Path, content: str) -> None:
@@ -82,7 +83,7 @@ def test_parse_zone_air_state_rejects_strict_contract_edges(tmp_path: Path, cont
 
 def test_parse_zone_air_state_accepts_crlf(tmp_path: Path) -> None:
     path = tmp_path / "crlf.nfr"
-    path.write_bytes((HEADER + "1/1\t00:00:00\t1\t20\t0\t1\r\n").encode("ascii"))
+    path.write_bytes((HEADER + "1/1\t00:00:00\t1\t 20 \t 0 \t 1 \r\n").encode("ascii"))
     assert parse_zone_air_state(path, 1)[0].day_type is None
 
 

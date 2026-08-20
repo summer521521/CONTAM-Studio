@@ -2,6 +2,11 @@ import type { ReaderDiagnostic } from "./project-state";
 
 export type ZoneResultStatus = "idle" | "selecting" | "loading" | "loaded" | "cancelled" | "error";
 export type ResultLoadSource = "active_run" | "selected_manifest";
+export const SIMREAD_NODE_AIR_STATE_UNAVAILABLE = "simread_node_air_state_unavailable";
+
+export function isSimReadNodeAirStateUnavailable(code: string | null | undefined): boolean {
+  return code === SIMREAD_NODE_AIR_STATE_UNAVAILABLE;
+}
 
 export interface ZoneAirStateSample {
   index: number;

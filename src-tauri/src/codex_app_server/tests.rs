@@ -712,6 +712,7 @@ fn model_catalog_preserves_server_order_and_skips_hidden_models() {
                     "displayName": "Visible Model",
                     "hidden": false,
                     "isDefault": true,
+                    "inputModalities": ["text", "image"],
                     "defaultReasoningEffort": "low",
                     "supportedReasoningEfforts": [
                         {"reasoningEffort": "low", "description": "Low"},
@@ -736,6 +737,7 @@ fn model_catalog_preserves_server_order_and_skips_hidden_models() {
     assert_eq!(cursor.as_deref(), Some("page-2"));
     assert_eq!(models.len(), 1);
     assert_eq!(models[0].id, "visible-model");
+    assert_eq!(models[0].input_modalities, vec!["text", "image"]);
     assert_eq!(
         models[0]
             .reasoning_efforts
@@ -762,6 +764,15 @@ fn model_catalog_rejects_unknown_default_effort_and_unsafe_ids() {
                 "model": "safe-model",
                 "displayName": "Safe",
                 "defaultReasoningEffort": "ultra",
+                "supportedReasoningEfforts": [{"reasoningEffort": "low"}]
+            }]
+        }),
+        json!({
+            "data": [{
+                "model": "safe-model",
+                "displayName": "Safe",
+                "inputModalities": ["text", "audio"],
+                "defaultReasoningEffort": "low",
                 "supportedReasoningEfforts": [{"reasoningEffort": "low"}]
             }]
         }),
@@ -960,6 +971,7 @@ fn stale_connection_is_cleared_before_a_catalog_can_be_reused() {
             display_name: "Model A".into(),
             is_default: true,
             available: true,
+            input_modalities: vec!["text".into(), "image".into()],
             reasoning_efforts: Vec::new(),
             default_reasoning_effort: "".into(),
         }],
@@ -1419,6 +1431,7 @@ fn context_invalidation_cancels_active_turn_and_keeps_connection_catalog() {
             display_name: "Model A".into(),
             is_default: true,
             available: true,
+            input_modalities: vec!["text".into(), "image".into()],
             reasoning_efforts: vec![CodexReasoningEffortView {
                 id: "low".into(),
                 description: "Low".into(),

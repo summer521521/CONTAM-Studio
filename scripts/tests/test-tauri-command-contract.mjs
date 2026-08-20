@@ -9,7 +9,7 @@ const root = path.resolve(
   rootArgument >= 0 ? process.argv[rootArgument + 1] : process.cwd(),
 );
 const strictGeneratedPermissions = process.argv.includes("--strict-generated-permissions");
-const EXPECTED_COMMAND_COUNT = 65;
+const EXPECTED_COMMAND_COUNT = 71;
 const failures = [];
 
 function read(relativePath) {

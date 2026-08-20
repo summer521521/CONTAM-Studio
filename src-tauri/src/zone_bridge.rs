@@ -14,6 +14,10 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
+use crate::contam_semantic_contract::{
+    contam_semantic_draft_object_ids, contam_semantic_draft_sha256, MAX_SEMANTIC_DRAFT_FLOW_PATHS,
+    MAX_SEMANTIC_DRAFT_ZONES,
+};
 use crate::controlled_process::ControlledChild;
 use crate::release::{resolve_verified_tool_path, ToolKind};
 
@@ -40,7 +44,7 @@ const RUN_TIMEOUT: Duration = Duration::from_secs(75);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MAX_STDOUT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 16 * 1024;
-const MAX_REQUEST_BYTES: usize = 128 * 1024;
+const MAX_REQUEST_BYTES: usize = 3 * 1024 * 1024;
 const MAX_VOLUME_TOKEN_BYTES: usize = 80;
 const MAX_DRAFT_REVISIONS: usize = 32;
 const ZONE_UUID_NAMESPACE: Uuid = Uuid::from_u128(0x0c6dfd5d_98c2_5fb3_a9f3_a72ee89a4471);
@@ -50,9 +54,11 @@ const MAX_DIAGNOSTIC_CODE_BYTES: usize = 80;
 const MAX_DIAGNOSTIC_MESSAGE_CHARS: usize = 160;
 const MAX_CONTEXT_STRING_CHARS: usize = 120;
 const ZONE_RESULT_DATASET_SCHEMA: &str = "zone_result_dataset.v1";
+const SIMREAD_NODE_AIR_STATE_UNAVAILABLE_DIAGNOSTIC: &str = "simread_node_air_state_unavailable";
 const MAX_RESULT_DATASET_ZONES: usize = 64;
 const MAX_RESULT_DATASET_SAMPLES: usize = 250_000;
 const MAX_RESULT_DATASET_PAYLOAD_BYTES: usize = 32 * 1024 * 1024;
+const MAX_SEMANTIC_AUTHORING_EXPORT_BYTES: u64 = 32 * 1024 * 1024;
 const PYTHON_DIAGNOSTIC_MESSAGE: &str = "Python Zone bridge returned a structured diagnostic.";
 const SHA256_INITIAL: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
@@ -587,6 +593,43 @@ pub struct DesktopDraftExportResponse {
     project_session_id: Option<String>,
     export: Option<DraftExportSummary>,
     error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SemanticAuthoringExportSummary {
+    file_name: String,
+    sha256: String,
+    size_bytes: u64,
+    added_zone_count: u64,
+    added_flow_path_count: u64,
+    zone_number_by_id: BTreeMap<String, u64>,
+    flow_path_number_by_id: BTreeMap<String, u64>,
+    sketchpad_geometry_written: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DesktopSemanticAuthoringExportResponse {
+    request_id: String,
+    cancelled: bool,
+    project_session_id: Option<String>,
+    revision_id: Option<String>,
+    export: Option<SemanticAuthoringExportSummary>,
+    error: Option<ReaderDiagnostic>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct RawSemanticAuthoringExportResult {
+    result_type: String,
+    source_sha256: String,
+    output_sha256: String,
+    output_size_bytes: u64,
+    source_unchanged: bool,
+    added_zone_count: u64,
+    added_flow_path_count: u64,
+    zone_number_by_id: BTreeMap<String, u64>,
+    flow_path_number_by_id: BTreeMap<String, u64>,
+    sketchpad_geometry_written: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -1397,6 +1440,7 @@ impl ActiveRunContext {
 #[derive(Default)]
 struct DesktopSessionState {
     active_project: Option<ActiveProjectContext>,
+    trusted_semantic_snapshot: Option<TrustedSemanticSnapshot>,
     planned_patch: Option<PlannedPatchContext>,
     semantic_patch: Option<SemanticPatchContext>,
     active_run: Option<ActiveRunContext>,
@@ -1406,6 +1450,15 @@ struct DesktopSessionState {
     last_trusted_result_dataset: Option<ZoneResultDatasetView>,
     active_study: Option<Value>,
     active_study_control: Option<ActiveStudyControl>,
+}
+
+#[derive(Clone, Debug)]
+struct TrustedSemanticSnapshot {
+    project_session_id: String,
+    revision_id: String,
+    identity_sha256: String,
+    source_sha256: String,
+    snapshot: Value,
 }
 
 #[derive(Default)]
@@ -1460,6 +1513,47 @@ impl DesktopProjectSessionStore {
         }
     }
 
+    pub(crate) fn build_geometry_ai_context(
+        &self,
+        project_session_id: &str,
+        revision_id: &str,
+    ) -> Result<GeometryAiContext, ReaderDiagnostic> {
+        let state = self.state.lock().expect("desktop session mutex poisoned");
+        let active = state.active_project.as_ref().ok_or_else(|| {
+            host_diagnostic(
+                "ai_context_unavailable",
+                "No active project is available for geometry analysis.",
+                BTreeMap::new(),
+            )
+        })?;
+        if active.project_session_id != project_session_id
+            || active.active_revision().revision_id != revision_id
+        {
+            return Err(host_diagnostic(
+                "ai_context_stale",
+                "The project revision changed before geometry analysis.",
+                BTreeMap::new(),
+            ));
+        }
+        Ok(GeometryAiContext {
+            project_session_id: active.project_session_id.clone(),
+            revision_id: active.active_revision().revision_id.clone(),
+            revision_number: active.active_revision().revision_number,
+            source_sha256: active.source_sha256.clone(),
+            identity_sha256: active.baseline_source_sha256.clone(),
+            zones: active
+                .zones
+                .iter()
+                .map(|zone| GeometryAiZoneContext {
+                    zone_id: zone.zone_id.clone(),
+                    contam_number: zone.contam_number,
+                    name: zone.name.clone(),
+                    level_number: zone.level_number,
+                })
+                .collect(),
+        })
+    }
+
     fn try_operation(&self) -> Option<OperationGuard<'_>> {
         self.operation_busy
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -1508,6 +1602,7 @@ impl DesktopProjectSessionStore {
         };
         let mut state = self.state.lock().expect("desktop session mutex poisoned");
         let previous = state.active_project.replace(context);
+        state.trusted_semantic_snapshot = None;
         state.planned_patch = None;
         state.semantic_patch = None;
         state.active_run = None;
@@ -1947,6 +2042,24 @@ pub(crate) struct AiTrustedContext {
     pub(crate) zone_id: String,
     pub(crate) zone_name: String,
     pub(crate) payload: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct GeometryAiZoneContext {
+    pub(crate) zone_id: String,
+    pub(crate) contam_number: i64,
+    pub(crate) name: String,
+    pub(crate) level_number: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct GeometryAiContext {
+    pub(crate) project_session_id: String,
+    pub(crate) revision_id: String,
+    pub(crate) revision_number: u64,
+    pub(crate) source_sha256: String,
+    pub(crate) identity_sha256: String,
+    pub(crate) zones: Vec<GeometryAiZoneContext>,
 }
 
 impl Drop for DesktopProjectSessionStore {
@@ -2994,6 +3107,18 @@ fn semantic_string_is_valid(value: &str, max: usize) -> bool {
         && !value.contains(['\r', '\n', '\0'])
 }
 
+fn semantic_operation_is_supported(value: &str) -> bool {
+    matches!(
+        value,
+        "set_zone_volume"
+            | "set_zone_name"
+            | "set_flow_path_multiplier"
+            | "set_flow_path_coefficient"
+            | "set_spatial_icon_column"
+            | "set_spatial_icon_row"
+    )
+}
+
 fn spatial_string_is_valid(value: &str, max: usize, allow_empty: bool) -> bool {
     (allow_empty || !value.is_empty()) && value.len() <= max && !value.contains(['\r', '\n', '\0'])
 }
@@ -3895,6 +4020,9 @@ fn exact_common_result_times(series: &[ZoneAirStateResultView]) -> ResultTimeIde
 }
 
 fn result_dataset_failure_is_hard(code: &str) -> bool {
+    if code == SIMREAD_NODE_AIR_STATE_UNAVAILABLE_DIAGNOSTIC {
+        return false;
+    }
     code.contains("identity_mismatch")
         || code.contains("project_mismatch")
         || code.contains("source_mismatch")
@@ -4331,13 +4459,44 @@ pub async fn read_semantic_project(
         active
     };
     match semantic_bridge_snapshot(&active, &request_id).await {
-        Ok(snapshot) => DesktopSemanticSnapshotResponse {
-            request_id,
-            project_session_id: Some(project_session_id),
-            revision_id: Some(revision_id),
-            snapshot: Some(snapshot),
-            error: None,
-        },
+        Ok(snapshot) => {
+            let mut state = store.state.lock().expect("desktop session mutex poisoned");
+            let still_current = state.active_project.as_ref().is_some_and(|current| {
+                current.project_session_id == active.project_session_id
+                    && current.active_revision().revision_id == active.active_revision().revision_id
+                    && current
+                        .source_sha256
+                        .eq_ignore_ascii_case(&active.source_sha256)
+                    && current
+                        .baseline_source_sha256
+                        .eq_ignore_ascii_case(&active.baseline_source_sha256)
+                    && active_project_source_matches(current)
+            });
+            if !still_current {
+                return semantic_snapshot_failure(
+                    &request_id,
+                    host_diagnostic(
+                        "project_session_mismatch",
+                        "项目Revision在语义读取期间发生变化。",
+                        BTreeMap::new(),
+                    ),
+                );
+            }
+            state.trusted_semantic_snapshot = Some(TrustedSemanticSnapshot {
+                project_session_id: active.project_session_id.clone(),
+                revision_id: active.active_revision().revision_id.clone(),
+                identity_sha256: active.baseline_source_sha256.clone(),
+                source_sha256: active.source_sha256.clone(),
+                snapshot: snapshot.clone(),
+            });
+            DesktopSemanticSnapshotResponse {
+                request_id,
+                project_session_id: Some(project_session_id),
+                revision_id: Some(revision_id),
+                snapshot: Some(snapshot),
+                error: None,
+            }
+        }
         Err(error) => semantic_snapshot_failure(&request_id, error),
     }
 }
@@ -4439,13 +4598,8 @@ pub async fn plan_semantic_patch(
         );
     };
     for item in &operations {
-        if !matches!(
-            item.operation.as_str(),
-            "set_zone_volume"
-                | "set_zone_name"
-                | "set_flow_path_multiplier"
-                | "set_flow_path_coefficient"
-        ) || !semantic_string_is_valid(&item.object_id, 160)
+        if !semantic_operation_is_supported(&item.operation)
+            || !semantic_string_is_valid(&item.object_id, 160)
             || !semantic_string_is_valid(&item.new_value, 80)
             || item
                 .unit
@@ -6482,6 +6636,20 @@ fn draft_export_failure(request_id: &str, error: ReaderDiagnostic) -> DesktopDra
     }
 }
 
+fn semantic_authoring_export_failure(
+    request_id: &str,
+    error: ReaderDiagnostic,
+) -> DesktopSemanticAuthoringExportResponse {
+    DesktopSemanticAuthoringExportResponse {
+        request_id: request_id.into(),
+        cancelled: false,
+        project_session_id: None,
+        revision_id: None,
+        export: None,
+        error: Some(error),
+    }
+}
+
 fn validate_draft_revision(
     active: &ActiveProjectContext,
     revision: &DraftRevision,
@@ -7120,6 +7288,472 @@ pub async fn export_active_project_draft_copy(
         }),
         error: None,
     }
+}
+
+fn remove_owned_semantic_authoring_export(
+    output: &Path,
+    expected_sha256: &str,
+    expected_size: u64,
+) {
+    let owned = safe_sha256(expected_sha256)
+        && sha256_file(output).is_ok_and(|(sha256, size)| {
+            size == expected_size && sha256.eq_ignore_ascii_case(expected_sha256)
+        });
+    if owned {
+        let _ = std::fs::remove_file(output);
+    }
+}
+
+fn validate_semantic_authoring_export_result(
+    raw: &RawSemanticAuthoringExportResult,
+    active: &ActiveProjectContext,
+    zone_ids: &BTreeSet<String>,
+    flow_path_ids: &BTreeSet<String>,
+    output: &Path,
+) -> Result<SemanticAuthoringExportSummary, ReaderDiagnostic> {
+    let returned_zone_ids = raw
+        .zone_number_by_id
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let returned_flow_path_ids = raw
+        .flow_path_number_by_id
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let unique_zone_numbers = raw
+        .zone_number_by_id
+        .values()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let unique_flow_path_numbers = raw
+        .flow_path_number_by_id
+        .values()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let highest_existing_zone_number = active
+        .zones
+        .iter()
+        .filter_map(|zone| u64::try_from(zone.contam_number).ok())
+        .max()
+        .unwrap_or(0);
+    let valid = raw.result_type == "semantic_authoring_export"
+        && raw
+            .source_sha256
+            .eq_ignore_ascii_case(&active.source_sha256)
+        && raw.source_unchanged
+        && safe_sha256(&raw.output_sha256)
+        && raw.output_size_bytes > 0
+        && raw.output_size_bytes <= MAX_SEMANTIC_AUTHORING_EXPORT_BYTES
+        && raw.added_zone_count == zone_ids.len() as u64
+        && raw.added_flow_path_count == flow_path_ids.len() as u64
+        && raw.added_zone_count <= MAX_SEMANTIC_DRAFT_ZONES as u64
+        && raw.added_flow_path_count <= MAX_SEMANTIC_DRAFT_FLOW_PATHS as u64
+        && returned_zone_ids == *zone_ids
+        && returned_flow_path_ids == *flow_path_ids
+        && unique_zone_numbers.len() == raw.zone_number_by_id.len()
+        && unique_flow_path_numbers.len() == raw.flow_path_number_by_id.len()
+        && raw
+            .zone_number_by_id
+            .values()
+            .all(|number| *number > highest_existing_zone_number)
+        && raw
+            .flow_path_number_by_id
+            .values()
+            .all(|number| *number > 0)
+        && !raw.sketchpad_geometry_written;
+    if !valid {
+        return Err(host_diagnostic(
+            "semantic_authoring_export_contract_invalid",
+            "The generated semantic authoring copy did not satisfy the desktop export contract.",
+            BTreeMap::new(),
+        ));
+    }
+    let (actual_sha256, actual_size) = sha256_file(output).map_err(|_| {
+        host_diagnostic(
+            "semantic_authoring_export_verification_failed",
+            "The generated semantic authoring copy could not be verified.",
+            BTreeMap::new(),
+        )
+    })?;
+    if actual_size != raw.output_size_bytes
+        || !actual_sha256.eq_ignore_ascii_case(&raw.output_sha256)
+    {
+        return Err(host_diagnostic(
+            "semantic_authoring_export_verification_failed",
+            "The generated semantic authoring copy did not match the verified worker result.",
+            BTreeMap::new(),
+        ));
+    }
+    Ok(SemanticAuthoringExportSummary {
+        file_name: safe_project_file_name(output),
+        sha256: actual_sha256,
+        size_bytes: actual_size,
+        added_zone_count: raw.added_zone_count,
+        added_flow_path_count: raw.added_flow_path_count,
+        zone_number_by_id: raw.zone_number_by_id.clone(),
+        flow_path_number_by_id: raw.flow_path_number_by_id.clone(),
+        sketchpad_geometry_written: false,
+    })
+}
+
+#[tauri::command]
+pub async fn export_semantic_authoring_draft_copy(
+    app: AppHandle,
+    store: tauri::State<'_, DesktopProjectSessionStore>,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+) -> Result<DesktopSemanticAuthoringExportResponse, ()> {
+    if !request_id_is_valid(&request_id)
+        || !request_id_is_valid(&project_session_id)
+        || Uuid::parse_str(&revision_id).is_err()
+    {
+        return Ok(semantic_authoring_export_failure(
+            &request_id,
+            host_diagnostic(
+                "bridge_request_invalid",
+                "The semantic authoring export request is invalid.",
+                BTreeMap::new(),
+            ),
+        ));
+    }
+    let Some(_operation) = store.try_operation() else {
+        return Ok(semantic_authoring_export_failure(
+            &request_id,
+            host_diagnostic(
+                "project_operation_busy",
+                "Another project operation is in progress.",
+                BTreeMap::new(),
+            ),
+        ));
+    };
+    let active = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        let Some(active) = state.active_project.clone() else {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "draft_session_missing",
+                    "No active project is available for semantic authoring export.",
+                    BTreeMap::new(),
+                ),
+            ));
+        };
+        if active.project_session_id != project_session_id
+            || active.active_revision().revision_id != revision_id
+            || !active_project_source_matches(&active)
+        {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "semantic_draft_context_stale",
+                    "The semantic authoring export no longer matches the active project Revision.",
+                    BTreeMap::new(),
+                ),
+            ));
+        }
+        active
+    };
+    let semantic_draft = match geometry_document::load_semantic_draft_for_export(
+        app.clone(),
+        store.inner(),
+        &project_session_id,
+        &revision_id,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => return Ok(semantic_authoring_export_failure(&request_id, error)),
+    };
+    let semantic_draft_sha256 = match contam_semantic_draft_sha256(&semantic_draft) {
+        Ok(value) => value,
+        Err(_) => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "semantic_draft_contract_invalid",
+                    "The persisted semantic authoring draft is invalid.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+    };
+    let (zone_ids, flow_path_ids) = match contam_semantic_draft_object_ids(&semantic_draft) {
+        Ok(value) if !value.0.is_empty() || !value.1.is_empty() => value,
+        Ok(_) => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "semantic_draft_empty",
+                    "The semantic authoring draft does not contain any new CONTAM objects.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+        Err(_) => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "semantic_draft_contract_invalid",
+                    "The persisted semantic authoring draft is invalid.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+    };
+    let suggested = format!(
+        "{}-studio-model-r{}.prj",
+        active
+            .baseline_source_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("project"),
+        active.active_revision().revision_number
+    );
+    let dialog_app = app.clone();
+    let selected = match tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .add_filter("CONTAM PRJ", &["prj"])
+            .set_file_name(suggested)
+            .blocking_save_file()
+    })
+    .await
+    {
+        Ok(value) => value,
+        Err(_) => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "semantic_authoring_export_destination_invalid",
+                    "The native semantic authoring export dialog failed.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+    };
+    let Some(selected) = selected else {
+        return Ok(DesktopSemanticAuthoringExportResponse {
+            request_id,
+            cancelled: true,
+            project_session_id: Some(project_session_id),
+            revision_id: Some(revision_id),
+            export: None,
+            error: None,
+        });
+    };
+    let selected = match selected.into_path() {
+        Ok(path) => path,
+        Err(_) => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "semantic_authoring_export_destination_invalid",
+                    "The selected semantic authoring export destination was not local.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+    };
+    let output = match validate_draft_export_destination(&active, &selected) {
+        Ok(path) => path,
+        Err(code) => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    code,
+                    "The semantic authoring export destination is not allowed.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+    };
+    let request = json!({
+        "protocol_version": PROTOCOL_VERSION,
+        "request_id": request_id,
+        "operation": "export_semantic_authoring_draft_to_copy",
+        "source_path": active.source_path,
+        "output_path": output,
+        "semantic_draft": semantic_draft,
+    });
+    let bridge_id = request_id.clone();
+    let raw = match tauri::async_runtime::spawn_blocking(move || {
+        execute_bridge_request(&request, &bridge_id, APPLY_TIMEOUT)
+    })
+    .await
+    {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => return Ok(semantic_authoring_export_failure(&request_id, error)),
+        Err(_) => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "bridge_task_failed",
+                    "The semantic authoring export task ended unexpectedly.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+    };
+    if !raw.ok {
+        return Ok(semantic_authoring_export_failure(
+            &request_id,
+            sanitize_python_error(&raw).unwrap_or_else(|error| error),
+        ));
+    }
+    let result = match raw
+        .result
+        .and_then(|value| serde_json::from_value::<RawSemanticAuthoringExportResult>(value).ok())
+    {
+        Some(value) => value,
+        None => {
+            return Ok(semantic_authoring_export_failure(
+                &request_id,
+                host_diagnostic(
+                    "semantic_authoring_export_contract_invalid",
+                    "The semantic authoring worker returned an invalid result.",
+                    BTreeMap::new(),
+                ),
+            ))
+        }
+    };
+    let summary = match validate_semantic_authoring_export_result(
+        &result,
+        &active,
+        &zone_ids,
+        &flow_path_ids,
+        &output,
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            remove_owned_semantic_authoring_export(
+                &output,
+                &result.output_sha256,
+                result.output_size_bytes,
+            );
+            return Ok(semantic_authoring_export_failure(&request_id, error));
+        }
+    };
+    let current_semantic_draft = geometry_document::load_semantic_draft_for_export(
+        app,
+        store.inner(),
+        &project_session_id,
+        &revision_id,
+    )
+    .await;
+    let semantic_draft_is_current = current_semantic_draft
+        .as_ref()
+        .ok()
+        .and_then(|value| contam_semantic_draft_sha256(value).ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case(&semantic_draft_sha256));
+    let project_is_current = {
+        let state = store.state.lock().expect("desktop session mutex poisoned");
+        state.active_project.as_ref().is_some_and(|current| {
+            current.project_session_id == project_session_id
+                && current.active_revision().revision_id == revision_id
+                && current
+                    .source_sha256
+                    .eq_ignore_ascii_case(&active.source_sha256)
+                && active_project_source_matches(current)
+        })
+    };
+    if !semantic_draft_is_current || !project_is_current {
+        remove_owned_semantic_authoring_export(
+            &output,
+            &result.output_sha256,
+            result.output_size_bytes,
+        );
+        return Ok(semantic_authoring_export_failure(
+            &request_id,
+            host_diagnostic(
+                "semantic_draft_context_stale",
+                "The semantic authoring draft changed while its copy was being generated.",
+                BTreeMap::new(),
+            ),
+        ));
+    }
+    Ok(DesktopSemanticAuthoringExportResponse {
+        request_id,
+        cancelled: false,
+        project_session_id: Some(project_session_id),
+        revision_id: Some(revision_id),
+        export: Some(summary),
+        error: None,
+    })
+}
+
+#[tauri::command]
+pub async fn load_project_geometry_document(
+    app: AppHandle,
+    store: tauri::State<'_, DesktopProjectSessionStore>,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+) -> Result<geometry_document::DesktopGeometryDocumentResponse, ()> {
+    Ok(geometry_document::load_project_geometry_document_impl(
+        app,
+        store.inner(),
+        request_id,
+        project_session_id,
+        revision_id,
+    )
+    .await)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn save_project_geometry_document(
+    app: AppHandle,
+    store: tauri::State<'_, DesktopProjectSessionStore>,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+    geometry: Value,
+    semantic_draft: Option<Value>,
+    expected_document_revision: Option<u64>,
+) -> Result<geometry_document::DesktopGeometryDocumentResponse, ()> {
+    Ok(geometry_document::save_project_geometry_document_impl(
+        app,
+        store.inner(),
+        request_id,
+        project_session_id,
+        revision_id,
+        geometry,
+        semantic_draft,
+        expected_document_revision,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn select_and_import_geometry_underlay(
+    app: AppHandle,
+    project_store: tauri::State<'_, DesktopProjectSessionStore>,
+    attachment_store: tauri::State<'_, attachment_center::AttachmentCenterStore>,
+    request_id: String,
+    project_session_id: String,
+    revision_id: String,
+) -> Result<geometry_underlay::DesktopGeometryUnderlayImportResponse, ()> {
+    Ok(geometry_underlay::select_and_import_geometry_underlay_impl(
+        app,
+        project_store,
+        attachment_store,
+        request_id,
+        project_session_id,
+        revision_id,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn read_geometry_underlay_resource(
+    app: AppHandle,
+    project_store: tauri::State<'_, DesktopProjectSessionStore>,
+    request: geometry_underlay::GeometryUnderlayReadRequest,
+) -> Result<tauri::ipc::Response, ReaderDiagnostic> {
+    geometry_underlay::read_geometry_underlay_resource_impl(app, project_store, request).await
 }
 
 fn study_failure(
@@ -7761,6 +8395,8 @@ pub async fn export_study_report(
 }
 
 pub(crate) mod attachment_center;
+mod geometry_document;
+mod geometry_underlay;
 pub(crate) mod simulation_loop;
 
 #[cfg(test)]

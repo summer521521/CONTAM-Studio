@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-select-and-import-geometry-underlay"
+description = "Enables the select_and_import_geometry_underlay command without any pre-configured scope."
+commands.allow = ["select_and_import_geometry_underlay"]
+
+[[permission]]
+identifier = "deny-select-and-import-geometry-underlay"
+description = "Denies the select_and_import_geometry_underlay command without any pre-configured scope."
+commands.deny = ["select_and_import_geometry_underlay"]
