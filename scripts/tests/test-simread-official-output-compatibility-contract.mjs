@@ -18,7 +18,12 @@ const runner = read("python/src/contam_studio_core/simread_runner.py");
 const rust = read("src-tauri/src/zone_bridge.rs");
 const resultsWorkspace = read("src/components/workbench/results/ResultsWorkspace.tsx");
 
-assert("task log has an active or completed status", /\nstatus: (?:in_progress|completed)\n/.test(taskLog));
+const taskStatusPattern = /(?:^|\r?\n)status: (?:in_progress|completed)(?:\r?\n|$)/;
+assert("task log has an active or completed status", taskStatusPattern.test(taskLog));
+const taskLogCrlf = taskLog.replace(/\r?\n/g, "\r\n");
+assert("task status remains portable under CRLF", taskStatusPattern.test(taskLogCrlf));
+const taskLogWithoutTrailingNewline = taskLogCrlf.replace(/(?:\r\n|\n)+$/, "");
+assert("task status remains valid without a trailing newline", taskStatusPattern.test(taskLogWithoutTrailingNewline));
 assert("task log records the official unavailable diagnostic", taskLog.includes("simread_node_air_state_unavailable"));
 assert("task log records the successful official sample count", taskLog.includes("289 个样本"));
 assert("parser strips only ASCII field-boundary spaces", parser.includes('token.strip(" ")'));

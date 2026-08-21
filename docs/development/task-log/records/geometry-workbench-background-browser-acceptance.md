@@ -29,7 +29,7 @@ allowed_scope:
   - src/i18n/locales/en.json
   - 与上述问题直接对应的前端测试
   - 本任务日志、任务日志索引和能力矩阵
-  - F:\Agent_File\contam-studio-gui-qa\geometry-workbench-background-browser-acceptance 产物目录
+  - 仓库外的私有浏览器验收证据根中的产物
 forbidden_scope:
   - 真实凭据、Credential Manager、Cookie、WebView 数据库、真实 AppData、用户唯一工程。
   - 修改 Rust/Tauri、Python、PRJ 解析或写入、ContamX/SimRead、desktop-api 权限链、reducer/controller 架构。
@@ -58,7 +58,7 @@ user_validated: not_run
 merged_to_main: no
 notes:
   - 任务完成，无屏幕浏览器执行 26 项严格断言全部 passed，0 未捕获异常。
-  - 20 张正式截图产物保存至 F:\Agent_File\contam-studio-gui-qa\geometry-workbench-background-browser-acceptance\。
+  - 20 张正式截图保存在仓库外的私有验收证据存储中，未提交到仓库。
   - 2 张旧版非标草案截图已归档至 superseded\ 目录。
   - 已生成 evidence-manifest.json 记录每张截图的元数据、视口、语言、主题、断言状态与 SHA-256。
   - 记录 3 条 Konva 6-layer 控制台警告为已知非功能性性能债务。
@@ -89,12 +89,12 @@ notes:
 
 ## 产物与证据清单（本机私有证据 local/private evidence）
 
-> 注：以下绝对路径为本机运行环境私有产物（local/private evidence），供本地追溯与审计核验，不作为仓库内跨机器可移植路径。
+> 注：以下文件保存在仓库外的私有验收证据根中，供本地追溯与审计核验；它们不是仓库内的跨机器可移植链接。
 
-- **测试运行器**：[runner.mjs](file:///F:/Agent_File/contam-studio-gui-qa/geometry-workbench-background-browser-acceptance/runner.mjs)
-- **证据清单**：[evidence-manifest.json](file:///F:/Agent_File/contam-studio-gui-qa/geometry-workbench-background-browser-acceptance/evidence-manifest.json)
-- **结构化验收总结**：[acceptance_summary.json](file:///F:/Agent_File/contam-studio-gui-qa/geometry-workbench-background-browser-acceptance/acceptance_summary.json)
-- **浏览器执行日志**：[browser_acceptance.log](file:///F:/Agent_File/contam-studio-gui-qa/geometry-workbench-background-browser-acceptance/browser_acceptance.log)
+- **测试运行器**：`runner.mjs`
+- **证据清单**：`evidence-manifest.json`
+- **结构化验收总结**：`acceptance_summary.json`
+- **浏览器执行日志**：`browser_acceptance.log`
 - **20 张正式截图矩阵**：
   1. `01_1440x900_zh_blueprint.png` (SHA256: `af407e32287df5506cd8952646bf10f27f1be7eacd72040737031f41f2367d99`)
   2. `02_1440x900_zh_paper.png` (SHA256: `9ef15a1e7973a4697c45b060023dc1859ee49a468d939da4465718f9e4b56386`)

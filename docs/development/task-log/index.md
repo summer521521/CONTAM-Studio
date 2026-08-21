@@ -4,6 +4,7 @@
 | --- | --- | --- | --- |
 | [Geometry Workbench Background Browser Acceptance](records/geometry-workbench-background-browser-acceptance.md) | Geometry Workbench | completed | live |
 | [SimRead Official Output Compatibility](records/simread-official-output-compatibility.md) | Geometry Workbench | completed | live |
+| [Windows CI Cross-environment Contract Portability Fix](records/windows-ci-cross-environment-contract-portability.md) | Geometry Workbench | completed | live |
 | [CONTAM Semantic Authoring and Safe Draft Foundation](records/contam-semantic-authoring-and-safe-draft-foundation.md) | Geometry Workbench | completed | live |
 | [Calibrated Plan Underlay and Building Tracing](records/calibrated-plan-underlay-and-building-tracing.md) | Geometry Workbench | completed | live |
 | [Wall Airflow Boundaries and Outdoor Context](records/wall-airflow-boundaries-and-outdoor-context.md) | Geometry Workbench | completed | live |
