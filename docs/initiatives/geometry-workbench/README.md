@@ -88,7 +88,7 @@ Python 负责从已验证空间投影生成只读几何并执行领域验证；R
 - `implementation=complete`
 - `automated_verified=passed`
 - `browser_design_qa=passed`
-- `github_windows_ci=pending_push`
+- `github_windows_ci=passed`
 - `manual_gui=partial`（真实 Tauri 构造、拓扑、运行、结果与 AI 入口已验收；125%/200% 缩放和用户最终验收仍未执行）
 - `real_tools=passed`（当前语义创作子集的官方 ContamX/SimRead 隔离复测已通过；无节点空气状态仍按真实诊断保留为结果读取失败）
 - `real_provider=not_run`
@@ -96,8 +96,12 @@ Python 负责从已验证空间投影生成只读几何并执行领域验证；R
 - `signed=not_run`
 - `released=no`
 - `user_validated=not_run`
-- `merged_to_main=no`
+- `merged_to_main=yes`
 - `integration_closure=completed`（累计工作树的跨端集成一致性收口与最终自动门禁已完成）
+
+## v0.6.0 本地候选状态
+
+当前 Geometry Workbench 已随 `main` 合并并通过对应 Windows CI；v0.6.0 仍是本地候选，不是公开发布版本。版本准备阶段保持 `packaged=no`，候选包只在外部目录构建；候选未签名、未创建标签或 Release，真实 Provider 未运行，125%/200% Windows 系统缩放和用户最终验收仍为未执行。
 
 本地浏览器视觉 QA 已通过选定参考图的同图对照、三主题、1488×1056、1280×720、1024×720、模式切换、墙体绘制、手势级撤销/重做以及 26 项严格背景浏览器断言；证据见项目根目录 [design-qa.md](../../../design-qa.md)和 [Geometry Workbench Background Browser Acceptance](../../development/task-log/records/geometry-workbench-background-browser-acceptance.md)。真实 Tauri GUI 已在隔离三 Zone fixture 上确认构造、SketchPad、气流拓扑、官方运行、partial 结果、证据链和 AI 未连接入口；125%/200% Windows 系统缩放、干净机与用户最终验收仍未执行，因此 `browser_design_qa=passed`、`manual_gui=partial`，两者均不等同于发布验收。
 

@@ -5,7 +5,7 @@
 
 CONTAM Studio是一个面向教学与科研的现代化、本地优先、联网增强、中英文双语CONTAM桌面工作台，使人和AI能够通过同一套安全、结构化、可审查的接口使用官方ContamX。
 
-当前研发计划唯一入口是 [CONTAM Studio Renewal R1](docs/initiatives/R1-visual-workbench/README.md)。R1-01 至 R1-05 是固定工作包；历史 Phase、QA 和 Batch 文档只用于追溯，不再作为当前任务分配来源。自动化、GUI、真实 Provider、GitHub CI、打包、签名和发布状态始终独立记录。
+当前研发事实源是 [Geometry Workbench](docs/initiatives/geometry-workbench/README.md)；Renewal R1 已随 v0.5.0 发布完成，仅用于历史追溯。历史 Phase、QA 和 Batch 文档不再作为当前任务分配来源。自动化、GUI、真实 Provider、GitHub CI、打包、签名和发布状态始终独立记录。
 
 ## 目标用户
 
@@ -24,11 +24,13 @@ CONTAM Studio是一个面向教学与科研的现代化、本地优先、联网�
 
 ## 当前能力
 
-0.5.0候选桌面主线已经形成可用纵向闭环：打开受支持PRJ，通过“项目、运行、结果、研究”四个任务入口完成建模检查、可信草稿修改、官方工具求解和结果分析。用户可浏览Project/Level/Zone/FlowPath/Species语义树，在不可变草稿中审阅和应用受支持的Zone名称、体积及FlowPath multiplier事务，使用只读SketchPad示意与气流拓扑视图，比较多Zone真实时间序列、空间投影和证据链，并通过上下文回执理解AI实际收到的信息。未知或不能可靠回写的内容保持只读，原始PRJ不由GUI或AI直接覆盖。
+v0.5.0 是当前已发布的稳定版本，形成了打开受支持 PRJ、运行官方工具、读取结果、审阅草稿和使用 AI 上下文回执的纵向闭环。用户可浏览 Project/Level/Zone/FlowPath/Species 语义树，使用只读 SketchPad 示意、气流拓扑、多 Zone 结果和证据链；未知或不能可靠回写的内容保持只读，原始 PRJ 不由 GUI 或 AI 直接覆盖。
+
+v0.6.0 是当前 Geometry Workbench 的本地候选版本：新增全画布建筑构造、三套视觉主题、多楼层、墙体与门窗、Zone/FlowPath 锚点、毫米坐标、捕捉、撤销/重做、校准底图、Studio 自有建筑草稿、受限语义创作和安全新副本导出。它尚未公开发布，候选状态以 Geometry Workbench 事实源和 v0.6.0 候选任务日志为准。
 
 AI助手支持 Codex/ChatGPT 登录，以及用户主动配置的 OpenAI、Anthropic、Gemini、OpenRouter、DeepSeek 和本地 OpenAI-compatible Provider。它复用可信上下文预览、附件证据披露、结构化仿真方案、哈希绑定批准和研究结果解释边界；API Key 只进入 Windows Credential Manager。所有写入均通过GUI共用的领域Patch、Diff、确定性验证和用户确认；未连接AI时，项目、草稿、运行、研究和报告仍可离线使用。图片当前只进入本地预览和受控元数据证据，不宣称已向远程模型发送像素。
 
-Windows x64候选提供便携版、NSIS安装器和MSI安装器。0.5.0 将冻结 Python Worker 和经NIST官方哈希锁定的 ContamX 工具随应用分发，普通用户不需要源码仓库、项目 `.venv`、系统 Python 或手动选择工具路径。NIST网页发布版本为CONTAM 3.4.0.8；该页面提供的Windows x64包及包内四个工具版本均为3.4.0.3。范围及限制见[候选发布说明](docs/release/CONTAM-Studio-0.5.0-release-notes.md)和[已知限制](docs/release/known-limitations-0.5.0.md)，产品事实以[能力状态矩阵](docs/capability-status-matrix.json)为准。
+Windows x64 候选将提供便携版、NSIS 安装器和 MSI 安装器。v0.5.0 已发布版本和 v0.6.0 本地候选均冻结 Python Worker，并使用经 NIST 官方哈希锁定的 ContamX 工具随应用分发；普通用户不需要源码仓库、项目 `.venv`、系统 Python 或手动选择工具路径。NIST 网页发布版本为 CONTAM 3.4.0.8；该页面提供的 Windows x64 包及包内四个工具版本均为 3.4.0.3。范围及限制见 [v0.5.0 发布说明](docs/release/CONTAM-Studio-0.5.0-release-notes.md)、[v0.6.0 候选发布说明](docs/release/CONTAM-Studio-0.6.0-release-notes.md)、[v0.6.0 已知限制](docs/release/known-limitations-0.6.0.md) 和 [能力状态矩阵](docs/capability-status-matrix.json)。
 
 CONTAM Studio自身源码采用[Apache License 2.0](LICENSE)。官方CONTAM、ContamX、SimRead、Codex及其他第三方组件不因本仓库许可证而改变其各自许可；本项目不是NIST或OpenAI官方产品，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
 
@@ -38,11 +40,11 @@ CONTAM Studio自身源码采用[Apache License 2.0](LICENSE)。官方CONTAM、Co
 
 普通用户应从[GitHub Releases](https://github.com/summer521521/CONTAM-Studio/releases/latest)下载，不要从仓库源码页寻找EXE。每个版本提供便携版、NSIS安装器、MSI安装器和SHA-256清单。
 
-0.5.0候选没有后台自动更新。正式发布前仍应使用已发布版本；更新时退出Studio，从GitHub Releases下载更高版本并覆盖安装。便携版必须完整解压，不能只复制主 EXE。用户项目、已保存研究、报告和系统凭据不属于发布资产。详细说明见[下载与更新](docs/maintenance/github-download-and-update.md)。
+当前没有后台自动更新。v0.5.0 是已发布版本；v0.6.0 仍是本地候选，不应从 GitHub Releases 或其他公开渠道寻找。正式发布前请继续使用已发布版本；便携版必须完整解压，不能只复制主 EXE。用户项目、已保存研究、报告和系统凭据不属于发布资产。详细说明见 [下载与更新](docs/maintenance/github-download-and-update.md)。
 
 ## 架构方向
 
-0.5.0采用React+TypeScript前端、Tauri 2桌面宿主、随包冻结的Python CONTAM领域核心和NIST官方ContamX/SimRead，Windows 10/11 x64为正式目标平台。Rust拥有桌面权限、活动项目、草稿、运行、结果、附件、AI批准、受控网络、凭据引用、进程树和发布配置边界；Python承担严格文档解析、空间事实投影、语义Patch、官方工具编排和结果/报告领域逻辑；React只使用路径受控的语义桌面API。
+v0.6.0 延续 React+TypeScript 前端、Tauri 2 桌面宿主、随包冻结的 Python CONTAM 领域核心和 NIST 官方 ContamX/SimRead，Windows 10/11 x64 为目标平台。Rust 拥有桌面权限、活动项目、草稿、运行、结果、附件、AI 批准、受控网络、凭据引用、进程树和发布配置边界；Python 承担严格文档解析、空间事实投影、语义 Patch、官方工具编排和结果/报告领域逻辑；React 只使用路径受控的语义桌面 API。
 
 ```text
 React GUI
@@ -57,7 +59,7 @@ Tauri桌面宿主
 官方ContamX
 ```
 
-历史阶段证据仍保留在`docs/development/`，但阶段名不再代表当前产品范围。0.5.0候选的事实来源是能力矩阵、候选发布说明、已知限制、候选包清单和R1任务记录；在总监提交、远程CI和正式重建前不属于正式发布资产。
+历史阶段证据仍保留在 `docs/development/`，但阶段名不再代表当前产品范围。v0.5.0 的正式发布事实保持不变；v0.6.0 候选的事实来源是能力矩阵、候选发布说明、已知限制、候选包清单和 Geometry Workbench 任务记录，在后续正式发布前不属于公开发布资产。
 
 ## 开发启动
 

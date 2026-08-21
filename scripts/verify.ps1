@@ -329,6 +329,7 @@ function Check-Docs {
     Invoke-Tool "R1-03 visual model contract" "node" @("scripts\tests\test-r1-03-visual-model-contract.mjs", $Root) | Out-Null
     Invoke-Tool "R1-04 results evidence AI contract" "node" @("scripts\tests\test-r1-04-results-evidence-ai-contract.mjs", $Root) | Out-Null
     Invoke-Tool "R1-05 final UAT release readiness contract" "node" @("scripts\tests\test-r1-05-final-uat-release-readiness-contract.mjs", $Root) | Out-Null
+    Invoke-Tool "Geometry Workbench v0.6.0 candidate contract" "node" @("scripts\tests\test-geometry-workbench-v0.6.0-candidate-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Geometry Workbench foundation contract" "node" @("scripts\tests\test-geometry-workbench-foundation-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Geometry Editor Integration contract" "node" @("scripts\tests\test-geometry-editor-integration-contract.mjs", $Root) | Out-Null
     Invoke-Tool "Spatial Command Deck contract" "node" @("scripts\tests\test-spatial-command-deck-contract.mjs", $Root) | Out-Null

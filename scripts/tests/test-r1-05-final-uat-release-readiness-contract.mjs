@@ -35,7 +35,9 @@ const limitations = read("docs/release/known-limitations-0.5.0.md");
 const taskLog = read("docs/development/task-log/records/r1-05-final-uat-release-readiness.md");
 const verify = read("scripts/verify.ps1");
 
-assert("candidate version is synchronized", packageJson.version === "0.5.0" && tauri.version === "0.5.0" && cargo.includes('version = "0.5.0"') && python.includes('version = "0.5.0"'));
+const currentProductVersion = String(packageJson.version);
+assert("candidate version is synchronized", Boolean(currentProductVersion) && tauri.version === currentProductVersion && cargo.includes(`version = "${currentProductVersion}"`) && python.includes(`version = "${currentProductVersion}"`));
+assert("v0.5.0 release facts remain historical", releaseNotes.includes("# CONTAM Studio v0.5.0") && limitations.includes("# CONTAM Studio 0.5.0 已知限制") && releaseNotes.includes("v0.5.0 已正式发布") && !releaseNotes.includes(`# CONTAM Studio v${currentProductVersion}`));
 assert("shared SHA helper uses the bounded PowerShell 5.1 implementation", integrity.includes("Security.Cryptography.SHA256") && integrity.includes("ComputeHash") && integrity.includes("FileStream") && integrity.includes("finally"));
 assert("acquisition and preparation share one integrity implementation", acquisition.includes("lib\\contam-integrity.ps1") && preparation.includes("lib\\contam-integrity.ps1") && !acquisition.includes("Get-FileHash") && !preparation.includes("Get-FileHash"));
 assert("redirected process regression checks exact hash failure before extraction", redirected.includes("RedirectStandardOutput") && redirected.includes("RedirectStandardError") && redirected.includes("WindowStyle") && redirected.includes("SHA-256 mismatch") && redirected.includes("extracted"));

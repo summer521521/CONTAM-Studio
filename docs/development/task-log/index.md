@@ -113,5 +113,6 @@
 | [Phase 7A 真实 Tauri GUI 集中验收](records/phase-7a-gui-acceptance-computer-use.md) | Phase 7A | completed | live |
 | [Phase 7B UI/UX 与运行体验修复](records/phase-7b-ui-ux-runtime-polish.md) | Phase 7B | completed | live |
 | [Release 0.4.0：Phase 7 用户体验收口与公开发布](records/release-v0-4-0-ui-ux-closure.md) | Release 0.4.0 | completed | live |
+| [CONTAM Studio v0.6.0 Geometry Workbench Candidate](records/geometry-workbench-v0.6.0-candidate.md) | Geometry Workbench | completed | live |
 
 历史阶段回填见[`historical-backfill.md`](historical-backfill.md)。
